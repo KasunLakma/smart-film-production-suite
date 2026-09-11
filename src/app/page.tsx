@@ -27,15 +27,17 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<"script" | "storyboard" | "financials">("script");
 
   return (
-    <div className="relative min-h-screen bg-[#07160d] text-slate-100 flex flex-col justify-between overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
+    <div className="relative min-h-screen text-slate-100 flex flex-col justify-between overflow-x-hidden font-sans selection:bg-emerald-500 selection:text-white">
       {/* Fixed Background Image Container */}
-      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+      <div className="fixed inset-0 -z-10 w-full h-full">
         <img
           src="/hero.jpg"
-          alt="eclat cinematic studio set"
-          className="w-full h-full object-cover object-center opacity-65"
+          alt="Cinematic production background"
+          className="w-full h-full object-cover object-center brightness-75 contrast-110"
         />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/80 via-[#07160d]/30 to-[#07160d]" />
+        {/* Emerald tint overlay with reduced opacity so the camera rig is visible */}
+        <div className="absolute inset-0 bg-[#07160d]/50 mix-blend-multiply" />
+        <div className="absolute inset-0 bg-gradient-to-t from-[#07160d] via-transparent to-[#07160d]/70" />
       </div>
 
       {/* Sticky Glassmorphism Navigation Bar */}
