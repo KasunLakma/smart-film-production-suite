@@ -27,32 +27,19 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<"script" | "storyboard" | "financials">("script");
 
   return (
-    <div className="min-h-screen bg-[#0d2818] text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Dark Cinematic Forest Gradient & Vignette Background */}
-      <div className="absolute inset-0 pointer-events-none z-0">
-        {/* Hero Cinematic Background Image Container */}
-        <div
-          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity filter brightness-75 contrast-125"
-          style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=2000&q=80')`,
-          }}
-        />
+    <div className="min-h-screen bg-[#07160d] text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
+      {/* 100% Visible Hero Background Image */}
+      <img
+        src="https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=2000&q=80"
+        alt="Cinematic camera production set background"
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-70"
+        onError={(e) => {
+          (e.target as HTMLImageElement).src = "/hero-bg.jpg";
+        }}
+      />
 
-        {/* Layered Gradient Overlays */}
-        <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/85 via-[#0d2818]/90 to-[#07160d]" />
-        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
-
-        {/* Radial Ambient Glows */}
-        <div className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-emerald-600/15 rounded-full blur-[140px] animate-pulse-slow" />
-        <div className="absolute top-[40%] -left-[10%] w-[600px] h-[600px] bg-emerald-900/20 rounded-full blur-[160px]" />
-        <div className="absolute top-[60%] -right-[10%] w-[700px] h-[700px] bg-[#143422]/60 rounded-full blur-[150px]" />
-        
-        {/* Cinematic Vignette Overlay */}
-        <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_center,transparent_0%,rgba(5,15,10,0.85)_100%)]" />
-        
-        {/* Fine Grid Background Pattern */}
-        <div className="absolute inset-0 bg-[linear-gradient(to_right,rgba(20,52,34,0.15)_1px,transparent_1px),linear-gradient(to_bottom,rgba(20,52,34,0.15)_1px,transparent_1px)] bg-[size:4rem_4rem] [mask-image:radial-gradient(ellipse_60%_50%_at_50%_40%,#000_70%,transparent_100%)]" />
-      </div>
+      {/* Subtle Soft Top/Bottom Gradient Overlay */}
+      <div className="absolute inset-0 bg-gradient-to-t from-[#07160d] via-transparent to-[#07160d]/80 pointer-events-none z-0" />
 
       {/* Sticky Glassmorphism Navigation Bar */}
       <header className="sticky top-0 z-50 w-full bg-[#0d2818]/75 backdrop-blur-md border-b border-emerald-900/40 transition-all">
