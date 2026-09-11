@@ -27,17 +27,20 @@ export default function LandingPage() {
   const [activeTab, setActiveTab] = useState<"script" | "storyboard" | "financials">("script");
 
   return (
-    <div className="min-h-screen bg-[#07160d] text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
-      {/* Local Hero Background Image */}
-      <img
-        src="/hero-bg.jpg"
-        alt="eclat cinematic studio set"
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-75"
-      />
-
-      {/* Subtle Dark Emerald Gradient Overlays */}
-      <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/80 via-transparent to-[#07160d] pointer-events-none z-0" />
-      <div className="absolute inset-0 bg-[#07160d]/30 pointer-events-none z-0" />
+    <div className="relative min-h-screen bg-[#07160d] text-slate-100 flex flex-col justify-between overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
+      {/* Fixed Background Image Container */}
+      <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
+        <img
+          src="/hero-bg.jpg"
+          alt="Cinematic Studio Background"
+          className="w-full h-full object-cover object-center opacity-70 scale-100"
+          onError={(e) => {
+            // Fallback to direct production cinema photo if local path has naming mismatch
+            e.currentTarget.src = "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=2000&q=80";
+          }}
+        />
+        <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/80 via-[#07160d]/40 to-[#07160d]" />
+      </div>
 
       {/* Sticky Glassmorphism Navigation Bar */}
       <header className="sticky top-0 z-50 w-full bg-[#0d2818]/75 backdrop-blur-md border-b border-emerald-900/40 transition-all">
