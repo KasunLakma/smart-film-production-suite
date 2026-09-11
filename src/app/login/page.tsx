@@ -13,7 +13,7 @@ export default function LandingPage() {
         <div
           className="w-full h-full bg-cover bg-center bg-no-repeat scale-105 transform duration-1000"
           style={{
-            backgroundImage: `url('https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=2000&q=80')`,
+            backgroundImage: `url('/hero-bg.jpg')`,
           }}
         />
         {/* Deep emerald & dark film overlay to ensure text contrast */}
