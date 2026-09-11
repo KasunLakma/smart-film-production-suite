@@ -10,13 +10,14 @@ const config: Config = {
     extend: {
       colors: {
         studio: {
-          950: "#020617",
-          900: "#0F172A",
-          800: "#1E293B",
-          700: "#334155",
-          accent: "#2563EB",
-          deficit: "#EF4444",
-          surplus: "#10B981",
+          950: "#07160d",
+          900: "#0d2818",
+          800: "#143422",
+          700: "#1e482f",
+          accent: "#16a34a",
+          "accent-hover": "#22c55e",
+          deficit: "#ef4444",
+          surplus: "#10b981",
         },
       },
       fontFamily: {

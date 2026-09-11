@@ -2,13 +2,14 @@
 @config "../../tailwind.config.ts";
 
 @theme {
-  --color-studio-950: #020617;
-  --color-studio-900: #0F172A;
-  --color-studio-800: #1E293B;
-  --color-studio-700: #334155;
-  --color-studio-accent: #2563EB;
-  --color-studio-deficit: #EF4444;
-  --color-studio-surplus: #10B981;
+  --color-studio-950: #07160d;
+  --color-studio-900: #0d2818;
+  --color-studio-800: #143422;
+  --color-studio-700: #1e482f;
+  --color-studio-accent: #16a34a;
+  --color-studio-accent-hover: #22c55e;
+  --color-studio-deficit: #ef4444;
+  --color-studio-surplus: #10b981;
   --font-mono: Consolas, "Courier Prime", monospace;
 }
 

@@ -7,11 +7,11 @@ export default function StudioLayout({
   children: React.ReactNode;
 }) {
   return (
-    <div className="flex h-screen w-screen overflow-hidden bg-studio-950 text-slate-100 font-sans">
+    <div className="flex h-screen w-screen overflow-hidden bg-studio-950 text-slate-100 font-sans selection:bg-emerald-500 selection:text-white">
       <Sidebar />
       <div className="flex flex-col flex-1 min-w-0 h-full overflow-hidden">
         <Navbar />
-        <main className="flex-1 overflow-y-auto bg-studio-950 p-6">
+        <main className="flex-1 overflow-y-auto bg-studio-950 p-6 text-slate-100">
           {children}
         </main>
       </div>

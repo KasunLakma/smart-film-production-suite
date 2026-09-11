@@ -41,22 +41,26 @@ export default function Sidebar() {
     <aside className="w-64 min-h-screen bg-studio-900 border-r border-studio-700 p-4 flex flex-col justify-between shrink-0 select-none z-30">
       {/* Brand Header */}
       <div className="space-y-6">
-        <div className="flex items-center gap-3 px-2 py-1">
-          <div className="p-2 rounded-lg bg-studio-accent/10 border border-studio-accent/20 text-studio-accent">
-            <Clapperboard className="w-6 h-6" />
+        <Link href="/" className="flex items-center gap-3 px-2 py-1 group">
+          <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-emerald-500 to-emerald-800 p-[1px] shadow-[0_0_15px_rgba(22,163,74,0.35)] transition-transform group-hover:scale-105">
+            <div className="w-full h-full bg-studio-900 rounded-[11px] flex items-center justify-center">
+              <Clapperboard className="w-5 h-5 text-emerald-400" />
+            </div>
           </div>
           <div>
-            <div className="flex items-center gap-2">
-              <span className="font-bold text-slate-100 tracking-wider text-sm">
-                SMART FILM
+            <div className="flex items-baseline gap-2">
+              <span className="font-serif-display text-2xl font-bold tracking-tight text-white drop-shadow-[0_0_12px_rgba(255,255,255,0.3)]">
+                eclat
               </span>
-              <span className="text-[10px] font-extrabold uppercase px-1.5 py-0.5 rounded bg-studio-accent/20 text-studio-accent border border-studio-accent/30 tracking-widest">
+              <span className="text-[10px] tracking-[0.22em] font-mono px-2 py-0.5 rounded bg-emerald-950/90 border border-emerald-700/50 text-emerald-400 font-semibold uppercase shadow-[0_0_10px_rgba(22,163,74,0.3)]">
                 STUDIO
               </span>
             </div>
-            <p className="text-[11px] text-slate-400 font-medium">Production Suite</p>
+            <p className="text-[11px] text-emerald-200/60 font-medium">
+              Pre-Production Suite
+            </p>
           </div>
-        </div>
+        </Link>
 
         {/* Navigation Links */}
         <nav className="space-y-1">
@@ -69,13 +73,17 @@ export default function Sidebar() {
               <Link
                 key={item.href}
                 href={item.href}
-                className={`flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all duration-150 ${
+                className={`flex items-center gap-3 px-3 py-2.5 rounded-r-lg text-sm transition-all duration-150 ${
                   isActive
-                    ? "bg-studio-accent text-white font-medium shadow-md shadow-studio-accent/20"
-                    : "text-slate-400 hover:text-slate-200 hover:bg-studio-800/70"
+                    ? "bg-emerald-900/40 text-emerald-300 border-l-2 border-emerald-500 font-medium shadow-sm"
+                    : "text-slate-300 hover:bg-studio-800 hover:text-emerald-200"
                 }`}
               >
-                <Icon className={`w-4 h-4 ${isActive ? "text-white" : "text-slate-400"}`} />
+                <Icon
+                  className={`w-4 h-4 ${
+                    isActive ? "text-emerald-400" : "text-slate-400"
+                  }`}
+                />
                 <span>{item.name}</span>
               </Link>
             );
@@ -86,7 +94,7 @@ export default function Sidebar() {
       {/* Footer Role Badge */}
       <div className="bg-studio-800 border border-studio-700 rounded-lg p-3 flex items-center justify-between">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="w-7 h-7 rounded-full bg-studio-700 flex items-center justify-center text-slate-300 shrink-0">
+          <div className="w-7 h-7 rounded-full bg-emerald-950 border border-emerald-700/60 flex items-center justify-center text-emerald-300 shrink-0">
             <User className="w-4 h-4" />
           </div>
           <div className="min-w-0">
@@ -94,8 +102,10 @@ export default function Sidebar() {
               DIRECTOR / PRODUCER
             </p>
             <div className="flex items-center gap-1.5">
-              <span className="w-1.5 h-1.5 rounded-full bg-studio-surplus" />
-              <span className="text-[10px] text-slate-400 font-medium">Online</span>
+              <span className="w-1.5 h-1.5 rounded-full bg-studio-surplus animate-pulse" />
+              <span className="text-[10px] text-emerald-300/80 font-medium">
+                eclat Workspace
+              </span>
             </div>
           </div>
         </div>
