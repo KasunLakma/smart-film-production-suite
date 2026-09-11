@@ -31,13 +31,9 @@ export default function LandingPage() {
       {/* Fixed Background Image Container */}
       <div className="fixed inset-0 z-0 overflow-hidden pointer-events-none">
         <img
-          src="/hero-bg.jpg"
-          alt="Cinematic Studio Background"
+          src="/hero.jpg"
+          alt="eclat cinematic studio set"
           className="w-full h-full object-cover object-center opacity-70 scale-100"
-          onError={(e) => {
-            // Fallback to direct production cinema photo if local path has naming mismatch
-            e.currentTarget.src = "https://images.unsplash.com/photo-1517604931442-7e0c8ed2963c?auto=format&fit=crop&w=2000&q=80";
-          }}
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/80 via-[#07160d]/40 to-[#07160d]" />
       </div>
