@@ -30,6 +30,18 @@ export default function LandingPage() {
     <div className="min-h-screen bg-[#0d2818] text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
       {/* Dark Cinematic Forest Gradient & Vignette Background */}
       <div className="absolute inset-0 pointer-events-none z-0">
+        {/* Hero Cinematic Background Image Container */}
+        <div
+          className="absolute inset-0 bg-cover bg-center opacity-30 mix-blend-luminosity filter brightness-75 contrast-125"
+          style={{
+            backgroundImage: `url('https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=2000&q=80')`,
+          }}
+        />
+
+        {/* Layered Gradient Overlays */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/85 via-[#0d2818]/90 to-[#07160d]" />
+        <div className="absolute inset-0 bg-black/40 backdrop-blur-[2px]" />
+
         {/* Radial Ambient Glows */}
         <div className="absolute -top-[20%] left-1/2 -translate-x-1/2 w-[1000px] h-[600px] bg-emerald-600/15 rounded-full blur-[140px] animate-pulse-slow" />
         <div className="absolute top-[40%] -left-[10%] w-[600px] h-[600px] bg-emerald-900/20 rounded-full blur-[160px]" />
