@@ -2,23 +2,24 @@
 
 import React from "react";
 import Link from "next/link";
-import { Clapperboard, Film, ArrowRight, Play, Sparkles, Database, CheckCircle2, ShieldCheck } from "lucide-react";
+import Image from "next/image";
+import { Clapperboard, Film, ArrowRight, Play, Sparkles, Database, ShieldCheck } from "lucide-react";
 
 export default function LandingPage() {
   return (
     <div className="relative min-h-screen bg-[#07160d] text-slate-100 overflow-x-hidden font-sans">
-      {/* 1. Cinematic Hero Background Image with Emerald Grading */}
+      {/* 1. Next.js Native Background Image with Controlled Opacity */}
       <div className="absolute inset-0 z-0 overflow-hidden pointer-events-none">
-        {/* High-res film production set image */}
-        <div
-          className="w-full h-full bg-cover bg-center bg-no-repeat scale-105 transform duration-1000"
-          style={{
-            backgroundImage: `url('/hero-bg.jpg')`,
-          }}
+        <Image
+          src="/hero-bg.jpg"
+          alt="eclat studio background"
+          fill
+          priority
+          className="object-cover object-center opacity-45 scale-105"
         />
-        {/* Deep emerald & dark film overlay to ensure text contrast */}
-        <div className="absolute inset-0 bg-[#07160d]/75 mix-blend-multiply" />
-        <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/90 via-[#0d2818]/60 to-[#07160d]" />
+        {/* Deep emerald gradient overlay that blends smoothly */}
+        <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/80 via-transparent to-[#07160d]" />
+        <div className="absolute inset-0 bg-[#07160d]/40" />
       </div>
 
       {/* 2. Glassmorphic Navigation Header */}
@@ -55,14 +56,12 @@ export default function LandingPage() {
 
       {/* 3. Main Hero Viewport */}
       <main className="relative z-10 max-w-6xl mx-auto px-6 pt-20 pb-28 flex flex-col items-center text-center">
-        {/* Release Pill Badge */}
         <div className="inline-flex items-center gap-2 px-3.5 py-1 rounded-full bg-emerald-950/80 border border-emerald-700/50 text-emerald-300 text-xs font-mono mb-8 shadow-sm">
           <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
           <span>Next-Gen Pre-Production Engine</span>
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse" />
         </div>
 
-        {/* Hero Title */}
         <h1 className="text-4xl sm:text-6xl lg:text-7xl font-sans font-extrabold tracking-tight text-white max-w-4xl leading-[1.15]">
           Transform your great idea into a{" "}
           <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-300 via-emerald-400 to-teal-300 underline decoration-emerald-500/40 underline-offset-8">
@@ -70,12 +69,10 @@ export default function LandingPage() {
           </span>
         </h1>
 
-        {/* Subtitle */}
-        <p className="mt-6 text-base sm:text-lg text-emerald-100/70 max-w-2xl font-normal leading-relaxed">
+        <p className="mt-6 text-base sm:text-lg text-emerald-100/80 max-w-2xl font-normal leading-relaxed">
           Unified screenplay text parsing, interactive 16:9 spatial visual boards, and real-time sub-50ms financial variance tracking for independent media creators.
         </p>
 
-        {/* CTA Buttons */}
         <div className="mt-10 flex flex-wrap items-center justify-center gap-4">
           <Link
             href="/dashboard"
@@ -93,7 +90,7 @@ export default function LandingPage() {
           </a>
         </div>
 
-        {/* 4. Glass Interactive Mockup Card */}
+        {/* 4. Interactive Terminal Preview Card */}
         <div className="mt-16 w-full max-w-3xl rounded-xl bg-[#0d2818]/90 border border-emerald-800/60 p-5 shadow-2xl backdrop-blur-md text-left font-mono">
           <div className="flex items-center justify-between pb-3 border-b border-emerald-900/60 text-xs text-emerald-400/80">
             <div className="flex items-center gap-2">
@@ -128,21 +125,21 @@ export default function LandingPage() {
 
         {/* 5. Features Grid */}
         <div id="features" className="mt-20 grid grid-cols-1 md:grid-cols-3 gap-5 w-full text-left">
-          <div className="p-5 rounded-xl bg-[#0d2818]/60 border border-emerald-900/50 backdrop-blur-sm">
+          <div className="p-5 rounded-xl bg-[#0d2818]/70 border border-emerald-900/50 backdrop-blur-sm">
             <Database className="w-6 h-6 text-emerald-400 mb-3" />
             <h3 className="text-sm font-semibold text-white">Dual-Pipeline Parsing</h3>
             <p className="mt-1 text-xs text-slate-400 leading-relaxed">
               Zero-cost deterministic regular expressions for fast formatting, supported by an LLM extraction fallback.
             </p>
           </div>
-          <div className="p-5 rounded-xl bg-[#0d2818]/60 border border-emerald-900/50 backdrop-blur-sm">
+          <div className="p-5 rounded-xl bg-[#0d2818]/70 border border-emerald-900/50 backdrop-blur-sm">
             <Film className="w-6 h-6 text-emerald-400 mb-3" />
             <h3 className="text-sm font-semibold text-white">16:9 Spatial Visualizer</h3>
             <p className="mt-1 text-xs text-slate-400 leading-relaxed">
               Direct scene-to-storyboard projection maintaining cinematic aspect ratios and camera tags.
             </p>
           </div>
-          <div className="p-5 rounded-xl bg-[#0d2818]/60 border border-emerald-900/50 backdrop-blur-sm">
+          <div className="p-5 rounded-xl bg-[#0d2818]/70 border border-emerald-900/50 backdrop-blur-sm">
             <ShieldCheck className="w-6 h-6 text-emerald-400 mb-3" />
             <h3 className="text-sm font-semibold text-white">Live Variance Alerts</h3>
             <p className="mt-1 text-xs text-slate-400 leading-relaxed">
