@@ -28,18 +28,16 @@ export default function LandingPage() {
 
   return (
     <div className="min-h-screen bg-[#07160d] text-slate-100 flex flex-col justify-between relative overflow-hidden font-sans selection:bg-emerald-500 selection:text-white">
-      {/* 100% Visible Hero Background Image */}
+      {/* Local Hero Background Image */}
       <img
-        src="https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=2000&q=80"
-        alt="Cinematic camera production set background"
-        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-70"
-        onError={(e) => {
-          (e.target as HTMLImageElement).src = "/hero-bg.jpg";
-        }}
+        src="/hero-bg.jpg"
+        alt="eclat cinematic studio set"
+        className="absolute inset-0 w-full h-full object-cover pointer-events-none z-0 opacity-75"
       />
 
-      {/* Subtle Soft Top/Bottom Gradient Overlay */}
-      <div className="absolute inset-0 bg-gradient-to-t from-[#07160d] via-transparent to-[#07160d]/80 pointer-events-none z-0" />
+      {/* Subtle Dark Emerald Gradient Overlays */}
+      <div className="absolute inset-0 bg-gradient-to-b from-[#07160d]/80 via-transparent to-[#07160d] pointer-events-none z-0" />
+      <div className="absolute inset-0 bg-[#07160d]/30 pointer-events-none z-0" />
 
       {/* Sticky Glassmorphism Navigation Bar */}
       <header className="sticky top-0 z-50 w-full bg-[#0d2818]/75 backdrop-blur-md border-b border-emerald-900/40 transition-all">
