@@ -10,6 +10,7 @@ import {
   DollarSign,
   User,
   Users,
+  MapPin,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -37,6 +38,11 @@ const NAV_ITEMS = [
     name: "Cast & Crew Roster",
     href: "/roster",
     icon: Users,
+  },
+  {
+    name: "Location Scouting Board",
+    href: "/locations",
+    icon: MapPin,
   },
 ];
 
