@@ -9,6 +9,7 @@ import {
   Film,
   DollarSign,
   User,
+  Users,
 } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -31,6 +32,11 @@ const NAV_ITEMS = [
     name: "Live Financials",
     href: "/financials",
     icon: DollarSign,
+  },
+  {
+    name: "Cast & Crew Roster",
+    href: "/roster",
+    icon: Users,
   },
 ];
 
