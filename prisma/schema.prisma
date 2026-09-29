@@ -1,0 +1,102 @@
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+}
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+enum Role {
+  DIRECTOR
+  PRODUCER
+  CREW
+}
+
+model User {
+  id           String    @id @default(uuid())
+  email        String    @unique
+  passwordHash String
+  salt         String
+  role         Role      @default(DIRECTOR)
+  createdAt    DateTime  @default(now())
+  projects     Project[]
+}
+
+model Project {
+  id           String             @id @default(uuid())
+  title        String
+  totalBudget  Decimal            @default(0.00) @db.Decimal(12, 2)
+  ownerId      String
+  owner        User               @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  screenplays  Screenplay[]
+  budgets      DepartmentBudget[]
+  createdAt    DateTime           @default(now())
+}
+
+model Screenplay {
+  id            String   @id @default(uuid())
+  projectId     String
+  project       Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  rawContent    String   @db.Text
+  parsingEngine String   @default("RULE_BASED")
+  scenes        Scene[]
+  createdAt     DateTime @default(now())
+}
+
+model Scene {
+  id           String           @id @default(uuid())
+  screenplayId String
+  screenplay   Screenplay       @relation(fields: [screenplayId], references: [id], onDelete: Cascade)
+  sceneNumber  Int
+  slugline     String
+  setting      String           // INT / EXT
+  timeOfDay    String           // DAY / NIGHT
+  characters   Character[]
+  props        Prop[]
+  storyboards  StoryboardCard[]
+}
+
+model Character {
+  id             String @id @default(uuid())
+  sceneId        String
+  scene          Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  name           String
+  dialogueCount  Int    @default(1)
+}
+
+model Prop {
+  id       String @id @default(uuid())
+  sceneId  String
+  scene    Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  name     String
+  category String @default("General")
+}
+
+model StoryboardCard {
+  id           String @id @default(uuid())
+  sceneId      String
+  scene        Scene  @relation(fields: [sceneId], references: [id], onDelete: Cascade)
+  shotNumber   String
+  aspectRatio  String @default("16:9")
+  cameraAngle  String
+  visualPrompt String @db.Text
+}
+
+model DepartmentBudget {
+  id          String          @id @default(uuid())
+  projectId   String
+  project     Project         @relation(fields: [projectId], references: [id], onDelete: Cascade)
+  department  String
+  allocated   Decimal         @db.Decimal(12, 2)
+  expenses    ExpenseRecord[]
+}
+
+model ExpenseRecord {
+  id          String           @id @default(uuid())
+  budgetId    String
+  budget      DepartmentBudget @relation(fields: [budgetId], references: [id], onDelete: Cascade)
+  amount      Decimal          @db.Decimal(12, 2)
+  description String
+  incurredAt  DateTime         @default(now())
+}
