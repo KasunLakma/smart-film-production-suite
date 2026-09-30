@@ -56,7 +56,7 @@ export default function ScriptBreakdownPage() {
   const [scriptText, setScriptText] = useState(SAMPLE_FEATURE_SCRIPT);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [isGeneratingStoryboards, setIsGeneratingStoryboards] = useState(false);
+  const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
@@ -155,16 +155,14 @@ export default function ScriptBreakdownPage() {
     }, 600);
   };
 
-  // Generate All Storyboards and navigate to /storyboard
   const handleGenerateAllStoryboards = () => {
-    setIsGeneratingStoryboards(true);
+    setIsGeneratingAllStoryboards(true);
     setTimeout(() => {
-      setIsGeneratingStoryboards(false);
+      setIsGeneratingAllStoryboards(false);
       router.push("/storyboard");
     }, 1200);
   };
 
-  // Generate Single Scene Storyboard and navigate to /storyboard
   const handleGenerateSceneStoryboard = (sceneId: string) => {
     setGeneratingSceneId(sceneId);
     setTimeout(() => {
@@ -210,10 +208,9 @@ export default function ScriptBreakdownPage() {
 
       {/* Main Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Script Input & PDF Ingestion (5 Cols) */}
+        {/* Left Column: Script Input & PDF Ingestion */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
-            {/* Input Mode Selector */}
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
               <button
                 onClick={() => setInputMode("upload")}
@@ -289,7 +286,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Ordered Scene Breakdown with Storyboard Triggers (7 Cols) */}
+        {/* Right Column: Ordered Scene Breakdown */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
@@ -333,7 +330,7 @@ export default function ScriptBreakdownPage() {
                     </div>
                   </div>
 
-                  {/* Synopsis / Action Line */}
+                  {/* Synopsis */}
                   <p className="text-xs text-slate-300 leading-relaxed font-light">
                     {scene.synopsis}
                   </p>
@@ -381,7 +378,7 @@ export default function ScriptBreakdownPage() {
                     </div>
                   </div>
 
-                  {/* Footer Action: Storyboard Trigger for this Scene */}
+                  {/* Footer Action */}
                   <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
                     <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
                       <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned 16:9 Shots
