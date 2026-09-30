@@ -6,14 +6,12 @@ import {
   Users,
   Sparkles,
   UserPlus,
-  Phone,
-  Mail,
   CheckCircle2,
   Clock,
   SlidersHorizontal,
   ArrowRight,
   ShieldCheck,
-  Clapperboard
+  X
 } from "lucide-react";
 
 interface Member {
@@ -28,8 +26,9 @@ interface Member {
 
 export default function RosterPage() {
   const [filterDept, setFilterDept] = useState("ALL");
+  const [isModalOpen, setIsModalOpen] = useState(false);
 
-  const members: Member[] = [
+  const [members, setMembers] = useState<Member[]>([
     {
       id: "MBR-01",
       name: "Marcus Vance",
@@ -93,7 +92,43 @@ export default function RosterPage() {
       contact: "julian.ad@directorsguild.org",
       status: "Confirmed"
     }
-  ];
+  ]);
+
+  // Form state
+  const [formData, setFormData] = useState({
+    name: "",
+    role: "",
+    department: "Camera" as Member["department"],
+    dayRate: "",
+    contact: "",
+    status: "Confirmed" as Member["status"]
+  });
+
+  const handleAddMember = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name || !formData.role) return;
+
+    const newMember: Member = {
+      id: `MBR-${String(members.length + 1).padStart(2, "0")}`,
+      name: formData.name,
+      role: formData.role,
+      department: formData.department,
+      dayRate: Number(formData.dayRate) || 500,
+      contact: formData.contact || "N/A",
+      status: formData.status
+    };
+
+    setMembers([newMember, ...members]);
+    setFormData({
+      name: "",
+      role: "",
+      department: "Camera",
+      dayRate: "",
+      contact: "",
+      status: "Confirmed"
+    });
+    setIsModalOpen(false);
+  };
 
   const filteredMembers = filterDept === "ALL"
     ? members
@@ -118,7 +153,10 @@ export default function RosterPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
+          >
             <UserPlus className="w-4 h-4" /> Add Crew Member
           </button>
           <Link
@@ -228,6 +266,123 @@ export default function RosterPage() {
           </table>
         </div>
       </div>
+
+      {/* Add Crew Member Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-lg bg-[#09130e] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-emerald-950/70">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <UserPlus className="w-4 h-4 text-emerald-400" /> Add Crew / Cast Member
+              </h3>
+              <button
+                onClick={() => setIsModalOpen(false)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#0e1d15]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleAddMember} className="space-y-4 mt-4">
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Full Name</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. John Doe"
+                    value={formData.name}
+                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Role / Job Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Focus Puller, 2nd AC"
+                    value={formData.role}
+                    onChange={(e) => setFormData({ ...formData, role: e.target.value })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Department</label>
+                  <select
+                    value={formData.department}
+                    onChange={(e) => setFormData({ ...formData, department: e.target.value as Member["department"] })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  >
+                    <option value="Direction">Direction</option>
+                    <option value="Camera">Camera</option>
+                    <option value="Art & Props">Art & Props</option>
+                    <option value="Sound">Sound</option>
+                    <option value="Cast">Cast</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Call Sheet Status</label>
+                  <select
+                    value={formData.status}
+                    onChange={(e) => setFormData({ ...formData, status: e.target.value as Member["status"] })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  >
+                    <option value="Confirmed">Confirmed</option>
+                    <option value="On Call">On Call</option>
+                    <option value="Pending">Pending</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Day Rate ($)</label>
+                  <input
+                    type="number"
+                    placeholder="e.g. 750"
+                    value={formData.dayRate}
+                    onChange={(e) => setFormData({ ...formData, dayRate: e.target.value })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Contact Email / Phone</label>
+                  <input
+                    type="text"
+                    placeholder="e.g. crew@cinemail.com"
+                    value={formData.contact}
+                    onChange={(e) => setFormData({ ...formData, contact: e.target.value })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-emerald-950/60">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
+                >
+                  Add Member to Roster
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
