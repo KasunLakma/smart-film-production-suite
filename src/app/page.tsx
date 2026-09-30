@@ -13,9 +13,9 @@ import {
 
 export default function HomePage() {
   return (
-    <div className="min-h-screen bg-[#070d0a] text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-black">
+    <div className="min-h-screen bg-[#060b08] text-slate-100 flex flex-col selection:bg-emerald-500 selection:text-black">
       {/* Navigation Bar */}
-      <header className="border-b border-emerald-950/40 bg-[#070d0a]/80 backdrop-blur-md sticky top-0 z-50">
+      <header className="border-b border-emerald-950/50 bg-[#060b08]/85 backdrop-blur-md sticky top-0 z-50">
         <div className="max-w-7xl mx-auto px-6 h-16 flex items-center justify-between">
           <Link href="/" className="flex items-center gap-2.5 group">
             <div className="w-9 h-9 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
@@ -49,34 +49,34 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero Section with Cinematic Background */}
+      {/* Hero Section with Visible Cinematic Camera Background */}
       <section className="relative pt-24 pb-28 md:pt-36 md:pb-40 px-6 overflow-hidden">
         {/* Background Image Container */}
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=2000&q=80"
-            alt="Film Production Studio Camera"
-            className="w-full h-full object-cover object-center opacity-25 filter brightness-[0.6] contrast-125"
+            src="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=2000&q=80"
+            alt="Film Production Camera Set"
+            className="w-full h-full object-cover object-center opacity-45 filter contrast-125 brightness-75"
           />
-          {/* Subtle Studio Glow */}
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-emerald-500/15 blur-[150px] pointer-events-none rounded-full" />
-          {/* Gradient Overlay for Readable Text & Clean Fade */}
-          <div className="absolute inset-0 bg-gradient-to-b from-[#070d0a]/90 via-[#070d0a]/75 to-[#070d0a]" />
+          {/* Subtle Ambient Radial Highlight */}
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-emerald-500/20 blur-[140px] pointer-events-none rounded-full" />
+          {/* Smooth Vignette and Gradient Overlay */}
+          <div className="absolute inset-0 bg-gradient-to-t from-[#060b08] via-[#060b08]/60 to-[#060b08]/85" />
         </div>
 
         <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-6 backdrop-blur-sm">
-            <Sparkles className="w-3.5 h-3.5" /> All-in-One Film Pre-Production Platform
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/15 border border-emerald-500/30 text-emerald-300 text-xs font-semibold uppercase tracking-wider mb-6 backdrop-blur-md">
+            <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> All-in-One Film Pre-Production Platform
           </div>
 
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6 drop-shadow-md">
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6 drop-shadow-lg">
             From Screenplay to Set, <br className="hidden sm:inline" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 to-emerald-300">
               Simplified in One Place.
             </span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-slate-200 max-w-2xl mx-auto mb-10 leading-relaxed font-light drop-shadow">
+          <p className="text-lg sm:text-xl text-slate-200 max-w-2xl mx-auto mb-10 leading-relaxed font-normal drop-shadow">
             Eliminate days of tedious manual script breakdowns. Upload your screenplay to instantly extract scenes, characters, 16:9 storyboards, and production budgets in minutes.
           </p>
 
@@ -91,7 +91,7 @@ export default function HomePage() {
 
             <Link
               href="/breakdown"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/40 text-white font-medium text-base transition-all flex items-center justify-center gap-2 backdrop-blur-sm"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0a1610]/80 hover:bg-[#0f241a] border border-emerald-500/40 text-white font-medium text-base transition-all flex items-center justify-center gap-2 backdrop-blur-md shadow-lg"
             >
               <PlayCircle className="w-5 h-5 text-emerald-400" />
               Explore Script Breakdown
@@ -99,14 +99,14 @@ export default function HomePage() {
           </div>
 
           {/* Key Value Points */}
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-300">
-            <div className="flex items-center gap-1.5 bg-[#070d0a]/60 px-3 py-1.5 rounded-full border border-emerald-950/60 backdrop-blur-sm">
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-200">
+            <div className="flex items-center gap-1.5 bg-[#060b08]/80 px-3.5 py-1.5 rounded-full border border-emerald-950/80 backdrop-blur-md">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Instant Entity Extraction
             </div>
-            <div className="flex items-center gap-1.5 bg-[#070d0a]/60 px-3 py-1.5 rounded-full border border-emerald-950/60 backdrop-blur-sm">
+            <div className="flex items-center gap-1.5 bg-[#060b08]/80 px-3.5 py-1.5 rounded-full border border-emerald-950/80 backdrop-blur-md">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 16:9 Storyboard Visuals
             </div>
-            <div className="flex items-center gap-1.5 bg-[#070d0a]/60 px-3 py-1.5 rounded-full border border-emerald-950/60 backdrop-blur-sm">
+            <div className="flex items-center gap-1.5 bg-[#060b08]/80 px-3.5 py-1.5 rounded-full border border-emerald-950/80 backdrop-blur-md">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Dynamic Department Budgets
             </div>
           </div>
@@ -114,7 +114,7 @@ export default function HomePage() {
       </section>
 
       {/* How It Works Section */}
-      <section id="how-it-works" className="py-20 px-6 border-t border-emerald-950/40 bg-[#09120e] relative z-10">
+      <section id="how-it-works" className="py-20 px-6 border-t border-emerald-950/40 bg-[#08120c] relative z-10">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-xs uppercase tracking-widest text-emerald-400 font-bold mb-2">Workflow</h2>
@@ -122,7 +122,7 @@ export default function HomePage() {
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-3 gap-8">
-            <div className="p-7 rounded-2xl bg-[#0e1b14] border border-emerald-950/70 hover:border-emerald-500/40 transition-all flex flex-col">
+            <div className="p-7 rounded-2xl bg-[#0b1811] border border-emerald-950/70 hover:border-emerald-500/40 transition-all flex flex-col">
               <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-lg mb-6">
                 01
               </div>
@@ -135,7 +135,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="p-7 rounded-2xl bg-[#0e1b14] border border-emerald-950/70 hover:border-emerald-500/40 transition-all flex flex-col">
+            <div className="p-7 rounded-2xl bg-[#0b1811] border border-emerald-950/70 hover:border-emerald-500/40 transition-all flex flex-col">
               <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-lg mb-6">
                 02
               </div>
@@ -148,7 +148,7 @@ export default function HomePage() {
               </div>
             </div>
 
-            <div className="p-7 rounded-2xl bg-[#0e1b14] border border-emerald-950/70 hover:border-emerald-500/40 transition-all flex flex-col">
+            <div className="p-7 rounded-2xl bg-[#0b1811] border border-emerald-950/70 hover:border-emerald-500/40 transition-all flex flex-col">
               <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 font-bold text-lg mb-6">
                 03
               </div>
@@ -172,7 +172,7 @@ export default function HomePage() {
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="p-8 rounded-2xl bg-[#0c1711] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
+          <div className="p-8 rounded-2xl bg-[#0a1610] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
             <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
               <Film className="w-6 h-6" />
             </div>
@@ -184,7 +184,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="p-8 rounded-2xl bg-[#0c1711] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
+          <div className="p-8 rounded-2xl bg-[#0a1610] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
             <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
               <Layers className="w-6 h-6" />
             </div>
@@ -196,7 +196,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="p-8 rounded-2xl bg-[#0c1711] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
+          <div className="p-8 rounded-2xl bg-[#0a1610] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
             <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
               <DollarSign className="w-6 h-6" />
             </div>
@@ -208,7 +208,7 @@ export default function HomePage() {
             </div>
           </div>
 
-          <div className="p-8 rounded-2xl bg-[#0c1711] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
+          <div className="p-8 rounded-2xl bg-[#0a1610] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex gap-5">
             <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-center text-emerald-400 shrink-0">
               <Users className="w-6 h-6" />
             </div>
