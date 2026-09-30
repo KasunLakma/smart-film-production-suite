@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import {
   FileText,
   Sparkles,
@@ -11,7 +12,10 @@ import {
   Play,
   CheckCircle2,
   ArrowRight,
-  FileCheck
+  FileCheck,
+  Film,
+  Wand2,
+  Loader2
 } from "lucide-react";
 
 interface SceneEntity {
@@ -23,6 +27,7 @@ interface SceneEntity {
   synopsis: string;
   characters: string[];
   props: string[];
+  plannedShots: number;
 }
 
 const SAMPLE_FEATURE_SCRIPT = `SCENE 01: INT. CYBERNETIC ARCHIVE - NIGHT
@@ -46,10 +51,13 @@ SCENE 04: EXT. INDUSTRIAL HARBOR - DAWN
 Fog rises off the dark harbor waters. A patrol boat cuts the engine. KAI inspects the BIOMETRIC SCANNER on the waterfront crane.`;
 
 export default function ScriptBreakdownPage() {
+  const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
   const [scriptText, setScriptText] = useState(SAMPLE_FEATURE_SCRIPT);
   const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingStoryboards, setIsGeneratingStoryboards] = useState(false);
+  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
   // Strictly typed Scene Parser
@@ -82,47 +90,24 @@ export default function ScriptBreakdownPage() {
           timeOfDay: isNight ? "NIGHT" : "DAY",
           synopsis: "",
           characters: [],
-          props: []
+          props: [],
+          plannedShots: 3
         };
       } else if (currentScene) {
-        if (trimmed) {
-          synopsisBuffer.push(trimmed);
-        }
+        if (trimmed) synopsisBuffer.push(trimmed);
 
-        if (/ELENA/i.test(trimmed) && !currentScene.characters.includes("Elena")) {
-          currentScene.characters.push("Elena");
-        }
-        if (/MARCUS/i.test(trimmed) && !currentScene.characters.includes("Marcus")) {
-          currentScene.characters.push("Marcus");
-        }
-        if (/KAI/i.test(trimmed) && !currentScene.characters.includes("Kai")) {
-          currentScene.characters.push("Kai");
-        }
-        if (/DIRECTOR/i.test(trimmed) && !currentScene.characters.includes("Director Vance")) {
-          currentScene.characters.push("Director Vance");
-        }
-        if (/MAYA/i.test(trimmed) && !currentScene.characters.includes("Maya")) {
-          currentScene.characters.push("Maya");
-        }
+        if (/ELENA/i.test(trimmed) && !currentScene.characters.includes("Elena")) currentScene.characters.push("Elena");
+        if (/MARCUS/i.test(trimmed) && !currentScene.characters.includes("Marcus")) currentScene.characters.push("Marcus");
+        if (/KAI/i.test(trimmed) && !currentScene.characters.includes("Kai")) currentScene.characters.push("Kai");
+        if (/DIRECTOR/i.test(trimmed) && !currentScene.characters.includes("Director Vance")) currentScene.characters.push("Director Vance");
+        if (/MAYA/i.test(trimmed) && !currentScene.characters.includes("Maya")) currentScene.characters.push("Maya");
 
-        if (/GLOWING CORE/i.test(trimmed) && !currentScene.props.includes("Glowing Core")) {
-          currentScene.props.push("Glowing Core");
-        }
-        if (/WRENCH/i.test(trimmed) && !currentScene.props.includes("Heavy Wrench")) {
-          currentScene.props.push("Heavy Wrench");
-        }
-        if (/PLASMA CUTTER/i.test(trimmed) && !currentScene.props.includes("Plasma Cutter")) {
-          currentScene.props.push("Plasma Cutter");
-        }
-        if (/BRIEFCASE/i.test(trimmed) && !currentScene.props.includes("Locked Briefcase")) {
-          currentScene.props.push("Locked Briefcase");
-        }
-        if (/MIC/i.test(trimmed) && !currentScene.props.includes("Wireless Boom Mic")) {
-          currentScene.props.push("Wireless Boom Mic");
-        }
-        if (/SCANNER/i.test(trimmed) && !currentScene.props.includes("Biometric Scanner")) {
-          currentScene.props.push("Biometric Scanner");
-        }
+        if (/GLOWING CORE/i.test(trimmed) && !currentScene.props.includes("Glowing Core")) currentScene.props.push("Glowing Core");
+        if (/WRENCH/i.test(trimmed) && !currentScene.props.includes("Heavy Wrench")) currentScene.props.push("Heavy Wrench");
+        if (/PLASMA CUTTER/i.test(trimmed) && !currentScene.props.includes("Plasma Cutter")) currentScene.props.push("Plasma Cutter");
+        if (/BRIEFCASE/i.test(trimmed) && !currentScene.props.includes("Locked Briefcase")) currentScene.props.push("Locked Briefcase");
+        if (/MIC/i.test(trimmed) && !currentScene.props.includes("Wireless Boom Mic")) currentScene.props.push("Wireless Boom Mic");
+        if (/SCANNER/i.test(trimmed) && !currentScene.props.includes("Biometric Scanner")) currentScene.props.push("Biometric Scanner");
       }
     }
 
@@ -140,7 +125,8 @@ export default function ScriptBreakdownPage() {
         timeOfDay: "NIGHT",
         synopsis: "Elena and Marcus inspect an unstable glowing core amidst flickering holographic terminals.",
         characters: ["Elena", "Marcus"],
-        props: ["Glowing Core", "Heavy Wrench", "Plasma Cutter"]
+        props: ["Glowing Core", "Heavy Wrench", "Plasma Cutter"],
+        plannedShots: 3
       }
     ];
   };
@@ -169,6 +155,24 @@ export default function ScriptBreakdownPage() {
     }, 600);
   };
 
+  // Generate All Storyboards and navigate to /storyboard
+  const handleGenerateAllStoryboards = () => {
+    setIsGeneratingStoryboards(true);
+    setTimeout(() => {
+      setIsGeneratingStoryboards(false);
+      router.push("/storyboard");
+    }, 1200);
+  };
+
+  // Generate Single Scene Storyboard and navigate to /storyboard
+  const handleGenerateSceneStoryboard = (sceneId: string) => {
+    setGeneratingSceneId(sceneId);
+    setTimeout(() => {
+      setGeneratingSceneId(null);
+      router.push("/storyboard");
+    }, 1000);
+  };
+
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
       {/* Top Banner */}
@@ -181,17 +185,26 @@ export default function ScriptBreakdownPage() {
             Script Breakdown Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Upload your full feature screenplay (PDF / FDX) or paste text to automatically extract scene sequences.
+            Parse screenplay into scenes, then generate 16:9 visual storyboards directly into production queue.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
-          <Link
-            href="/storyboard"
-            className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all flex items-center gap-1.5 shadow-lg shadow-emerald-500/20"
+          <button
+            onClick={handleGenerateAllStoryboards}
+            disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
           >
-            Go to Storyboards <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+            {isGeneratingAllStoryboards ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing All Storyboards...
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-4 h-4" /> Generate All Storyboards
+              </>
+            )}
+          </button>
         </div>
       </div>
 
@@ -224,7 +237,6 @@ export default function ScriptBreakdownPage() {
 
             {inputMode === "upload" ? (
               <div className="space-y-4">
-                {/* Drag and Drop Box */}
                 <label className="border-2 border-dashed border-emerald-950/80 hover:border-emerald-500/50 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-[#050b07]/50 group">
                   <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3 group-hover:scale-105 transition-transform">
                     <UploadCloud className="w-7 h-7" />
@@ -233,7 +245,7 @@ export default function ScriptBreakdownPage() {
                     Upload Feature Screenplay
                   </h4>
                   <p className="text-xs text-slate-400 max-w-xs mb-3">
-                    Drag and drop your full script file here. Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and text files.
+                    Drag and drop your script file. Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and text files.
                   </p>
                   <span className="px-3 py-1 rounded-full bg-[#0e1d15] border border-emerald-500/20 text-[11px] text-emerald-400 font-medium">
                     No word or page limit (2-hour feature ready)
@@ -277,7 +289,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Ordered Scene-by-Scene Breakdown List (7 Cols) */}
+        {/* Right Column: Ordered Scene Breakdown with Storyboard Triggers (7 Cols) */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
@@ -367,6 +379,29 @@ export default function ScriptBreakdownPage() {
                         )}
                       </div>
                     </div>
+                  </div>
+
+                  {/* Footer Action: Storyboard Trigger for this Scene */}
+                  <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
+                    <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                      <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned 16:9 Shots
+                    </span>
+
+                    <button
+                      onClick={() => handleGenerateSceneStoryboard(scene.id)}
+                      disabled={generatingSceneId === scene.id}
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5"
+                    >
+                      {generatingSceneId === scene.id ? (
+                        <>
+                          <Loader2 className="w-3 h-3 animate-spin" /> Loading Storyboard...
+                        </>
+                      ) : (
+                        <>
+                          Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
+                        </>
+                      )}
+                    </button>
                   </div>
                 </div>
               ))}
