@@ -49,30 +49,41 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero Section */}
-      <section className="relative pt-20 pb-24 md:pt-28 md:pb-36 px-6 overflow-hidden">
-        <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[600px] h-[350px] bg-emerald-500/10 blur-[140px] pointer-events-none rounded-full" />
+      {/* Hero Section with Cinematic Background */}
+      <section className="relative pt-24 pb-28 md:pt-36 md:pb-40 px-6 overflow-hidden">
+        {/* Background Image Container */}
+        <div className="absolute inset-0 z-0">
+          <img
+            src="https://images.unsplash.com/photo-1485846234645-a62644f84728?auto=format&fit=crop&w=2000&q=80"
+            alt="Film Production Studio Camera"
+            className="w-full h-full object-cover object-center opacity-25 filter brightness-[0.6] contrast-125"
+          />
+          {/* Subtle Studio Glow */}
+          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[700px] h-[350px] bg-emerald-500/15 blur-[150px] pointer-events-none rounded-full" />
+          {/* Gradient Overlay for Readable Text & Clean Fade */}
+          <div className="absolute inset-0 bg-gradient-to-b from-[#070d0a]/90 via-[#070d0a]/75 to-[#070d0a]" />
+        </div>
 
         <div className="max-w-5xl mx-auto text-center relative z-10">
-          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-6">
+          <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-6 backdrop-blur-sm">
             <Sparkles className="w-3.5 h-3.5" /> All-in-One Film Pre-Production Platform
           </div>
 
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6">
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6 drop-shadow-md">
             From Screenplay to Set, <br className="hidden sm:inline" />
-            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 to-teal-200">
+            <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 to-emerald-300">
               Simplified in One Place.
             </span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-slate-300 max-w-2xl mx-auto mb-10 leading-relaxed font-light">
+          <p className="text-lg sm:text-xl text-slate-200 max-w-2xl mx-auto mb-10 leading-relaxed font-light drop-shadow">
             Eliminate days of tedious manual script breakdowns. Upload your screenplay to instantly extract scenes, characters, 16:9 storyboards, and production budgets in minutes.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/dashboard"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-base shadow-xl shadow-emerald-500/25 transition-all flex items-center justify-center gap-2 group"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-base shadow-xl shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 group"
             >
               Start Free Production
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -80,7 +91,7 @@ export default function HomePage() {
 
             <Link
               href="/breakdown"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-950/40 hover:bg-emerald-900/40 border border-emerald-500/30 text-white font-medium text-base transition-all flex items-center justify-center gap-2"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-500/40 text-white font-medium text-base transition-all flex items-center justify-center gap-2 backdrop-blur-sm"
             >
               <PlayCircle className="w-5 h-5 text-emerald-400" />
               Explore Script Breakdown
@@ -88,14 +99,14 @@ export default function HomePage() {
           </div>
 
           {/* Key Value Points */}
-          <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-400">
-            <div className="flex items-center gap-1.5">
+          <div className="mt-12 flex flex-wrap items-center justify-center gap-6 text-xs text-slate-300">
+            <div className="flex items-center gap-1.5 bg-[#070d0a]/60 px-3 py-1.5 rounded-full border border-emerald-950/60 backdrop-blur-sm">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Instant Entity Extraction
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 bg-[#070d0a]/60 px-3 py-1.5 rounded-full border border-emerald-950/60 backdrop-blur-sm">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> 16:9 Storyboard Visuals
             </div>
-            <div className="flex items-center gap-1.5">
+            <div className="flex items-center gap-1.5 bg-[#070d0a]/60 px-3 py-1.5 rounded-full border border-emerald-950/60 backdrop-blur-sm">
               <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Dynamic Department Budgets
             </div>
           </div>
@@ -103,7 +114,7 @@ export default function HomePage() {
       </section>
 
       {/* How It Works Section */}
-      <section id="how-it-works" className="py-20 px-6 border-t border-emerald-950/40 bg-[#09120e]">
+      <section id="how-it-works" className="py-20 px-6 border-t border-emerald-950/40 bg-[#09120e] relative z-10">
         <div className="max-w-6xl mx-auto">
           <div className="text-center mb-16">
             <h2 className="text-xs uppercase tracking-widest text-emerald-400 font-bold mb-2">Workflow</h2>
@@ -154,7 +165,7 @@ export default function HomePage() {
       </section>
 
       {/* Core Features */}
-      <section id="features" className="py-20 px-6 max-w-6xl mx-auto w-full">
+      <section id="features" className="py-20 px-6 max-w-6xl mx-auto w-full relative z-10">
         <div className="text-center mb-16">
           <h2 className="text-xs uppercase tracking-widest text-emerald-400 font-bold mb-2">Capabilities</h2>
           <h3 className="text-3xl sm:text-4xl font-bold text-white tracking-tight">Built for Independent Filmmakers</h3>
@@ -212,7 +223,7 @@ export default function HomePage() {
       </section>
 
       {/* Bottom CTA Banner */}
-      <section className="py-16 px-6 bg-gradient-to-b from-transparent to-emerald-950/20 border-t border-emerald-950/40">
+      <section className="py-16 px-6 bg-gradient-to-b from-transparent to-emerald-950/20 border-t border-emerald-950/40 relative z-10">
         <div className="max-w-4xl mx-auto text-center">
           <h3 className="text-2xl sm:text-3xl font-bold text-white mb-4">
             Ready to Plan Your Next Production?
@@ -230,7 +241,7 @@ export default function HomePage() {
       </section>
 
       {/* Footer */}
-      <footer className="mt-auto py-8 px-6 border-t border-emerald-950/40 text-center text-xs text-slate-400">
+      <footer className="mt-auto py-8 px-6 border-t border-emerald-950/40 text-center text-xs text-slate-400 relative z-10">
         <p>© 2026 eclat Studio. All rights reserved. Built for modern filmmakers.</p>
       </footer>
     </div>
