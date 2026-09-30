@@ -49,14 +49,14 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero Section with Visible Cinematic Camera Background */}
+      {/* Hero Section with Local Cinema Camera Background */}
       <section className="relative pt-24 pb-28 md:pt-36 md:pb-40 px-6 overflow-hidden">
         {/* Background Image Container */}
         <div className="absolute inset-0 z-0">
           <img
-            src="https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=2000&q=80"
-            alt="Film Production Camera Set"
-            className="w-full h-full object-cover object-center opacity-45 filter contrast-125 brightness-75"
+            src="/hero.jpg"
+            alt="Film Production Cinema Camera Set"
+            className="w-full h-full object-cover object-center opacity-40 filter contrast-125 brightness-75"
           />
           {/* Subtle Ambient Radial Highlight */}
           <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-emerald-500/20 blur-[140px] pointer-events-none rounded-full" />
