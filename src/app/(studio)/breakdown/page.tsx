@@ -11,10 +11,7 @@ import {
   Play,
   CheckCircle2,
   ArrowRight,
-  FileCheck,
-  RotateCcw,
-  Film,
-  Layers
+  FileCheck
 } from "lucide-react";
 
 interface SceneEntity {
@@ -55,21 +52,21 @@ export default function ScriptBreakdownPage() {
   const [isProcessing, setIsProcessing] = useState(false);
   const [hasParsed, setHasParsed] = useState(true);
 
-  // Dynamic Scene Parsing Logic based on Sluglines
+  // Strictly typed Scene Parser
   const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
     const lines = raw.split("\n");
     const parsed: SceneEntity[] = [];
-    let currentScene: Partial<SceneEntity> | null = null;
+    let currentScene: SceneEntity | null = null;
     let synopsisBuffer: string[] = [];
 
-    lines.forEach((line) => {
+    for (const line of lines) {
       const trimmed = line.trim();
       const isSlugline = /^(SCENE\s*\d+:?\s*)?(INT\.|EXT\.|I\/E\.)/i.test(trimmed);
 
       if (isSlugline) {
         if (currentScene) {
-          currentScene.synopsis = synopsisBuffer.slice(0, 2).join(" ") || "Characters engage in dialogue and key action sequence.";
-          parsed.push(currentScene as SceneEntity);
+          currentScene.synopsis = synopsisBuffer.slice(0, 2).join(" ") || "Dialogue and action sequence.";
+          parsed.push(currentScene);
           synopsisBuffer = [];
         }
 
@@ -83,31 +80,55 @@ export default function ScriptBreakdownPage() {
           slugline: trimmed,
           locationType: isExt ? "EXT" : "INT",
           timeOfDay: isNight ? "NIGHT" : "DAY",
+          synopsis: "",
           characters: [],
           props: []
         };
       } else if (currentScene) {
-        if (trimmed) synopsisBuffer.push(trimmed);
+        if (trimmed) {
+          synopsisBuffer.push(trimmed);
+        }
 
-        // Simple entity detection
-        if (/ELENA/i.test(trimmed) && !currentScene.characters?.includes("Elena")) currentScene.characters?.push("Elena");
-        if (/MARCUS/i.test(trimmed) && !currentScene.characters?.includes("Marcus")) currentScene.characters?.push("Marcus");
-        if (/KAI/i.test(trimmed) && !currentScene.characters?.includes("Kai")) currentScene.characters?.push("Kai");
-        if (/DIRECTOR/i.test(trimmed) && !currentScene.characters?.includes("Director Vance")) currentScene.characters?.push("Director Vance");
-        if (/MAYA/i.test(trimmed) && !currentScene.characters?.includes("Maya")) currentScene.characters?.push("Maya");
+        if (/ELENA/i.test(trimmed) && !currentScene.characters.includes("Elena")) {
+          currentScene.characters.push("Elena");
+        }
+        if (/MARCUS/i.test(trimmed) && !currentScene.characters.includes("Marcus")) {
+          currentScene.characters.push("Marcus");
+        }
+        if (/KAI/i.test(trimmed) && !currentScene.characters.includes("Kai")) {
+          currentScene.characters.push("Kai");
+        }
+        if (/DIRECTOR/i.test(trimmed) && !currentScene.characters.includes("Director Vance")) {
+          currentScene.characters.push("Director Vance");
+        }
+        if (/MAYA/i.test(trimmed) && !currentScene.characters.includes("Maya")) {
+          currentScene.characters.push("Maya");
+        }
 
-        if (/GLOWING CORE/i.test(trimmed) && !currentScene.props?.includes("Glowing Core")) currentScene.props?.push("Glowing Core");
-        if (/WRENCH/i.test(trimmed) && !currentScene.props?.includes("Heavy Wrench")) currentScene.props?.push("Heavy Wrench");
-        if (/PLASMA CUTTER/i.test(trimmed) && !currentScene.props?.includes("Plasma Cutter")) currentScene.props?.push("Plasma Cutter");
-        if (/BRIEFCASE/i.test(trimmed) && !currentScene.props?.includes("Locked Briefcase")) currentScene.props?.push("Locked Briefcase");
-        if (/MIC/i.test(trimmed) && !currentScene.props?.includes("Wireless Boom Mic")) currentScene.props?.push("Wireless Boom Mic");
-        if (/SCANNER/i.test(trimmed) && !currentScene.props?.includes("Biometric Scanner")) currentScene.props?.push("Biometric Scanner");
+        if (/GLOWING CORE/i.test(trimmed) && !currentScene.props.includes("Glowing Core")) {
+          currentScene.props.push("Glowing Core");
+        }
+        if (/WRENCH/i.test(trimmed) && !currentScene.props.includes("Heavy Wrench")) {
+          currentScene.props.push("Heavy Wrench");
+        }
+        if (/PLASMA CUTTER/i.test(trimmed) && !currentScene.props.includes("Plasma Cutter")) {
+          currentScene.props.push("Plasma Cutter");
+        }
+        if (/BRIEFCASE/i.test(trimmed) && !currentScene.props.includes("Locked Briefcase")) {
+          currentScene.props.push("Locked Briefcase");
+        }
+        if (/MIC/i.test(trimmed) && !currentScene.props.includes("Wireless Boom Mic")) {
+          currentScene.props.push("Wireless Boom Mic");
+        }
+        if (/SCANNER/i.test(trimmed) && !currentScene.props.includes("Biometric Scanner")) {
+          currentScene.props.push("Biometric Scanner");
+        }
       }
-    });
+    }
 
     if (currentScene) {
       currentScene.synopsis = synopsisBuffer.slice(0, 2).join(" ") || "Action continues at designated production location.";
-      parsed.push(currentScene as SceneEntity);
+      parsed.push(currentScene);
     }
 
     return parsed.length > 0 ? parsed : [
@@ -131,12 +152,11 @@ export default function ScriptBreakdownPage() {
     if (file) {
       setUploadedFileName(file.name);
       setIsProcessing(true);
-      // Simulate reading and parsing large feature script (PDF/FDX)
       setTimeout(() => {
         setIsProcessing(false);
         setHasParsed(true);
         setParsedScenes(parseScriptIntoScenes(SAMPLE_FEATURE_SCRIPT));
-      }, 900);
+      }, 800);
     }
   };
 
