@@ -49,19 +49,18 @@ export default function HomePage() {
         </div>
       </header>
 
-      {/* Hero Section with Local Cinema Camera Background */}
+      {/* Hero Section with Clear Cinema Background */}
       <section className="relative pt-24 pb-28 md:pt-36 md:pb-40 px-6 overflow-hidden">
         {/* Background Image Container */}
         <div className="absolute inset-0 z-0">
           <img
             src="/hero.jpg"
             alt="Film Production Cinema Camera Set"
-            className="w-full h-full object-cover object-center opacity-40 filter contrast-125 brightness-75"
+            className="w-full h-full object-cover object-center brightness-90 contrast-110"
           />
-          {/* Subtle Ambient Radial Highlight */}
-          <div className="absolute top-1/3 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[400px] bg-emerald-500/20 blur-[140px] pointer-events-none rounded-full" />
-          {/* Smooth Vignette and Gradient Overlay */}
-          <div className="absolute inset-0 bg-gradient-to-t from-[#060b08] via-[#060b08]/60 to-[#060b08]/85" />
+          {/* Subtle Vignette so text stays legible without hiding the image */}
+          <div className="absolute inset-0 bg-[#060b08]/50 backdrop-blur-[1px]" />
+          <div className="absolute inset-0 bg-gradient-to-b from-[#060b08]/70 via-transparent to-[#060b08]" />
         </div>
 
         <div className="max-w-5xl mx-auto text-center relative z-10">
@@ -69,21 +68,21 @@ export default function HomePage() {
             <Sparkles className="w-3.5 h-3.5 text-emerald-400" /> All-in-One Film Pre-Production Platform
           </div>
 
-          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6 drop-shadow-lg">
+          <h1 className="text-4xl sm:text-6xl md:text-7xl font-extrabold tracking-tight text-white leading-[1.1] mb-6 drop-shadow-2xl">
             From Screenplay to Set, <br className="hidden sm:inline" />
             <span className="text-transparent bg-clip-text bg-gradient-to-r from-emerald-400 via-teal-200 to-emerald-300">
               Simplified in One Place.
             </span>
           </h1>
 
-          <p className="text-lg sm:text-xl text-slate-200 max-w-2xl mx-auto mb-10 leading-relaxed font-normal drop-shadow">
+          <p className="text-lg sm:text-xl text-slate-100 max-w-2xl mx-auto mb-10 leading-relaxed font-medium drop-shadow-md">
             Eliminate days of tedious manual script breakdowns. Upload your screenplay to instantly extract scenes, characters, 16:9 storyboards, and production budgets in minutes.
           </p>
 
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
             <Link
               href="/dashboard"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-base shadow-xl shadow-emerald-500/30 transition-all flex items-center justify-center gap-2 group"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-base shadow-2xl shadow-emerald-500/40 transition-all flex items-center justify-center gap-2 group"
             >
               Start Free Production
               <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
@@ -91,7 +90,7 @@ export default function HomePage() {
 
             <Link
               href="/breakdown"
-              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#0a1610]/80 hover:bg-[#0f241a] border border-emerald-500/40 text-white font-medium text-base transition-all flex items-center justify-center gap-2 backdrop-blur-md shadow-lg"
+              className="w-full sm:w-auto px-8 py-4 rounded-xl bg-[#060b08]/80 hover:bg-[#060b08] border border-emerald-500/50 text-white font-medium text-base transition-all flex items-center justify-center gap-2 backdrop-blur-md shadow-xl"
             >
               <PlayCircle className="w-5 h-5 text-emerald-400" />
               Explore Script Breakdown
