@@ -27,7 +27,7 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// පිටපතේ ඕනෑම Scene එකක ක්‍රියාව අනුව StudioBinder Pencil & Ink Storyboard Art එකක් කෙළින්ම සාදන High-Quality Canvas Engine එක
+// Canvas Storyboard Art Generator (StudioBinder Charcoal & Ink Style)
 function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: boolean): string {
   if (typeof document === "undefined") return "";
 
@@ -46,7 +46,7 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
   ctx.fillStyle = "#121415";
   ctx.fillRect(0, 0, 1280, 720);
 
-  // 2. Paper Texture & Crosshatch Sketch Lines (Pencil Texture)
+  // 2. Paper Texture & Crosshatch Sketch Lines
   ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
   ctx.lineWidth = 1;
   for (let i = -720; i < 1280; i += 8) {
@@ -64,16 +64,14 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
   // Crosshairs & Aspect Marks
   ctx.strokeStyle = "#505a63";
   ctx.lineWidth = 1.5;
-  // Top / Bottom center marks
   ctx.beginPath();
   ctx.moveTo(640, 20); ctx.lineTo(640, 50);
   ctx.moveTo(640, 670); ctx.lineTo(640, 700);
-  // Left / Right center marks
   ctx.moveTo(25, 360); ctx.lineTo(55, 360);
   ctx.moveTo(1225, 360); ctx.lineTo(1255, 360);
   ctx.stroke();
 
-  // 4. Perspective Grids & Scene Layout (StudioBinder Cinematography Lines)
+  // 4. Perspective Grids & Scene Layout
   ctx.strokeStyle = "rgba(180, 195, 205, 0.25)";
   ctx.lineWidth = 1.5;
   const horizonY = isWide ? 420 : 480;
@@ -81,7 +79,6 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
   ctx.beginPath();
   ctx.moveTo(40, horizonY);
   ctx.lineTo(1240, horizonY);
-  // Vanishing point perspective diagonals
   ctx.moveTo(640, horizonY); ctx.lineTo(40, 685);
   ctx.moveTo(640, horizonY); ctx.lineTo(380, 685);
   ctx.moveTo(640, horizonY); ctx.lineTo(900, 685);
@@ -91,28 +88,27 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
   // 5. Hand-Drawn Ink Elements based on Scene Type
   if (isLab) {
     if (isWide) {
-      // Wide Lab: Computer terminal racks, table, figure in background
       ctx.strokeStyle = "#cbd5e1";
       ctx.lineWidth = 2.5;
-      // Server racks & screens left
       ctx.strokeRect(100, 180, 220, 240);
       ctx.strokeRect(120, 200, 180, 60);
       ctx.strokeRect(120, 280, 180, 60);
-      // Screens right
       ctx.strokeRect(960, 180, 220, 240);
       ctx.strokeRect(980, 200, 180, 60);
       ctx.strokeRect(980, 280, 180, 60);
+
       // Central Hologram Table
       ctx.beginPath();
       ctx.ellipse(640, 520, 320, 70, 0, 0, Math.PI * 2);
       ctx.stroke();
+
       // Holographic Light Cone
       ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
-      ctx.strokePoly = true;
       ctx.beginPath();
       ctx.moveTo(640, 320); ctx.lineTo(480, 520);
       ctx.moveTo(640, 320); ctx.lineTo(800, 520);
       ctx.stroke();
+
       // Operative Silhouette
       ctx.fillStyle = "#e2e8f0";
       ctx.beginPath();
@@ -122,58 +118,55 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
       ctx.moveTo(600, 470); ctx.lineTo(620, 385); ctx.lineTo(660, 385); ctx.lineTo(680, 470);
       ctx.fill();
     } else {
-      // Close up: Technician face, intense eyes & glowing handheld scanner
       ctx.strokeStyle = "#e2e8f0";
       ctx.fillStyle = "#1e242a";
       ctx.lineWidth = 3;
-      // Face / Head silhouette
       ctx.beginPath();
       ctx.arc(640, 280, 95, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      // Eyes / Brow crosshatching
+
       ctx.strokeStyle = "#f8fafc";
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(590, 275); ctx.lineTo(630, 270);
       ctx.moveTo(650, 270); ctx.lineTo(690, 275);
       ctx.stroke();
+
       // Handheld Tactical Scanner tool
       ctx.fillStyle = "#334155";
       ctx.strokeStyle = "#38bdf8";
       ctx.lineWidth = 3;
       ctx.fillRect(560, 430, 160, 180);
       ctx.strokeRect(560, 430, 160, 180);
-      // Scanner Display
       ctx.strokeStyle = "#7dd3fc";
       ctx.strokeRect(580, 450, 120, 80);
-      // Scanning Light Array
       ctx.beginPath();
       ctx.moveTo(580, 490); ctx.lineTo(700, 490);
       ctx.stroke();
     }
   } else if (isHarbor) {
     if (isWide) {
-      // Wide Harbor: Containers, parked van, downpour rain
       ctx.strokeStyle = "#cbd5e1";
       ctx.lineWidth = 2.5;
-      // Stacked Containers Left & Right
       ctx.strokeRect(80, 260, 240, 160);
       ctx.strokeRect(960, 260, 240, 160);
       ctx.strokeRect(980, 140, 200, 120);
-      // Dark Tactical Van silhouette
+
+      // Van silhouette
       ctx.fillStyle = "#262e35";
       ctx.strokeStyle = "#e2e8f0";
       ctx.beginPath();
       ctx.moveTo(480, 480); ctx.lineTo(500, 390); ctx.lineTo(660, 390); ctx.lineTo(740, 430); ctx.lineTo(780, 440); ctx.lineTo(780, 480); ctx.closePath();
       ctx.fill();
       ctx.stroke();
-      // Van wheels
+
       ctx.beginPath();
       ctx.arc(540, 485, 20, 0, Math.PI * 2);
       ctx.arc(720, 485, 20, 0, Math.PI * 2);
       ctx.stroke();
-      // Heavy Downpour Rain Hatching
+
+      // Rain Hatching
       ctx.strokeStyle = "rgba(148, 163, 184, 0.4)";
       ctx.lineWidth = 1.5;
       for (let r = 100; r < 1200; r += 45) {
@@ -183,16 +176,14 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
         ctx.stroke();
       }
     } else {
-      // Close up: Agent holding binoculars in rain
       ctx.strokeStyle = "#e2e8f0";
       ctx.fillStyle = "#1e242a";
       ctx.lineWidth = 3;
-      // Hooded Head
       ctx.beginPath();
       ctx.arc(640, 270, 110, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
-      // Binoculars in front
+
       ctx.fillStyle = "#334155";
       ctx.beginPath();
       ctx.arc(580, 360, 45, 0, Math.PI * 2);
@@ -203,15 +194,14 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
     }
   } else if (isControl) {
     if (isWide) {
-      // Wide Control Room: Warning alarms, curved console
       ctx.strokeStyle = "#cbd5e1";
       ctx.lineWidth = 2.5;
-      // Mainframe Monitor Wall
       ctx.strokeRect(180, 140, 920, 200);
       ctx.strokeRect(220, 160, 260, 160);
       ctx.strokeRect(510, 160, 260, 160);
       ctx.strokeRect(800, 160, 260, 160);
-      // Emergency Flashing Beacon
+
+      // Warning beacon
       ctx.strokeStyle = "#ef4444";
       ctx.lineWidth = 3;
       ctx.beginPath();
@@ -222,18 +212,17 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
       ctx.moveTo(680, 80); ctx.lineTo(700, 60);
       ctx.stroke();
     } else {
-      // Close up: Hand pulling encrypted hard drive
       ctx.strokeStyle = "#e2e8f0";
       ctx.fillStyle = "#1e242a";
       ctx.lineWidth = 3;
-      // Server Bay Slot
       ctx.strokeRect(340, 160, 600, 380);
       ctx.strokeRect(380, 200, 520, 80);
-      // Military Encrypted Drive Being Pulled Out
+
+      // Hard drive
       ctx.fillStyle = "#334155";
       ctx.fillRect(480, 310, 320, 160);
       ctx.strokeRect(480, 310, 320, 160);
-      // Red Alarm Light Edge
+
       ctx.strokeStyle = "#ef4444";
       ctx.lineWidth = 4;
       ctx.beginPath();
@@ -241,12 +230,12 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
       ctx.stroke();
     }
   } else {
-    // Dawn Docks / Generic Escape Scene
+    // Dawn / Escape
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 2.5;
     ctx.strokeRect(140, 240, 300, 180);
     ctx.strokeRect(840, 240, 300, 180);
-    // Running Figures
+
     ctx.fillStyle = "#e2e8f0";
     ctx.beginPath();
     ctx.arc(580, 380, 18, 0, Math.PI * 2);
@@ -254,7 +243,7 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
     ctx.fill();
   }
 
-  // 6. StudioBinder Bottom Slate / Metadata Bar
+  // 6. Bottom Metadata Bar
   ctx.fillStyle = "rgba(5, 10, 8, 0.88)";
   ctx.fillRect(40, 615, 1200, 70);
   ctx.strokeStyle = "#10b981";
