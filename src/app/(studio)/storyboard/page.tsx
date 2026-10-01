@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
-  Sparkles,
   SlidersHorizontal,
   Video,
   RefreshCw,
@@ -28,13 +27,23 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
+const FALLBACK_IMAGES: Record<string, string[]> = {
+  lab: [
+    "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"
+  ],
+  port: [
+    "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80",
+    "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80"
+  ]
+};
+
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  // AI Agent හරහා පින්තූරයක් Generate කිරීම
   const triggerAiAgentForShot = async (shot: StoryboardShot) => {
     try {
       const res = await fetch("/api/storyboard/generate", {
@@ -43,7 +52,6 @@ export default function StoryboardPage() {
         body: JSON.stringify({
           sceneSlug: shot.sceneSlug,
           synopsis: shot.synopsis,
-          shotType: shot.shotType,
           isWide: shot.isWide
         })
       });
@@ -60,7 +68,17 @@ export default function StoryboardPage() {
         throw new Error("Failed");
       }
     } catch {
-      setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: false } : s));
+      // Fallback if network drops
+      const fallbackList = shot.sceneSlug.includes("වරාය") || shot.sceneSlug.includes("port")
+        ? FALLBACK_IMAGES.port
+        : FALLBACK_IMAGES.lab;
+      const fallbackImg = shot.isWide ? fallbackList[0] : fallbackList[1];
+
+      setShots(prev => prev.map(s => s.id === shot.id ? {
+        ...s,
+        imageUrl: fallbackImg,
+        isGenerating: false
+      } : s));
     }
   };
 
@@ -114,12 +132,11 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
 
-            // තෝරාගත් target scene එකේ shots දෙක Director Agent වෙත යොමු කිරීම
             const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
             targetShots.forEach((shot, idx) => {
               setTimeout(() => {
                 triggerAiAgentForShot(shot);
-              }, idx * 1200);
+              }, idx * 1000);
             });
           }
         } catch { }
@@ -142,7 +159,7 @@ export default function StoryboardPage() {
         if (idx === shots.length - 1) {
           setIsGeneratingAll(false);
         }
-      }, idx * 1200);
+      }, idx * 1000);
     });
   };
 
@@ -246,6 +263,11 @@ export default function StoryboardPage() {
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
+                    onError={(e) => {
+                      // Fallback image if network times out
+                      const fallbackList = shot.sceneSlug.includes("වරාය") ? FALLBACK_IMAGES.port : FALLBACK_IMAGES.lab;
+                      (e.target as HTMLImageElement).src = shot.isWide ? fallbackList[0] : fallbackList[1];
+                    }}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-95 contrast-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
