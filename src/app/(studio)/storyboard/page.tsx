@@ -22,16 +22,40 @@ interface StoryboardShot {
   lens: string;
   cameraMovement: string;
   visualPrompt: string;
+  englishPrompt: string;
   imageUrl?: string;
   isGenerating?: boolean;
 }
 
-// Storyboard AI Prompt Generator (Black & White Comic Sketch Style)
-const buildStoryboardAiUrl = (promptText: string, seed: number) => {
-  const cleanPrompt = encodeURIComponent(
-    `black and white film storyboard sketch, graphic novel comic ink drawing, dynamic framing, cinematic pencil sketch, ${promptText}`
+// Convert Sinhala/Bilingual Scene Context to Clean English Storyboard Prompt
+const buildEnglishStoryboardPrompt = (sceneSlug: string, isCloseUp: boolean): string => {
+  const isNight = /NIGHT|රාත්‍රී|රෑ/i.test(sceneSlug);
+  const isLab = /විද්‍යාගාරය|ARCHIVE|LAB|INT/i.test(sceneSlug);
+  const isPort = /වරාය|DOCKS|HARBOR|STREET|EXT/i.test(sceneSlug);
+
+  if (isLab) {
+    return isCloseUp
+      ? "medium close up shot of a male technician inspecting a glowing holographic device on a metal desk in a dark high tech laboratory, black and white comic book ink sketch, detailed linework, crosshatching shading, studiobinder storyboard art"
+      : "wide establishing shot of a dark cyberpunk tech laboratory with glowing computer screens, metallic catwalks, a technician working, high contrast black and white comic storyboard, pencil and ink sketch, dynamic perspective";
+  }
+
+  if (isPort) {
+    return isCloseUp
+      ? "intense close-up of a secret agent looking through binoculars, rain dripping down face, high contrast noir ink drawing, graphic novel storyboard frame, dynamic pencil hatching"
+      : "cinematic wide angle shot of a rainy harbor street at night, a dark van parked near shipping containers under streetlights, black and white comic storyboard sketch, dramatic ink lines";
+  }
+
+  return isCloseUp
+    ? "dramatic medium close up of dramatic film character expressing tension, black and white comic storyboard sketch, clean ink outlines, crosshatching"
+    : "wide angle dynamic film scene establishing shot, black and white ink sketch, cinematic storyboard panel, graphic novel art style";
+};
+
+// Construct Verified AI Image URL
+const generateAiImageUrl = (englishPrompt: string, seed: number): string => {
+  const finalPrompt = encodeURIComponent(
+    `black and white film storyboard drawing, studiobinder comic panel, cinematic sketch, pencil and ink art, no realistic human faces, no text watermark, ${englishPrompt}`
   );
-  return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=800&height=450&nologo=true&seed=${seed}`;
+  return `https://image.pollinations.ai/prompt/${finalPrompt}?width=800&height=450&nologo=true&seed=${seed}`;
 };
 
 export default function StoryboardPage() {
@@ -56,18 +80,19 @@ export default function StoryboardPage() {
             parsed.forEach((scene, scnIdx) => {
               const isTargetScene = activeFilter === "ALL" || activeFilter === scene.id;
 
-              const shotA_Prompt = `${scene.slugline}, wide angle establishing shot, ${scene.synopsis.slice(0, 90)}, key props: ${scene.props.join(", ") || "set details"}`;
-              const shotB_Prompt = `medium close-up shot, character focus ${scene.characters.join(" and ") || "lead character"}, expressive intense reaction, scene dialogue action`;
+              const shotA_Prompt = buildEnglishStoryboardPrompt(scene.slugline, false);
+              const shotB_Prompt = buildEnglishStoryboardPrompt(scene.slugline, true);
 
               generatedShots.push({
                 id: `shot-${scene.id}-A`,
                 sceneId: scene.id,
                 shotNumber: `SHOT ${String(scnIdx + 1).padStart(2, "0")}A`,
                 sceneSlug: scene.slugline,
-                shotType: "High Angle Wide Storyboard",
+                shotType: "Wide Master Framing (WMS)",
                 lens: "24mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
-                visualPrompt: shotA_Prompt,
+                visualPrompt: `${scene.slugline} - පසුතලය සහ ආලෝකකරණය`,
+                englishPrompt: shotA_Prompt,
                 isGenerating: isTargetScene,
                 imageUrl: ""
               });
@@ -77,10 +102,11 @@ export default function StoryboardPage() {
                 sceneId: scene.id,
                 shotNumber: `SHOT ${String(scnIdx + 1).padStart(2, "0")}B`,
                 sceneSlug: scene.slugline,
-                shotType: "Tight Close-Up Frame",
+                shotType: "Tight Action Close-Up",
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Eye-Level Static",
-                visualPrompt: shotB_Prompt,
+                visualPrompt: `චරිත සහ ක්‍රියාදාමය කෙරෙහි අවධානය`,
+                englishPrompt: shotB_Prompt,
                 isGenerating: isTargetScene,
                 imageUrl: ""
               });
@@ -89,7 +115,7 @@ export default function StoryboardPage() {
             setShots(generatedShots);
             setFilterScene(activeFilter);
 
-            // තෝරාගත් Scene එකට අදාළව පමණක් AI Image Synthesis ආරම්භ වීම
+            // Fetch AI images with safe delay to prevent rate limits
             setTimeout(() => {
               setShots(prev => prev.map((shot, idx) => {
                 const isTarget = activeFilter === "ALL" || activeFilter === shot.sceneId;
@@ -97,12 +123,12 @@ export default function StoryboardPage() {
                   return {
                     ...shot,
                     isGenerating: false,
-                    imageUrl: buildStoryboardAiUrl(shot.visualPrompt, 1000 + idx * 37)
+                    imageUrl: generateAiImageUrl(shot.englishPrompt, 2040 + idx * 83)
                   };
                 }
                 return { ...shot, isGenerating: false };
               }));
-            }, 1000);
+            }, 800);
           }
         } catch {
           // fallback
@@ -111,17 +137,17 @@ export default function StoryboardPage() {
     }
   }, []);
 
-  // Single Frame On-Demand Generation
+  // Redraw Frame
   const handleGenerateFrame = (shotId: string) => {
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
     setTimeout(() => {
-      setShots(prev => prev.map((s, idx) => {
+      setShots(prev => prev.map(s => {
         if (s.id === shotId) {
           return {
             ...s,
             isGenerating: false,
-            imageUrl: buildStoryboardAiUrl(s.visualPrompt, Math.floor(Math.random() * 99999))
+            imageUrl: generateAiImageUrl(s.englishPrompt, Math.floor(Math.random() * 999999))
           };
         }
         return s;
@@ -138,7 +164,7 @@ export default function StoryboardPage() {
       setShots(prev => prev.map((s, idx) => ({
         ...s,
         isGenerating: false,
-        imageUrl: buildStoryboardAiUrl(s.visualPrompt, 2000 + idx * 43)
+        imageUrl: generateAiImageUrl(s.englishPrompt, 5000 + idx * 47)
       })));
       setIsGeneratingAll(false);
     }, 2000);
@@ -160,7 +186,7 @@ export default function StoryboardPage() {
             16:9 Cinematic Storyboard
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Breakdown එකෙන් තෝරාගත් දර්ශන සඳහා StudioBinder ශෛලියේ කළු-සුදු AI Storyboard Frames මෙහි සකස් වේ.
+            Breakdown එකෙන් තෝරාගත් දර්ශන සඳහා StudioBinder comic/sketch ශෛලියේ කළු-සුදු AI Storyboard Frames සකස් වේ.
           </p>
         </div>
 
@@ -224,7 +250,7 @@ export default function StoryboardPage() {
             Comic / Ink Sketch Mode
           </span>
           <span className="text-slate-500">•</span>
-          <span>16:9 Aspect Ratio</span>
+          <span>16:9 DCI Flat</span>
         </div>
       </div>
 
@@ -240,38 +266,41 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Rendering Ink Storyboard Sketch...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing Ink Storyboard Panel...</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 filter grayscale contrast-125"
+                    onError={(e) => {
+                      // Fallback sketch if network drops
+                      (e.target as HTMLImageElement).src = "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=800&q=80";
+                    }}
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 filter grayscale contrast-125 brightness-95"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
                       onClick={() => handleGenerateFrame(shot.id)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Redraw Frame
+                      <RefreshCw className="w-3 h-3" /> Redraw Panel
                     </button>
                   </div>
                 </>
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08] border border-dashed border-emerald-950/80 rounded-t-2xl">
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
-                  <p className="text-xs text-slate-400 mb-3 font-medium">Frame not synthesized yet</p>
+                  <p className="text-xs text-slate-400 mb-3 font-medium">Panel not drawn yet</p>
                   <button
                     onClick={() => handleGenerateFrame(shot.id)}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
-                    <Wand2 className="w-3.5 h-3.5" /> Generate Frame
+                    <Wand2 className="w-3.5 h-3.5" /> Draw Storyboard
                   </button>
                 </div>
               )}
 
-              {/* Storyboard Header Badges */}
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
                   {shot.shotNumber}
@@ -280,12 +309,12 @@ export default function StoryboardPage() {
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-700">
-                  Sketch Frame
+                  Sketch Panel
                 </span>
               </div>
             </div>
 
-            {/* Details (StudioBinder Comic Style) */}
+            {/* Details */}
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
