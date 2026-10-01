@@ -43,31 +43,32 @@ export default function StoryboardPage() {
 
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
-    // Try up to 3 times before giving up
-    for (let attempt = 1; attempt <= 3; attempt++) {
-      try {
-        const res = await fetch("/api/storyboard/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slugline, isWide, artStyle })
+    try {
+      const res = await fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slugline, isWide, artStyle })
+      });
+
+      const data = await res.json();
+      if (data.success && data.imageUrl) {
+        // Pre-load image inside browser cache before completing
+        await new Promise((resolve) => {
+          const img = new Image();
+          img.src = data.imageUrl;
+          img.onload = () => resolve(true);
+          img.onerror = () => resolve(false);
         });
 
-        const data = await res.json();
-        if (data.success && data.imageUrl) {
-          renderedCache.current[shotId] = data.imageUrl;
-          setShots(prev => prev.map(s => s.id === shotId ? {
-            ...s,
-            imageUrl: data.imageUrl,
-            isGenerating: false
-          } : s));
-          return true;
-        }
-      } catch { }
-
-      if (attempt < 3) {
-        await new Promise(r => setTimeout(r, 1500));
+        renderedCache.current[shotId] = data.imageUrl;
+        setShots(prev => prev.map(s => s.id === shotId ? {
+          ...s,
+          imageUrl: data.imageUrl,
+          isGenerating: false
+        } : s));
+        return true;
       }
-    }
+    } catch { }
 
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
     return false;
@@ -128,7 +129,7 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Tab එකක් තෝරාගත් විට අදාළ shots පිළිවෙළින් auto-generate කිරීම
+  // Tab එක තෝරාගත් විට අදාළ Scene එකේ frames ස්වයංක්‍රීයව render වීම
   useEffect(() => {
     if (shots.length === 0) return;
 
@@ -139,20 +140,18 @@ export default function StoryboardPage() {
     const pending = currentShots.filter(s => !s.imageUrl && !s.isGenerating);
     if (pending.length === 0) return;
 
-    let isCancelled = false;
-
+    let isMounted = true;
     const processQueue = async () => {
       for (const item of pending) {
-        if (isCancelled) break;
+        if (!isMounted) break;
         await fetchAiFrame(item.id, item.sceneSlug, item.id.endsWith("-A"));
-        await new Promise(r => setTimeout(r, 800));
+        await new Promise(r => setTimeout(r, 600));
       }
     };
-
     processQueue();
 
     return () => {
-      isCancelled = true;
+      isMounted = false;
     };
   }, [filterScene, shots.length]);
 
@@ -162,7 +161,7 @@ export default function StoryboardPage() {
     for (const shot of targetShots) {
       delete renderedCache.current[shot.id];
       await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-      await new Promise(r => setTimeout(r, 800));
+      await new Promise(r => setTimeout(r, 600));
     }
     setIsGeneratingAll(false);
   };
