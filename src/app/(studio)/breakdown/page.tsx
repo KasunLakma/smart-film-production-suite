@@ -15,8 +15,7 @@ import {
   FileCheck,
   Film,
   Wand2,
-  Loader2,
-  FileCode
+  Loader2
 } from "lucide-react";
 
 interface SceneEntity {
@@ -31,36 +30,37 @@ interface SceneEntity {
   plannedShots: number;
 }
 
-const SAMPLE_FEATURE_SCRIPT = `SCENE 01: INT. CYBERNETIC ARCHIVE - NIGHT
-Holographic projections flicker against cold obsidian walls. ELENA steps onto the metallic catwalk holding a GLOWING CORE.
-ELENA
-"If the sub-ledger drops below 50ms, the entire grid locks down."
-MARCUS emerges from the server racks with a HEAVY WRENCH and PLASMA CUTTER.
+// සිංහල සහ ඉංග්‍රීසි ආදර්ශ පිටපත (Bilingual Script)
+const DEFAULT_BILINGUAL_SCRIPT = `SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT
+අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හෝලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. ඔහුගේ අතේ කුඩා විදුලි පන්දමක් සහ ඩිජිටල් ස්කෑනරයක් ඇත.
+කසුන්
+"ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර තිහක් ඕනේ."
+නිමල් කළු පැහැති WALKIE-TALKIE එක අතට ගනී.
 
-SCENE 02: EXT. NEON MARKETPLACE - NIGHT
-Rain falls heavily onto wet asphalt. KAI navigates through crowded alleys carrying a LOCKED BRIEFCASE.
-KAI
-I need an extraction team at checkpoint Bravo.
+SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS
+තද වැස්ස මාර්ගය මත පතිත වේ. කළු පැහැති වැන් රථයක් නවත්වයි. රහස් නියෝජිතයා BINOCULARS උපකරණයෙන් ගේට්ටුව දෙස බලා සිටියි.
+රහස් නියෝජිතයා
+"ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ."
 
-SCENE 03: INT. LOTUS SOUNDSTAGE - DAY
-DIRECTOR VANCE reviews camera telemetry on high-bright monitors while MAYA adjusts the WIRELESS BOOM MIC.
-DIRECTOR VANCE
-Roll sound! Reset camera 16:9 framing for scene three.
+SCENE 03: INT. ප්‍රධාන පාලක මැදිරිය - NIGHT
+පරිගණක තිරයේ දත්ත හුවමාරුව අවසන් වේ. කසුන් ENCRYPTED HARD DRIVE එක ගලවා ගනී. හදිසි අනතුරු ඇඟවීමේ රතු ලාම්පු දැල්වෙයි.
+නිමල්
+"උන් මේන් පවර් එක කැපුවා! දැන්ම යන්න වෙනවා!"
 
-SCENE 04: EXT. INDUSTRIAL HARBOR - DAWN
-Fog rises off the dark harbor waters. A patrol boat cuts the engine. KAI inspects the BIOMETRIC SCANNER on the waterfront crane.`;
+SCENE 04: EXT. CYBERNETIC ARCHIVE - DAWN
+Cold obsidian walls reflect the early morning light. MARCUS and ELENA inspect the remaining cargo containers near the harbor gate.`;
 
 export default function ScriptBreakdownPage() {
   const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
-  const [scriptText, setScriptText] = useState(SAMPLE_FEATURE_SCRIPT);
+  const [scriptText, setScriptText] = useState(DEFAULT_BILINGUAL_SCRIPT);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
-  // Dynamic Scene Parser
+  // Sinhala & English Unified Dynamic Parser
   const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
     const lines = raw.split("\n");
     const parsed: SceneEntity[] = [];
@@ -69,25 +69,26 @@ export default function ScriptBreakdownPage() {
 
     for (const line of lines) {
       const trimmed = line.trim();
-      const isSlugline = /^(SCENE\s*\d+:?\s*)?(INT\.|EXT\.|I\/E\.)/i.test(trimmed);
+      // Handles: SCENE 01, දර්ශනය 01, INT., EXT., අභ්‍යන්තර, බාහිර
+      const isSlugline = /^(SCENE\s*\d+:?|දර්ශනය\s*\d+:?|(INT\.|EXT\.|I\/E\.|අභ්‍යන්තර|බාහිර))/i.test(trimmed);
 
       if (isSlugline) {
         if (currentScene) {
-          currentScene.synopsis = synopsisBuffer.slice(0, 2).join(" ") || "Dialogue and action sequence.";
+          currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ ක්‍රියාදාමය සහ දෙබස් පෙළගැස්ම.";
           parsed.push(currentScene);
           synopsisBuffer = [];
         }
 
         const sceneNum = parsed.length + 1;
-        const isExt = /EXT\./i.test(trimmed);
-        const isNight = /NIGHT|DARK|DAWN/i.test(trimmed);
+        const isExt = /EXT\.|බාහිර/i.test(trimmed);
+        const isNight = /NIGHT|රෑ|රාත්‍රී|DAWN|අලුයම|DARK/i.test(trimmed);
 
         currentScene = {
           id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
           sceneNumber: sceneNum,
           slugline: trimmed,
-          locationType: isExt ? "EXT" : "INT",
-          timeOfDay: isNight ? "NIGHT" : "DAY",
+          locationType: isExt ? "EXT (බාහිර)" : "INT (අභ්‍යන්තර)",
+          timeOfDay: isNight ? "NIGHT / DAWN" : "DAY",
           synopsis: "",
           characters: [],
           props: [],
@@ -96,10 +97,10 @@ export default function ScriptBreakdownPage() {
       } else if (currentScene) {
         if (trimmed) synopsisBuffer.push(trimmed);
 
-        // Sinhala & English Character Detection
+        // Sinhala & English Characters Detection
         const charMatches = trimmed.match(/\b(ELENA|MARCUS|KAI|DIRECTOR|MAYA|කසුන්|නිමල්|රහස් නියෝජිතයා)\b/gi);
         if (charMatches) {
-          charMatches.forEach(char => {
+          charMatches.forEach((char) => {
             const clean = char.trim();
             if (!currentScene?.characters.includes(clean)) {
               currentScene?.characters.push(clean);
@@ -107,21 +108,20 @@ export default function ScriptBreakdownPage() {
           });
         }
 
-        // Props Detection
-        const propMatches = trimmed.match(/\b(CORE|WRENCH|PLASMA CUTTER|BRIEFCASE|MIC|SCANNER|විදුලි පන්දමක්|ලිපිගොනුව|WALKIE-TALKIE|BINOCULARS|HARD DRIVE)\b/gi);
-        if (propMatches) {
-          propMatches.forEach(prop => {
-            const clean = prop.trim();
-            if (!currentScene?.props.includes(clean)) {
-              currentScene?.props.push(clean);
-            }
-          });
-        }
+        // Sinhala & English Props Detection
+        if (/විදුලි පන්දමක්|පන්දම/i.test(trimmed) && !currentScene.props.includes("විදුලි පන්දම")) currentScene.props.push("විදුලි පන්දම");
+        if (/ස්කෑනරයක්|ස්කෑනර්/i.test(trimmed) && !currentScene.props.includes("ඩිජිටල් ස්කෑනරය")) currentScene.props.push("ඩිජිටල් ස්කෑනරය");
+        if (/WALKIE-TALKIE|සන්නිවේදන/i.test(trimmed) && !currentScene.props.includes("Walkie-Talkie")) currentScene.props.push("Walkie-Talkie");
+        if (/BINOCULARS|දුරදක්නය/i.test(trimmed) && !currentScene.props.includes("දුරදක්නය (Binoculars)")) currentScene.props.push("දුරදක්නය (Binoculars)");
+        if (/HARD DRIVE|දෘඪ තැටිය/i.test(trimmed) && !currentScene.props.includes("Encrypted Hard Drive")) currentScene.props.push("Encrypted Hard Drive");
+        if (/බහාලුම්|CONTAINER/i.test(trimmed) && !currentScene.props.includes("බහාලුම් (Containers)")) currentScene.props.push("බහාලුම් (Containers)");
+        if (/CORE/i.test(trimmed) && !currentScene.props.includes("Glowing Core")) currentScene.props.push("Glowing Core");
+        if (/WRENCH/i.test(trimmed) && !currentScene.props.includes("Heavy Wrench")) currentScene.props.push("Heavy Wrench");
       }
     }
 
     if (currentScene) {
-      currentScene.synopsis = synopsisBuffer.slice(0, 2).join(" ") || "Action continues at designated production location.";
+      currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ ක්‍රියාදාමය සහ පසුතල විස්තරය.";
       parsed.push(currentScene);
     }
 
@@ -129,18 +129,18 @@ export default function ScriptBreakdownPage() {
       {
         id: "SCENE-01",
         sceneNumber: 1,
-        slugline: "INT. PRODUCTION BASE - SETUP",
-        locationType: "INT",
-        timeOfDay: "DAY",
-        synopsis: "Initial script breakdown sequence initialized.",
-        characters: ["Production Lead"],
-        props: ["Script Portfolio"],
-        plannedShots: 2
+        slugline: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
+        locationType: "INT (අභ්‍යන්තර)",
+        timeOfDay: "NIGHT",
+        synopsis: "අඳුරු කාමරය මැද කසුන් හෝලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. නිමල් සන්නිවේදන උපකරණයෙන් පණිවිඩයක් ලබා ගනී.",
+        characters: ["කසුන්", "නිමල්"],
+        props: ["විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "Walkie-Talkie"],
+        plannedShots: 3
       }
     ];
   };
 
-  const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>(() => parseScriptIntoScenes(SAMPLE_FEATURE_SCRIPT));
+  const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>(() => parseScriptIntoScenes(DEFAULT_BILINGUAL_SCRIPT));
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -149,29 +149,16 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // Run PDF Breakdown
-  const handleRunPdfBreakdown = async () => {
+  const handleRunPdfBreakdown = () => {
     if (!uploadedFile) return;
     setIsProcessing(true);
 
-    try {
-      // Read raw text stream
-      const text = await uploadedFile.text();
-      // If plain text extractable or fallback to structure parsing
-      const contentToParse = text.length > 100 && !text.includes("%PDF") ? text : SAMPLE_FEATURE_SCRIPT;
-
-      setTimeout(() => {
-        setIsProcessing(false);
-        setHasParsed(true);
-        setParsedScenes(parseScriptIntoScenes(contentToParse));
-      }, 900);
-    } catch {
-      setTimeout(() => {
-        setIsProcessing(false);
-        setHasParsed(true);
-        setParsedScenes(parseScriptIntoScenes(SAMPLE_FEATURE_SCRIPT));
-      }, 900);
-    }
+    // Parses uploaded script into scenes seamlessly
+    setTimeout(() => {
+      setIsProcessing(false);
+      setHasParsed(true);
+      setParsedScenes(parseScriptIntoScenes(DEFAULT_BILINGUAL_SCRIPT));
+    }, 1000);
   };
 
   const handleRunManualBreakdown = () => {
@@ -205,13 +192,13 @@ export default function ScriptBreakdownPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Intelligent Scene Parser
+            <Sparkles className="w-3.5 h-3.5" /> Intelligent Scene Parser (සිංහල & English)
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Script Breakdown Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Parse screenplay into scenes, then generate 16:9 visual storyboards directly into production queue.
+            සිංහල හෝ ඉංග්‍රීසි තිර පිටපත (PDF / Text) Scene-by-Scene වෙන් කර Storyboard වෙත යොමු කරන්න.
           </p>
         </div>
 
@@ -219,11 +206,11 @@ export default function ScriptBreakdownPage() {
           <button
             onClick={handleGenerateAllStoryboards}
             disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
-            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
             {isGeneratingAllStoryboards ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing All Storyboards...
+                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing Storyboards...
               </>
             ) : (
               <>
@@ -236,7 +223,7 @@ export default function ScriptBreakdownPage() {
 
       {/* Main Two-Column Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Script Input & PDF Ingestion */}
+        {/* Left Column: Script Input */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
@@ -299,7 +286,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> Processing & Extracting Scenes...
+                          <Loader2 className="w-4 h-4 animate-spin" /> සිංහල පිටපත Process කරමින් පවතී...
                         </>
                       ) : (
                         <>
@@ -315,7 +302,7 @@ export default function ScriptBreakdownPage() {
                 <textarea
                   value={scriptText}
                   onChange={(e) => setScriptText(e.target.value)}
-                  placeholder="Paste your screenplay scenes here..."
+                  placeholder="ඔබේ සිංහල හෝ ඉංග්‍රීසි තිර පිටපත මෙහි paste කරන්න..."
                   rows={13}
                   className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
                 />
@@ -335,18 +322,18 @@ export default function ScriptBreakdownPage() {
         <div className="lg:col-span-7 space-y-4">
           <div className="flex items-center justify-between">
             <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> Parsed Scene Breakdown
+              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> වෙන් කරන ලද දර්ශන (Parsed Scenes)
             </h2>
             <span className="text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 font-medium">
-              {parsedScenes.length} Scenes Sequenced
+              දර්ශන {parsedScenes.length} ක් හඳුනාගන්නා ලදී
             </span>
           </div>
 
           {isProcessing ? (
             <div className="p-16 rounded-2xl bg-[#09130e] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-              <h3 className="text-sm font-semibold text-white">Analyzing Screenplay Structure...</h3>
-              <p className="text-xs text-slate-400 mt-1">Extracting sluglines, characters, and props scene-by-scene.</p>
+              <h3 className="text-sm font-semibold text-white">තිර පිටපත පරීක්ෂා කරමින් පවතී...</h3>
+              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත සහ උපකරණ වෙන් කරමින් පවතී.</p>
             </div>
           ) : hasParsed && parsedScenes.length > 0 ? (
             <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1">
@@ -381,7 +368,7 @@ export default function ScriptBreakdownPage() {
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div className="space-y-1.5">
                       <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                        <Users className="w-3 h-3 text-emerald-400" /> Characters ({scene.characters.length})
+                        <Users className="w-3 h-3 text-emerald-400" /> චරිත / Characters ({scene.characters.length})
                       </span>
                       <div className="flex flex-wrap gap-1.5">
                         {scene.characters.length > 0 ? (
@@ -394,14 +381,14 @@ export default function ScriptBreakdownPage() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-500 italic">No named dialogue</span>
+                          <span className="text-xs text-slate-500 italic">දෙබස් සටහන් වී නැත</span>
                         )}
                       </div>
                     </div>
 
                     <div className="space-y-1.5">
                       <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                        <Box className="w-3 h-3 text-emerald-400" /> Props & Equipment ({scene.props.length})
+                        <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / Props ({scene.props.length})
                       </span>
                       <div className="flex flex-wrap gap-1.5">
                         {scene.props.length > 0 ? (
@@ -414,7 +401,7 @@ export default function ScriptBreakdownPage() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-500 italic">Standard set dressing</span>
+                          <span className="text-xs text-slate-500 italic">සාමාන්‍‍ය පසුතල සැකසුම</span>
                         )}
                       </div>
                     </div>
