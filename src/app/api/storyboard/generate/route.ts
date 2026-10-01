@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 
-export const maxDuration = 60; // Vercel execution timeout limit වැඩි කිරීම
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
     try {
@@ -8,56 +8,81 @@ export async function POST(req: Request) {
 
         const text = (slugline || "").toLowerCase();
 
-        // Scene Environment & Subject Context Detection
-        let sceneSubject = "cinematic interior scene with dramatic chiaroscuro lighting";
+        // 1. Scene & Shot Context Extraction (Strict Storyboard Action)
+        let environment = "";
+        let characterAction = "";
+
         if (/lab|විද්‍යාගාර|computer|research|tech/.test(text)) {
-            sceneSubject = isWide
-                ? "high tech cybernetics research laboratory, illuminated computer server arrays, holographic console desk in center, deep wide perspective"
-                : "medium close-up of tactical male operative with intense eyes examining glowing electronic decoding scanner tool";
+            environment = "underground cybernetics research laboratory with glowing server arrays and holographic console table";
+            characterAction = isWide
+                ? "wide establishing camera angle, male technician figure seen from distance working at computer console, chiaroscuro lighting"
+                : "tight dynamic camera framing, close up of South Asian male technician hands and face inspecting a high-tech glowing electronic decoder scanner gadget with circuit lights";
         } else if (/harbor|port|dock|වරාය|නැව|බෝට්ටු/.test(text)) {
-            sceneSubject = isWide
-                ? "rainy industrial harbor checkpoint at night, shipping freight containers, dark tactical van parked on wet reflective tarmac"
-                : "close up portrait of covert operative looking through tactical binoculars in heavy rain downpour, water droplets, intense expression";
+            environment = "industrial cargo harbor shipping gate at night in heavy pouring rain with stacked metal shipping containers";
+            characterAction = isWide
+                ? "wide cinematic angle, black tactical surveillance van parked under street lamps on wet asphalt with rain reflections"
+                : "dramatic over-the-shoulder close up of a focused male spy agent wearing hooded tactical jacket holding military binoculars looking through rainy window, water droplets";
         } else if (/control|පාලක|command|office/.test(text)) {
-            sceneSubject = isWide
-                ? "central operations command control center, emergency red beacon alarm flashing, banks of terminal monitors"
-                : "dramatic close up of operative hand swiftly extracting encrypted military hard drive from server slot";
+            environment = "high security operations control room with flashing emergency alarm beacon sirens and mainframe computer banks";
+            characterAction = isWide
+                ? "wide establishing master shot of server consoles, flashing alarm warning beacons casting deep shadows"
+                : "intense close-up action frame of operative hand pulling out an encrypted military hard drive cartridge from server chassis, motion lines";
         } else {
-            sceneSubject = isWide
-                ? "misty coastal shipping container dock yard at dawn, morning sea fog, figures running in distance"
-                : "medium tracking shot of two male operatives sprinting towards docked escape speedboat under dawn sky";
+            environment = "misty coastal container shipyard docks at early morning dawn with dense fog rolling over water";
+            characterAction = isWide
+                ? "wide dramatic framing, two male operative silhouettes running between cargo shipping containers towards ocean pier"
+                : "medium close tracking action shot of two male agents in intense sprint towards docked speed boat, urgency, dramatic facial expression";
         }
 
-        // Storyboard Art Style Engineering (Ink & Shading)
+        // 2. Strict Storyboard Prompt Construction
         let prompt = "";
         if (artStyle === "graphic_novel") {
-            prompt = `graphic novel comic book illustration, dynamic comic panel, ${sceneSubject}, GTA loading screen art style, bold black ink outlines, cel shading, vibrant cinematic color palette, dramatic storyboard panel, no realistic photo, no 3d render`;
+            prompt = `graphic novel comic storyboard panel, GTA loading screen concept art, ${characterAction}, setting of ${environment}, bold ink linework, vibrant cel shaded colors, dramatic cinematography, 16:9 widescreen frame, no photo, no 3d render`;
         } else {
-            prompt = `black and white film storyboard drawing, studiobinder ink sketch, dynamic wide angle comic panel, crosshatching pencil shading, ${sceneSubject}, bold ink linework, film storyboard template, professional cinema sketch, no photo, no color`;
+            prompt = `black and white film storyboard drawing, studiobinder ink sketch, pencil crosshatching, ${characterAction}, in ${environment}, dynamic movie storyboard panel, high contrast noir shadows, cinema concept sketch, 16:9 widescreen, no color, no photo, no watermark`;
         }
 
-        const seed = Math.floor(Math.random() * 899999) + 100000;
         const cleanPrompt = encodeURIComponent(prompt);
-        // model=turbo භාවිතා කර ක්ෂණිකව (2-3s) high quality image render කර ගැනීම
-        const pollUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=576&model=turbo&nologo=true&seed=${seed}`;
+        const seed = Math.floor(Math.random() * 899999) + 100000;
 
-        const controller = new AbortController();
-        const timeout = setTimeout(() => controller.abort(), 25000); // 25s backend fetch timeout
+        // Direct Image Fetch with Fallback models
+        const primaryUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=576&model=turbo&nologo=true&seed=${seed}`;
+        const secondaryUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=576&model=flux&nologo=true&seed=${seed}`;
 
-        const imageRes = await fetch(pollUrl, {
-            cache: "no-store",
-            signal: controller.signal
-        });
-        clearTimeout(timeout);
+        let imageBuffer: ArrayBuffer | null = null;
+        let contentType = "image/jpeg";
 
-        if (!imageRes.ok) {
-            throw new Error("AI service timeout");
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 18000);
+            const res = await fetch(primaryUrl, { cache: "no-store", signal: controller.signal });
+            clearTimeout(timeout);
+            if (res.ok) {
+                imageBuffer = await res.arrayBuffer();
+                contentType = res.headers.get("content-type") || "image/jpeg";
+            }
+        } catch { }
+
+        // Fallback to secondary if primary timed out
+        if (!imageBuffer) {
+            try {
+                const controller2 = new AbortController();
+                const timeout2 = setTimeout(() => controller2.abort(), 18000);
+                const res2 = await fetch(secondaryUrl, { cache: "no-store", signal: controller2.signal });
+                clearTimeout2(timeout2);
+                if (res2.ok) {
+                    imageBuffer = await res2.arrayBuffer();
+                    contentType = res2.headers.get("content-type") || "image/jpeg";
+                }
+            } catch { }
         }
 
-        const arrayBuffer = await imageRes.arrayBuffer();
-        const base64 = Buffer.from(arrayBuffer).toString("base64");
-        const mimeType = imageRes.headers.get("content-type") || "image/jpeg";
-        const dataUrl = `data:${mimeType};base64,${base64}`;
+        if (!imageBuffer) {
+            throw new Error("Image synthesis timed out across all engines");
+        }
+
+        const base64 = Buffer.from(imageBuffer).toString("base64");
+        const dataUrl = `data:${contentType};base64,${base64}`;
 
         return NextResponse.json({
             success: true,
@@ -66,7 +91,7 @@ export async function POST(req: Request) {
         });
     } catch (error: any) {
         return NextResponse.json(
-            { success: false, error: error.message || "Failed" },
+            { success: false, error: error.message || "Failed to render frame" },
             { status: 500 }
         );
     }
