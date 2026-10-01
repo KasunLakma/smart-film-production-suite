@@ -26,46 +26,30 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-const DEFAULT_SHOTS: StoryboardShot[] = [
-  {
-    id: "shot-1",
-    sceneId: "SCENE-01",
-    shotNumber: "SHOT 01A",
-    sceneSlug: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
-    shotType: "Extreme Wide Shot (EWS)",
-    lens: "24mm Anamorphic T2.0",
-    cameraMovement: "Slow Push-In Dolly",
-    visualPrompt: "අඳුරු විද්‍යාගාරය තුළ හෝලෝග්‍රැෆික් තිර නිල් සහ කොළ එළියෙන් දැල්වෙයි. කසුන් මේසය අසල සිටී.",
-    imageUrl: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "shot-2",
-    sceneId: "SCENE-01",
-    shotNumber: "SHOT 01B",
-    sceneSlug: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
-    shotType: "Medium Close-Up (MCU)",
-    lens: "50mm Prime T1.5",
-    cameraMovement: "Static Eye-Level",
-    visualPrompt: "කසුන් කුඩා විදුලි පන්දමක් සහ ඩිජිටල් ස්කෑනරය අතැතිව දත්ත පරීක්ෂා කරයි.",
-    imageUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80"
-  },
-  {
-    id: "shot-3",
-    sceneId: "SCENE-02",
-    shotNumber: "SHOT 02A",
-    sceneSlug: "SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS",
-    shotType: "High Angle Wide",
-    lens: "35mm Cine Lens",
-    cameraMovement: "Crane Downward Boom",
-    visualPrompt: "ධාරානිපාත වැසි මැද කළු පැහැති වැන් රථයක් වරාය පිවිසුම අසල නවතා ඇත.",
-    imageUrl: "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80"
-  }
-];
+// සිනමාත්මක සැබෑ Cinematic Visuals එකතුව
+const CINEMATIC_VISUAL_PRESETS: Record<string, string[]> = {
+  "SCENE-01": [
+    "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80", // Cyber dark room
+    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"  // Tech terminal
+  ],
+  "SCENE-02": [
+    "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80", // Wet neon rainy street
+    "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80"  // Surveillance look
+  ],
+  "SCENE-03": [
+    "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80", // Control room / servers
+    "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80"  // Hard drive / glowing lights
+  ],
+  "SCENE-04": [
+    "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1200&q=80", // Foggy docks container yard
+    "https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1200&q=80"  // Harbor boat dawn
+  ]
+};
 
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
-  const [shots, setShots] = useState<StoryboardShot[]>(DEFAULT_SHOTS);
+  const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
   useEffect(() => {
@@ -79,43 +63,65 @@ export default function StoryboardPage() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setSceneList(parsed.map(s => ({ id: s.id, slugline: s.slugline })));
 
+            // Generate initial shot structures
             const generatedShots: StoryboardShot[] = [];
-            const sampleImages = [
-              "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80",
-              "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=800&q=80",
-              "https://images.unsplash.com/photo-1542751371-adc38448a05e?auto=format&fit=crop&w=800&q=80",
-              "https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?auto=format&fit=crop&w=800&q=80",
-              "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=800&q=80"
-            ];
 
             parsed.forEach((scene, scnIdx) => {
+              const isTargetScene = activeFilter === "ALL" || activeFilter === scene.id;
+
+              // Shot A
               generatedShots.push({
                 id: `shot-${scene.id}-A`,
                 sceneId: scene.id,
                 shotNumber: `SHOT ${String(scnIdx + 1).padStart(2, "0")}A`,
                 sceneSlug: scene.slugline,
                 shotType: "Wide Master Framing (WMS)",
-                lens: "28mm Anamorphic",
+                lens: "24mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
-                visualPrompt: `${scene.synopsis.slice(0, 120)}... Props: ${scene.props.join(", ") || "Set dressing"}`,
-                imageUrl: sampleImages[scnIdx % sampleImages.length]
+                visualPrompt: `${scene.synopsis.slice(0, 100)}... පසුතල උපකරණ: ${scene.props.join(", ") || "ස්වාභාවික සැකසුම"}`,
+                // Target scene එක පමණක් generate වීම simulate කරයි
+                isGenerating: isTargetScene,
+                imageUrl: ""
               });
 
+              // Shot B
               generatedShots.push({
                 id: `shot-${scene.id}-B`,
                 sceneId: scene.id,
                 shotNumber: `SHOT ${String(scnIdx + 1).padStart(2, "0")}B`,
                 sceneSlug: scene.slugline,
                 shotType: "Medium Close Action (MCU)",
-                lens: "50mm Prime T1.8",
-                cameraMovement: "Handheld Eye-level",
-                visualPrompt: `Focus on ${scene.characters.join(" & ") || "Lead characters"} during intense sequence.`,
-                imageUrl: scnIdx === 0 ? sampleImages[1] : ""
+                lens: "50mm Prime T1.5",
+                cameraMovement: "Static Eye-level",
+                visualPrompt: `චරිත කෙරෙහි අවධානය: ${scene.characters.join(" & ") || "ප්‍රධාන චරිත"}`,
+                isGenerating: isTargetScene,
+                imageUrl: ""
               });
             });
 
             setShots(generatedShots);
             setFilterScene(activeFilter);
+
+            // Simulation: තෝරාගත් target scene එකේ shots ටික පමණක් තත්පර 1.2 කින් render වී Image එක වැටීම
+            setTimeout(() => {
+              setShots(prev => prev.map(shot => {
+                const isTarget = activeFilter === "ALL" || activeFilter === shot.sceneId;
+                if (isTarget) {
+                  const presets = CINEMATIC_VISUAL_PRESETS[shot.sceneId] || [
+                    "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80",
+                    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"
+                  ];
+                  const img = shot.id.endsWith("-A") ? presets[0] : presets[1];
+
+                  return {
+                    ...shot,
+                    isGenerating: false,
+                    imageUrl: img
+                  };
+                }
+                return { ...shot, isGenerating: false };
+              }));
+            }, 1200);
           }
         } catch {
           // fallback
@@ -124,16 +130,22 @@ export default function StoryboardPage() {
     }
   }, []);
 
+  // Single Frame On-Demand Generation
   const handleGenerateFrame = (shotId: string) => {
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
     setTimeout(() => {
       setShots(prev => prev.map(s => {
         if (s.id === shotId) {
+          const presets = CINEMATIC_VISUAL_PRESETS[s.sceneId] || [
+            "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80",
+            "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80"
+          ];
+          const img = s.id.endsWith("-A") ? presets[0] : presets[1];
           return {
             ...s,
             isGenerating: false,
-            imageUrl: "https://images.unsplash.com/photo-1511447333015-45b65e60f6d5?auto=format&fit=crop&w=800&q=80"
+            imageUrl: img
           };
         }
         return s;
@@ -141,13 +153,23 @@ export default function StoryboardPage() {
     }, 1200);
   };
 
+  // Generate All Scenes
   const handleGenerateAll = () => {
     setIsGeneratingAll(true);
+    setShots(prev => prev.map(s => ({ ...s, isGenerating: true })));
+
     setTimeout(() => {
-      setShots(prev => prev.map(s => ({
-        ...s,
-        imageUrl: s.imageUrl || "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=800&q=80"
-      })));
+      setShots(prev => prev.map(s => {
+        const presets = CINEMATIC_VISUAL_PRESETS[s.sceneId] || [
+          "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80",
+          "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80"
+        ];
+        return {
+          ...s,
+          isGenerating: false,
+          imageUrl: s.id.endsWith("-A") ? presets[0] : presets[1]
+        };
+      }));
       setIsGeneratingAll(false);
     }, 1500);
   };
@@ -168,7 +190,7 @@ export default function StoryboardPage() {
             16:9 Cinematic Storyboard
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Breakdown එකෙන් ලබාගත් Scenes සඳහා 16:9 cinematic storyboard visuals පිළිවෙළට මෙහි පෙළගස්වයි.
+            Breakdown එකෙන් තෝරාගත් දර්ශන සඳහා පමණක් 16:9 සිනමාත්මක visuals නිවැරදිව මෙහි Generate වේ.
           </p>
         </div>
 
@@ -181,12 +203,12 @@ export default function StoryboardPage() {
           </Link>
           <button
             onClick={handleGenerateAll}
-            disabled={isGeneratingAll}
+            disabled={isGeneratingAll || shots.length === 0}
             className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Synthesizing All Frames...
+                <Loader2 className="w-4 h-4 animate-spin" /> Synthesizing All Sequences...
               </>
             ) : (
               <>
@@ -197,11 +219,11 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Control Bar: Scene Selector */}
+      {/* Filter Toolbar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Scene Filter:
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter:
           </span>
           <button
             onClick={() => setFilterScene("ALL")}
@@ -229,25 +251,26 @@ export default function StoryboardPage() {
 
         <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
           <span className="px-2.5 py-1 rounded bg-[#0e1d15] border border-emerald-500/20 text-emerald-400 font-mono">
-            16:9 DCI Flat (1.78:1)
+            16:9 Cinema Scope
           </span>
           <span className="text-slate-500">•</span>
           <span>FLUX Visual Pipeline</span>
         </div>
       </div>
 
-      {/* 16:9 Storyboard Cards Grid */}
+      {/* 16:9 Shots Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
         {filteredShots.map((shot) => (
           <div
             key={shot.id}
             className="group rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/40 transition-all overflow-hidden flex flex-col shadow-lg"
           >
+            {/* 16:9 Visual Container */}
             <div className="relative aspect-video w-full bg-[#050a07] overflow-hidden border-b border-emerald-950/60 flex items-center justify-center">
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Synthesizing 16:9 Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Synthesizing 16:9 Shot Frame...</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
@@ -256,7 +279,7 @@ export default function StoryboardPage() {
                     alt={shot.shotNumber}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-90 contrast-110"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/60 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
                       onClick={() => handleGenerateFrame(shot.id)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
@@ -268,7 +291,7 @@ export default function StoryboardPage() {
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08] border border-dashed border-emerald-950/80 rounded-t-2xl">
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
-                  <p className="text-xs text-slate-400 mb-3 font-medium">No visual generated for this shot</p>
+                  <p className="text-xs text-slate-400 mb-3 font-medium">Frame not synthesized yet</p>
                   <button
                     onClick={() => handleGenerateFrame(shot.id)}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
@@ -278,6 +301,7 @@ export default function StoryboardPage() {
                 </div>
               )}
 
+              {/* Badges */}
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-300 text-[11px] font-bold font-mono">
                   {shot.shotNumber}
@@ -286,11 +310,12 @@ export default function StoryboardPage() {
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[10px] font-mono text-slate-300">
-                  16:9 Frame
+                  16:9 DCI
                 </span>
               </div>
             </div>
 
+            {/* Details */}
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
@@ -304,6 +329,7 @@ export default function StoryboardPage() {
                 </p>
               </div>
 
+              {/* Optics */}
               <div className="pt-3 border-t border-emerald-950/60 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
                   <span className="text-slate-500 block text-[10px] uppercase">Optics / Lens</span>
