@@ -27,43 +27,274 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// උසස් තත්ත්වයේ සැබෑ StudioBinder Hand-Drawn Sketch Storyboard Panels (100% Scene-Accurate)
-const HIGH_RES_STORYBOARD_PANELS: Record<string, { wide: string; close: string; wideDesc: string; closeDesc: string }> = {
-  "SCENE-01": {
-    // Lab Scene: තාක්ෂණික විද්‍යාගාරය & Handheld Scanner
-    wide: "https://images.unsplash.com/photo-1507499739999-097706ad8914?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "StudioBinder Sketch: Wide master perspective of underground tech laboratory, illuminated monitors, holographic workbenches, depth perspective.",
-    closeDesc: "StudioBinder Sketch: Expressive close-up pencil shading of technician intensely examining illuminated digital scanner and circuits."
-  },
-  "SCENE-02": {
-    // Harbor Scene: වැසි සහිත වරාය & Agent Binoculars
-    wide: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "StudioBinder Sketch: Industrial harbor checkpoint gate in heavy downpour, dark tactical van parked near security barrier, rain hatching.",
-    closeDesc: "StudioBinder Sketch: Dynamic close-up pencil crosshatch of covert operative holding binoculars, wet textures, tense eyes."
-  },
-  "SCENE-03": {
-    // Control Room: රතු එළි සහිත පාලක මැදිරිය & Hard drive ගැලවීම
-    wide: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1563770660941-20978e870e26?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "StudioBinder Sketch: Central command operations room, flashing emergency warning sirens, terminal arrays in wide framing.",
-    closeDesc: "StudioBinder Sketch: Tight close-up sketch of operative hand pulling military encrypted drive from server slot, high contrast shadows."
-  },
-  "SCENE-04": {
-    // Dawn Docks: අලුයම වරාය බහාලුම් & බෝට්ටුව වෙත දිවීම
-    wide: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "StudioBinder Sketch: Misty shipping container terminal at dawn, morning fog across water, silhouettes in distance.",
-    closeDesc: "StudioBinder Sketch: Medium tracking sketch of two operatives sprinting urgently toward escape speedboat under twilight sky."
+// පිටපතේ ඕනෑම Scene එකක ක්‍රියාව අනුව StudioBinder Pencil & Ink Storyboard Art එකක් කෙළින්ම සාදන High-Quality Canvas Engine එක
+function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: boolean): string {
+  if (typeof document === "undefined") return "";
+
+  const canvas = document.createElement("canvas");
+  canvas.width = 1280;
+  canvas.height = 720;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  const slug = (sceneSlug || "").toLowerCase();
+  const isLab = /lab|විද්‍යාගාර|computer|research|tech/.test(slug);
+  const isHarbor = /harbor|port|dock|වරාය|නැව|බෝට්ටු/.test(slug);
+  const isControl = /control|පාලක|command|office/.test(slug);
+
+  // 1. StudioBinder Paper / Dark Charcoal Board Background
+  ctx.fillStyle = "#121415";
+  ctx.fillRect(0, 0, 1280, 720);
+
+  // 2. Paper Texture & Crosshatch Sketch Lines (Pencil Texture)
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+  ctx.lineWidth = 1;
+  for (let i = -720; i < 1280; i += 8) {
+    ctx.beginPath();
+    ctx.moveTo(i, 0);
+    ctx.lineTo(i + 720, 720);
+    ctx.stroke();
   }
-};
+
+  // 3. 16:9 Cinematic Safe Framing Box
+  ctx.strokeStyle = "#384149";
+  ctx.lineWidth = 2.5;
+  ctx.strokeRect(40, 35, 1200, 650);
+
+  // Crosshairs & Aspect Marks
+  ctx.strokeStyle = "#505a63";
+  ctx.lineWidth = 1.5;
+  // Top / Bottom center marks
+  ctx.beginPath();
+  ctx.moveTo(640, 20); ctx.lineTo(640, 50);
+  ctx.moveTo(640, 670); ctx.lineTo(640, 700);
+  // Left / Right center marks
+  ctx.moveTo(25, 360); ctx.lineTo(55, 360);
+  ctx.moveTo(1225, 360); ctx.lineTo(1255, 360);
+  ctx.stroke();
+
+  // 4. Perspective Grids & Scene Layout (StudioBinder Cinematography Lines)
+  ctx.strokeStyle = "rgba(180, 195, 205, 0.25)";
+  ctx.lineWidth = 1.5;
+  const horizonY = isWide ? 420 : 480;
+
+  ctx.beginPath();
+  ctx.moveTo(40, horizonY);
+  ctx.lineTo(1240, horizonY);
+  // Vanishing point perspective diagonals
+  ctx.moveTo(640, horizonY); ctx.lineTo(40, 685);
+  ctx.moveTo(640, horizonY); ctx.lineTo(380, 685);
+  ctx.moveTo(640, horizonY); ctx.lineTo(900, 685);
+  ctx.moveTo(640, horizonY); ctx.lineTo(1240, 685);
+  ctx.stroke();
+
+  // 5. Hand-Drawn Ink Elements based on Scene Type
+  if (isLab) {
+    if (isWide) {
+      // Wide Lab: Computer terminal racks, table, figure in background
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 2.5;
+      // Server racks & screens left
+      ctx.strokeRect(100, 180, 220, 240);
+      ctx.strokeRect(120, 200, 180, 60);
+      ctx.strokeRect(120, 280, 180, 60);
+      // Screens right
+      ctx.strokeRect(960, 180, 220, 240);
+      ctx.strokeRect(980, 200, 180, 60);
+      ctx.strokeRect(980, 280, 180, 60);
+      // Central Hologram Table
+      ctx.beginPath();
+      ctx.ellipse(640, 520, 320, 70, 0, 0, Math.PI * 2);
+      ctx.stroke();
+      // Holographic Light Cone
+      ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+      ctx.strokePoly = true;
+      ctx.beginPath();
+      ctx.moveTo(640, 320); ctx.lineTo(480, 520);
+      ctx.moveTo(640, 320); ctx.lineTo(800, 520);
+      ctx.stroke();
+      // Operative Silhouette
+      ctx.fillStyle = "#e2e8f0";
+      ctx.beginPath();
+      ctx.arc(640, 350, 24, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(600, 470); ctx.lineTo(620, 385); ctx.lineTo(660, 385); ctx.lineTo(680, 470);
+      ctx.fill();
+    } else {
+      // Close up: Technician face, intense eyes & glowing handheld scanner
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.fillStyle = "#1e242a";
+      ctx.lineWidth = 3;
+      // Face / Head silhouette
+      ctx.beginPath();
+      ctx.arc(640, 280, 95, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Eyes / Brow crosshatching
+      ctx.strokeStyle = "#f8fafc";
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.moveTo(590, 275); ctx.lineTo(630, 270);
+      ctx.moveTo(650, 270); ctx.lineTo(690, 275);
+      ctx.stroke();
+      // Handheld Tactical Scanner tool
+      ctx.fillStyle = "#334155";
+      ctx.strokeStyle = "#38bdf8";
+      ctx.lineWidth = 3;
+      ctx.fillRect(560, 430, 160, 180);
+      ctx.strokeRect(560, 430, 160, 180);
+      // Scanner Display
+      ctx.strokeStyle = "#7dd3fc";
+      ctx.strokeRect(580, 450, 120, 80);
+      // Scanning Light Array
+      ctx.beginPath();
+      ctx.moveTo(580, 490); ctx.lineTo(700, 490);
+      ctx.stroke();
+    }
+  } else if (isHarbor) {
+    if (isWide) {
+      // Wide Harbor: Containers, parked van, downpour rain
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 2.5;
+      // Stacked Containers Left & Right
+      ctx.strokeRect(80, 260, 240, 160);
+      ctx.strokeRect(960, 260, 240, 160);
+      ctx.strokeRect(980, 140, 200, 120);
+      // Dark Tactical Van silhouette
+      ctx.fillStyle = "#262e35";
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.beginPath();
+      ctx.moveTo(480, 480); ctx.lineTo(500, 390); ctx.lineTo(660, 390); ctx.lineTo(740, 430); ctx.lineTo(780, 440); ctx.lineTo(780, 480); ctx.closePath();
+      ctx.fill();
+      ctx.stroke();
+      // Van wheels
+      ctx.beginPath();
+      ctx.arc(540, 485, 20, 0, Math.PI * 2);
+      ctx.arc(720, 485, 20, 0, Math.PI * 2);
+      ctx.stroke();
+      // Heavy Downpour Rain Hatching
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.4)";
+      ctx.lineWidth = 1.5;
+      for (let r = 100; r < 1200; r += 45) {
+        ctx.beginPath();
+        ctx.moveTo(r, 60); ctx.lineTo(r - 50, 220);
+        ctx.moveTo(r + 20, 240); ctx.lineTo(r - 30, 400);
+        ctx.stroke();
+      }
+    } else {
+      // Close up: Agent holding binoculars in rain
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.fillStyle = "#1e242a";
+      ctx.lineWidth = 3;
+      // Hooded Head
+      ctx.beginPath();
+      ctx.arc(640, 270, 110, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      // Binoculars in front
+      ctx.fillStyle = "#334155";
+      ctx.beginPath();
+      ctx.arc(580, 360, 45, 0, Math.PI * 2);
+      ctx.arc(700, 360, 45, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+      ctx.strokeRect(615, 345, 50, 30);
+    }
+  } else if (isControl) {
+    if (isWide) {
+      // Wide Control Room: Warning alarms, curved console
+      ctx.strokeStyle = "#cbd5e1";
+      ctx.lineWidth = 2.5;
+      // Mainframe Monitor Wall
+      ctx.strokeRect(180, 140, 920, 200);
+      ctx.strokeRect(220, 160, 260, 160);
+      ctx.strokeRect(510, 160, 260, 160);
+      ctx.strokeRect(800, 160, 260, 160);
+      // Emergency Flashing Beacon
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(640, 100, 20, 0, Math.PI * 2);
+      ctx.stroke();
+      ctx.beginPath();
+      ctx.moveTo(600, 80); ctx.lineTo(580, 60);
+      ctx.moveTo(680, 80); ctx.lineTo(700, 60);
+      ctx.stroke();
+    } else {
+      // Close up: Hand pulling encrypted hard drive
+      ctx.strokeStyle = "#e2e8f0";
+      ctx.fillStyle = "#1e242a";
+      ctx.lineWidth = 3;
+      // Server Bay Slot
+      ctx.strokeRect(340, 160, 600, 380);
+      ctx.strokeRect(380, 200, 520, 80);
+      // Military Encrypted Drive Being Pulled Out
+      ctx.fillStyle = "#334155";
+      ctx.fillRect(480, 310, 320, 160);
+      ctx.strokeRect(480, 310, 320, 160);
+      // Red Alarm Light Edge
+      ctx.strokeStyle = "#ef4444";
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(480, 310); ctx.lineTo(800, 310);
+      ctx.stroke();
+    }
+  } else {
+    // Dawn Docks / Generic Escape Scene
+    ctx.strokeStyle = "#cbd5e1";
+    ctx.lineWidth = 2.5;
+    ctx.strokeRect(140, 240, 300, 180);
+    ctx.strokeRect(840, 240, 300, 180);
+    // Running Figures
+    ctx.fillStyle = "#e2e8f0";
+    ctx.beginPath();
+    ctx.arc(580, 380, 18, 0, Math.PI * 2);
+    ctx.arc(680, 395, 18, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  // 6. StudioBinder Bottom Slate / Metadata Bar
+  ctx.fillStyle = "rgba(5, 10, 8, 0.88)";
+  ctx.fillRect(40, 615, 1200, 70);
+  ctx.strokeStyle = "#10b981";
+  ctx.lineWidth = 1.5;
+  ctx.strokeRect(40, 615, 1200, 70);
+
+  ctx.fillStyle = "#10b981";
+  ctx.font = "bold 22px monospace";
+  ctx.fillText(shotNumber, 70, 658);
+
+  ctx.fillStyle = "#cbd5e1";
+  ctx.font = "16px sans-serif";
+  ctx.fillText(
+    isWide ? "WIDE MASTER (WMS) - StudioBinder Charcoal & Ink Sketch" : "CLOSE-UP ACTION (MCU) - StudioBinder Hand-Drawn Sketch",
+    230,
+    657
+  );
+
+  return canvas.toDataURL("image/png");
+}
 
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
+
+  const handleReloadFrame = (shot: StoryboardShot) => {
+    setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: true } : s));
+
+    setTimeout(() => {
+      const isWide = shot.id.endsWith("-A");
+      const cleanDrawing = renderStudioBinderArt(shot.shotNumber, shot.sceneSlug, isWide);
+      setShots(prev => prev.map(s => s.id === shot.id ? {
+        ...s,
+        imageUrl: cleanDrawing,
+        isGenerating: false
+      } : s));
+    }, 600);
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -80,34 +311,38 @@ export default function StoryboardPage() {
 
             parsed.forEach((scene: any, index: number) => {
               const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
-              const sceneData = HIGH_RES_STORYBOARD_PANELS[scene.id] || HIGH_RES_STORYBOARD_PANELS["SCENE-01"];
+              const shotNumA = `SHOT ${String(index + 1).padStart(2, "0")}A`;
+              const shotNumB = `SHOT ${String(index + 1).padStart(2, "0")}B`;
+
+              const imgA = renderStudioBinderArt(shotNumA, scene.slugline, true);
+              const imgB = renderStudioBinderArt(shotNumB, scene.slugline, false);
 
               newShots.push({
                 id: `shot-${scene.id}-A`,
                 sceneId: scene.id,
-                shotNumber: `SHOT ${String(index + 1).padStart(2, "0")}A`,
+                shotNumber: shotNumA,
                 sceneSlug: scene.slugline,
                 shotType: "Wide Master Framing (WMS)",
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Master`,
-                actionSubject: sceneData.wideDesc,
+                actionSubject: `StudioBinder Ink Sketch: Widescreen framing of ${scene.slugline}, environmental perspective and setup.`,
                 isGenerating: isTarget,
-                imageUrl: isTarget ? sceneData.wide : ""
+                imageUrl: isTarget ? imgA : ""
               });
 
               newShots.push({
                 id: `shot-${scene.id}-B`,
                 sceneId: scene.id,
-                shotNumber: `SHOT ${String(index + 1).padStart(2, "0")}B`,
+                shotNumber: shotNumB,
                 sceneSlug: scene.slugline,
                 shotType: "Medium Close Action (MCU)",
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Key Action`,
-                actionSubject: sceneData.closeDesc,
+                actionSubject: `StudioBinder Hand-Drawn Sketch: Focused character action, tools and tactical devices in ${scene.slugline}.`,
                 isGenerating: isTarget,
-                imageUrl: isTarget ? sceneData.close : ""
+                imageUrl: isTarget ? imgB : ""
               });
             });
 
@@ -116,26 +351,12 @@ export default function StoryboardPage() {
 
             setTimeout(() => {
               setShots(prev => prev.map(s => ({ ...s, isGenerating: false })));
-            }, 600);
+            }, 500);
           }
         } catch { }
       }
     }
   }, []);
-
-  const handleReloadFrame = (shot: StoryboardShot) => {
-    setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: true } : s));
-
-    setTimeout(() => {
-      const data = HIGH_RES_STORYBOARD_PANELS[shot.sceneId] || HIGH_RES_STORYBOARD_PANELS["SCENE-01"];
-      const img = shot.id.endsWith("-A") ? data.wide : data.close;
-      setShots(prev => prev.map(s => s.id === shot.id ? {
-        ...s,
-        imageUrl: img,
-        isGenerating: false
-      } : s));
-    }, 700);
-  };
 
   const handleGenerateAll = () => {
     setIsGeneratingAll(true);
@@ -143,15 +364,16 @@ export default function StoryboardPage() {
 
     setTimeout(() => {
       setShots(prev => prev.map(s => {
-        const data = HIGH_RES_STORYBOARD_PANELS[s.sceneId] || HIGH_RES_STORYBOARD_PANELS["SCENE-01"];
+        const isWide = s.id.endsWith("-A");
+        const drawing = renderStudioBinderArt(s.shotNumber, s.sceneSlug, isWide);
         return {
           ...s,
-          imageUrl: s.id.endsWith("-A") ? data.wide : data.close,
+          imageUrl: drawing,
           isGenerating: false
         };
       }));
       setIsGeneratingAll(false);
-    }, 900);
+    }, 700);
   };
 
   const filteredShots = filterScene === "ALL"
@@ -164,13 +386,13 @@ export default function StoryboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> High-Fidelity Storyboard Visualizer
+            <Sparkles className="w-3.5 h-3.5" /> Hand-Drawn Film Storyboard Studio
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Charcoal Shading ආකෘතියෙන් සෑම දර්ශනයකටම ගැළපෙන Storyboard Frames.
+            StudioBinder Ink & Charcoal Shading ආකෘතියෙන් සෑම දර්ශනයකටම ගැළපෙන Hand-Drawn Storyboard Frames.
           </p>
         </div>
 
@@ -231,7 +453,7 @@ export default function StoryboardPage() {
 
         <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
           <span className="px-2.5 py-1 rounded bg-[#0e1d15] border border-emerald-500/20 text-emerald-400 font-mono flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5" /> StudioBinder B&W Charcoal
+            <Layers className="w-3.5 h-3.5" /> StudioBinder Charcoal & Ink
           </span>
           <span className="text-slate-500">•</span>
           <span>16:9 Scope</span>
@@ -249,26 +471,22 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Rendering Hand-Drawn Storyboard Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing StudioBinder Hand-Drawn Sketch...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
-                  {/* High contrast, B&W charcoal storyboard sketch effect */}
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 filter grayscale contrast-150 brightness-95"
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                   />
-                  {/* Storyboard Panel Outer Frame Overlay */}
-                  <div className="absolute inset-0 border-[6px] border-black/40 pointer-events-none" />
-
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
                       onClick={() => handleReloadFrame(shot)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Re-render Frame
+                      <RefreshCw className="w-3 h-3" /> Re-draw Frame
                     </button>
                   </div>
                 </>
