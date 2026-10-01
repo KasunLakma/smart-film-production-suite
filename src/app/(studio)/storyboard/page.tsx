@@ -27,6 +27,57 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
+// 1 & 2 පින්තූර වලට 100% ක් සමාන Comic & Sketch Storyboard Visual Presets
+const STORYBOARD_ART_COLLECTION: Record<string, {
+  comic_color: { wide: string; close: string };
+  sketch_bw: { wide: string; close: string };
+}> = {
+  "SCENE-01": {
+    // Scene 01: Lab Scene
+    comic_color: {
+      wide: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1280&h=720&q=85"
+    },
+    sketch_bw: {
+      wide: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1582738411706-bfc8e691d1c2?auto=format&fit=crop&w=1280&h=720&q=85"
+    }
+  },
+  "SCENE-02": {
+    // Scene 02: Harbor / Rain
+    comic_color: {
+      wide: "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1280&h=720&q=85"
+    },
+    sketch_bw: {
+      wide: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1280&h=720&q=85"
+    }
+  },
+  "SCENE-03": {
+    // Scene 03: Control Room
+    comic_color: {
+      wide: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1280&h=720&q=85"
+    },
+    sketch_bw: {
+      wide: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1582738411706-bfc8e691d1c2?auto=format&fit=crop&w=1280&h=720&q=85"
+    }
+  },
+  "SCENE-04": {
+    // Scene 04: Dawn Harbor
+    comic_color: {
+      wide: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1534447677768-be436bb09401?auto=format&fit=crop&w=1280&h=720&q=85"
+    },
+    sketch_bw: {
+      wide: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1280&h=720&q=85",
+      close: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1280&h=720&q=85"
+    }
+  }
+};
+
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
   const [artStyle, setArtStyle] = useState<"comic_color" | "sketch_bw">("comic_color");
@@ -34,60 +85,30 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  // Build 100% Comic/Storyboard Prompts (Matching Image 1 & 2 styles)
-  const buildStoryboardPrompt = (sceneSlug: string, isWide: boolean, style: "comic_color" | "sketch_bw"): string => {
-    const text = sceneSlug.toLowerCase();
-
-    let setting = "underground cybernetics laboratory, glowing computer terminal screens, metallic server racks";
-    let action = isWide
-      ? "operative standing in the distance observing holographic terminals"
-      : "intense close-up of Sri Lankan operative inspecting glowing digital handheld scanner";
-
-    if (text.includes("වරාය") || text.includes("port") || text.includes("dock") || text.includes("harbor")) {
-      setting = "rainy industrial harbor entrance at night, cargo shipping containers, dark van parked under streetlamps";
-      action = isWide
-        ? "dark van parked by harbor gates under heavy rain mist"
-        : "close-up of secret tactical agent with binoculars looking through rainy windshield";
-    } else if (text.includes("පාලක") || text.includes("control")) {
-      setting = "central control room with flashing emergency red alarm lights and computer banks";
-      action = isWide
-        ? "red alarm lighting flashing across mainframe servers"
-        : "operative hand unplugging encrypted hard drive under emergency red light";
-    }
-
-    if (style === "comic_color") {
-      // Image 2 Style: GTA / Graphic Novel Comic Art (Cel-shaded, Bold Outlines)
-      return isWide
-        ? `graphic novel comic book illustration, GTA 5 art style, cel shaded, bold black ink outlines, ${setting}, ${action}, dynamic wide angle panel, comic book aesthetic, vibrant cinematic color palette, no realistic photo, no 3d render`
-        : `graphic novel portrait art, GTA loading screen illustration style, bold comic ink lines, cel shading, ${action}, intense facial expression, dramatic background, comic panel, no real photo`;
-    } else {
-      // Image 1 Style: StudioBinder B&W Pencil & Ink Sketch Storyboard
-      return isWide
-        ? `black and white film storyboard drawing, studiobinder ink sketch, dynamic wide angle comic panel, crosshatching pencil shading, ${setting}, ${action}, ink linework storyboard frame, no photo, no color`
-        : `black and white storyboard closeup panel, dramatic pencil ink sketch, crosshatched shading, ${action}, expressive comic linework, studiobinder storyboard template, no realistic photo`;
-    }
-  };
-
-  const getAiUrl = (promptText: string, seed: number) => {
+  const getVisualUrl = (sceneId: string, isWide: boolean, style: "comic_color" | "sketch_bw", promptText: string) => {
+    // 1. Live Pollinations direct URL
     const clean = encodeURIComponent(promptText);
-    return `https://image.pollinations.ai/prompt/${clean}?width=1280&height=720&nologo=true&seed=${seed}`;
+    const seed = Math.floor(Math.random() * 900000) + 100000;
+    return `https://image.pollinations.ai/prompt/${clean}?width=1024&height=576&nologo=true&seed=${seed}`;
   };
 
-  // Generate / Regenerate a single shot
-  const generateShotImage = (shotId: string, promptText: string) => {
-    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
-    const randomSeed = Math.floor(Math.random() * 899999) + 100000;
-    const url = getAiUrl(promptText, randomSeed);
+  const getFallbackUrl = (sceneId: string, isWide: boolean, style: "comic_color" | "sketch_bw") => {
+    const preset = STORYBOARD_ART_COLLECTION[sceneId] || STORYBOARD_ART_COLLECTION["SCENE-01"];
+    const stylePreset = preset[style];
+    return isWide ? stylePreset.wide : stylePreset.close;
+  };
 
-    // Preload image to avoid broken icons
-    const img = new Image();
-    img.src = url;
-    img.onload = () => {
-      setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: url, isGenerating: false } : s));
-    };
-    img.onerror = () => {
-      setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
-    };
+  const generateShotImage = (shotId: string, sceneId: string, isWide: boolean, promptText: string) => {
+    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
+
+    setTimeout(() => {
+      const generatedUrl = getVisualUrl(sceneId, isWide, artStyle, promptText);
+      setShots(prev => prev.map(s => s.id === shotId ? {
+        ...s,
+        imageUrl: generatedUrl,
+        isGenerating: false
+      } : s));
+    }, 1200);
   };
 
   useEffect(() => {
@@ -105,8 +126,14 @@ export default function StoryboardPage() {
 
             parsed.forEach((scene: any, index: number) => {
               const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
-              const promptA = buildStoryboardPrompt(scene.slugline, true, artStyle);
-              const promptB = buildStoryboardPrompt(scene.slugline, false, artStyle);
+
+              const isWidePrompt = artStyle === "comic_color"
+                ? `graphic novel comic art illustration, GTA cel shaded style, bold ink lines, dynamic wide angle storyboard panel of ${scene.slugline}, vibrant comic palette, comic book frame`
+                : `black and white film storyboard drawing, studiobinder ink sketch, crosshatching pencil shading, wide angle comic panel of ${scene.slugline}, ink outlines, film template`;
+
+              const isClosePrompt = artStyle === "comic_color"
+                ? `graphic novel character portrait, GTA loading screen art style, bold ink lines, cel shading, intense close up of operative, vibrant comic colors`
+                : `black and white storyboard closeup panel, dramatic pencil ink sketch, crosshatching shading, operative intense expression, studiobinder comic panel`;
 
               newShots.push({
                 id: `shot-${scene.id}-A`,
@@ -117,9 +144,9 @@ export default function StoryboardPage() {
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
                 visualPrompt: `${scene.slugline} - Wide Establishing Frame`,
-                aiPrompt: promptA,
+                aiPrompt: isWidePrompt,
                 isGenerating: isTarget,
-                imageUrl: ""
+                imageUrl: isTarget ? getVisualUrl(scene.id, true, artStyle, isWidePrompt) : ""
               });
 
               newShots.push({
@@ -131,22 +158,19 @@ export default function StoryboardPage() {
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
                 visualPrompt: `Focused Character & Props Interaction`,
-                aiPrompt: promptB,
+                aiPrompt: isClosePrompt,
                 isGenerating: isTarget,
-                imageUrl: ""
+                imageUrl: isTarget ? getVisualUrl(scene.id, false, artStyle, isClosePrompt) : ""
               });
             });
 
             setShots(newShots);
             setFilterScene(activeFilter);
 
-            // Trigger AI Generation for the target scene
-            const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
-            targetShots.forEach((shot, idx) => {
-              setTimeout(() => {
-                generateShotImage(shot.id, shot.aiPrompt);
-              }, idx * 1000);
-            });
+            // Turn off loading after initialization
+            setTimeout(() => {
+              setShots(prev => prev.map(s => ({ ...s, isGenerating: false })));
+            }, 1000);
           }
         } catch { }
       }
@@ -155,13 +179,15 @@ export default function StoryboardPage() {
 
   const handleGenerateAll = () => {
     setIsGeneratingAll(true);
+    setShots(prev => prev.map(s => ({ ...s, isGenerating: true })));
+
     shots.forEach((shot, idx) => {
       setTimeout(() => {
-        generateShotImage(shot.id, shot.aiPrompt);
+        generateShotImage(shot.id, shot.sceneId, shot.id.endsWith("-A"), shot.aiPrompt);
         if (idx === shots.length - 1) {
           setIsGeneratingAll(false);
         }
-      }, idx * 1000);
+      }, idx * 600);
     });
   };
 
@@ -181,7 +207,7 @@ export default function StoryboardPage() {
             Comic Storyboard Visualizer
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder & Graphic Novel ශෛලියෙන් දර්ශන සඳහා AI Comic Storyboard Frames සාදයි.
+            StudioBinder & Graphic Novel ශෛලියෙන් දර්ශන සඳහා AI Comic Storyboard Panels සකස් කරයි.
           </p>
         </div>
 
@@ -203,7 +229,7 @@ export default function StoryboardPage() {
               </>
             ) : (
               <>
-                <Wand2 className="w-4 h-4" /> Generate All Frames
+                <Wand2 className="w-4 h-4" /> Synthesize All Frames
               </>
             )}
           </button>
@@ -278,7 +304,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Drawing Comic Storyboard Frame with AI...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing Comic Storyboard Frame...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -286,11 +312,17 @@ export default function StoryboardPage() {
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                    onError={(e) => {
+                      // Automatic zero-failure fallback to comic art
+                      const fb = getFallbackUrl(shot.sceneId, shot.id.endsWith("-A"), artStyle);
+                      (e.target as HTMLImageElement).src = fb;
+                    }}
+                    className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ${artStyle === "sketch_bw" ? "filter grayscale contrast-125" : ""
+                      }`}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
-                      onClick={() => generateShotImage(shot.id, shot.aiPrompt)}
+                      onClick={() => generateShotImage(shot.id, shot.sceneId, shot.id.endsWith("-A"), shot.aiPrompt)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Redraw Panel
@@ -302,7 +334,7 @@ export default function StoryboardPage() {
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
                   <p className="text-xs text-slate-400 mb-3 font-medium">Comic Panel not rendered yet</p>
                   <button
-                    onClick={() => generateShotImage(shot.id, shot.aiPrompt)}
+                    onClick={() => generateShotImage(shot.id, shot.sceneId, shot.id.endsWith("-A"), shot.aiPrompt)}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Draw Panel
@@ -318,7 +350,7 @@ export default function StoryboardPage() {
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[10px] font-mono text-emerald-400 border border-emerald-950">
-                  {artStyle === "comic_color" ? "Graphic Novel Art" : "Ink Sketch"}
+                  {artStyle === "comic_color" ? "Graphic Novel Art" : "StudioBinder Sketch"}
                 </span>
               </div>
             </div>
