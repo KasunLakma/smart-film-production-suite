@@ -10,7 +10,8 @@ import {
   Wand2,
   FileText,
   Sparkles,
-  Layers
+  Layers,
+  Palette
 } from "lucide-react";
 
 interface StoryboardShot {
@@ -27,8 +28,13 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// Canvas Storyboard Art Generator (StudioBinder Charcoal & Ink Style)
-function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: boolean): string {
+// StudioBinder Professional Charcoal / Ink Hatching Render Engine
+function generateStudioBinderFrame(
+  shotNumber: string,
+  sceneSlug: string,
+  isWide: boolean,
+  artStyle: "sketch_bw" | "graphic_novel"
+): string {
   if (typeof document === "undefined") return "";
 
   const canvas = document.createElement("canvas");
@@ -42,231 +48,306 @@ function renderStudioBinderArt(shotNumber: string, sceneSlug: string, isWide: bo
   const isHarbor = /harbor|port|dock|වරාය|නැව|බෝට්ටු/.test(slug);
   const isControl = /control|පාලක|command|office/.test(slug);
 
-  // 1. StudioBinder Paper / Dark Charcoal Board Background
-  ctx.fillStyle = "#121415";
+  const isColor = artStyle === "graphic_novel";
+
+  // 1. Background Tone (Charcoal Paper / Deep Noir Studio Canvas)
+  ctx.fillStyle = isColor ? "#0d1512" : "#111417";
   ctx.fillRect(0, 0, 1280, 720);
 
-  // 2. Paper Texture & Crosshatch Sketch Lines
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.03)";
+  // 2. Chiaroscuro Atmospheric Vignette / Lighting Gradient
+  const grad = ctx.createRadialGradient(640, 340, 100, 640, 360, 680);
+  if (isColor) {
+    grad.addColorStop(0, "rgba(16, 185, 129, 0.12)");
+    grad.addColorStop(0.7, "rgba(5, 20, 15, 0.8)");
+    grad.addColorStop(1, "#030805");
+  } else {
+    grad.addColorStop(0, "rgba(255, 255, 255, 0.15)");
+    grad.addColorStop(0.65, "rgba(15, 20, 25, 0.7)");
+    grad.addColorStop(1, "#080a0c");
+  }
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, 1280, 720);
+
+  // 3. Dense Crosshatching / Pencil Shading Textures
+  ctx.strokeStyle = isColor ? "rgba(52, 211, 153, 0.04)" : "rgba(255, 255, 255, 0.05)";
   ctx.lineWidth = 1;
-  for (let i = -720; i < 1280; i += 8) {
+  for (let i = -720; i < 1280; i += 6) {
     ctx.beginPath();
     ctx.moveTo(i, 0);
     ctx.lineTo(i + 720, 720);
     ctx.stroke();
   }
 
-  // 3. 16:9 Cinematic Safe Framing Box
-  ctx.strokeStyle = "#384149";
-  ctx.lineWidth = 2.5;
-  ctx.strokeRect(40, 35, 1200, 650);
+  // 4. StudioBinder Cinematic Scope Border & Grid Marks
+  ctx.strokeStyle = isColor ? "#065f46" : "#334155";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(40, 30, 1200, 660);
 
-  // Crosshairs & Aspect Marks
-  ctx.strokeStyle = "#505a63";
+  // Crosshairs & Center Frame Ticks
+  ctx.strokeStyle = isColor ? "#10b981" : "#64748b";
   ctx.lineWidth = 1.5;
   ctx.beginPath();
-  ctx.moveTo(640, 20); ctx.lineTo(640, 50);
-  ctx.moveTo(640, 670); ctx.lineTo(640, 700);
+  ctx.moveTo(640, 15); ctx.lineTo(640, 45);
+  ctx.moveTo(640, 675); ctx.lineTo(640, 705);
   ctx.moveTo(25, 360); ctx.lineTo(55, 360);
   ctx.moveTo(1225, 360); ctx.lineTo(1255, 360);
   ctx.stroke();
 
-  // 4. Perspective Grids & Scene Layout
-  ctx.strokeStyle = "rgba(180, 195, 205, 0.25)";
-  ctx.lineWidth = 1.5;
-  const horizonY = isWide ? 420 : 480;
-
+  // Perspective Horizon Lines
+  ctx.strokeStyle = "rgba(148, 163, 184, 0.25)";
+  ctx.lineWidth = 1;
+  const horizon = isWide ? 440 : 490;
   ctx.beginPath();
-  ctx.moveTo(40, horizonY);
-  ctx.lineTo(1240, horizonY);
-  ctx.moveTo(640, horizonY); ctx.lineTo(40, 685);
-  ctx.moveTo(640, horizonY); ctx.lineTo(380, 685);
-  ctx.moveTo(640, horizonY); ctx.lineTo(900, 685);
-  ctx.moveTo(640, horizonY); ctx.lineTo(1240, 685);
+  ctx.moveTo(40, horizon); ctx.lineTo(1240, horizon);
+  ctx.moveTo(640, horizon); ctx.lineTo(40, 690);
+  ctx.moveTo(640, horizon); ctx.lineTo(1240, 690);
   ctx.stroke();
 
-  // 5. Hand-Drawn Ink Elements based on Scene Type
+  // 5. High-Contrast Figurative Storyboard Sketches by Scene Context
   if (isLab) {
     if (isWide) {
-      ctx.strokeStyle = "#cbd5e1";
+      // Wide Lab: 3D Perspective Server Walls, Holographic Desk, Technician Sketch
+      ctx.fillStyle = "#1e293b";
+      ctx.strokeStyle = isColor ? "#34d399" : "#cbd5e1";
       ctx.lineWidth = 2.5;
-      ctx.strokeRect(100, 180, 220, 240);
-      ctx.strokeRect(120, 200, 180, 60);
-      ctx.strokeRect(120, 280, 180, 60);
-      ctx.strokeRect(960, 180, 220, 240);
-      ctx.strokeRect(980, 200, 180, 60);
-      ctx.strokeRect(980, 280, 180, 60);
 
-      // Central Hologram Table
+      // Left Server Racks with Depth
       ctx.beginPath();
-      ctx.ellipse(640, 520, 320, 70, 0, 0, Math.PI * 2);
+      ctx.moveTo(60, 180); ctx.lineTo(260, 220); ctx.lineTo(260, 560); ctx.lineTo(60, 620); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      // Server Lights Hatching
+      for (let y = 250; y < 520; y += 40) {
+        ctx.strokeRect(90, y, 140, 18);
+      }
+
+      // Right Monitors Wall
+      ctx.beginPath();
+      ctx.moveTo(1220, 180); ctx.lineTo(1020, 220); ctx.lineTo(1020, 560); ctx.lineTo(1220, 620); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      for (let y = 250; y < 520; y += 45) {
+        ctx.strokeRect(1050, y, 140, 24);
+      }
+
+      // Center Holographic Terminal Desk
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.ellipse(640, 540, 280, 65, 0, 0, Math.PI * 2);
+      ctx.fill();
       ctx.stroke();
 
-      // Holographic Light Cone
-      ctx.strokeStyle = "rgba(56, 189, 248, 0.4)";
+      // Holographic Volumetric Projection Cone
+      const holoGrad = ctx.createLinearGradient(640, 320, 640, 540);
+      holoGrad.addColorStop(0, isColor ? "rgba(16, 185, 129, 0.6)" : "rgba(255, 255, 255, 0.4)");
+      holoGrad.addColorStop(1, "rgba(0, 0, 0, 0)");
+      ctx.fillStyle = holoGrad;
       ctx.beginPath();
-      ctx.moveTo(640, 320); ctx.lineTo(480, 520);
-      ctx.moveTo(640, 320); ctx.lineTo(800, 520);
-      ctx.stroke();
+      ctx.moveTo(640, 320); ctx.lineTo(460, 540); ctx.lineTo(820, 540); ctx.closePath();
+      ctx.fill();
 
-      // Operative Silhouette
-      ctx.fillStyle = "#e2e8f0";
+      // Technician Mid-Ground Silhouette with Charcoal Hatching
+      ctx.fillStyle = "#020617";
       ctx.beginPath();
-      ctx.arc(640, 350, 24, 0, Math.PI * 2);
+      ctx.arc(640, 360, 26, 0, Math.PI * 2);
       ctx.fill();
       ctx.beginPath();
-      ctx.moveTo(600, 470); ctx.lineTo(620, 385); ctx.lineTo(660, 385); ctx.lineTo(680, 470);
+      ctx.moveTo(595, 490); ctx.lineTo(620, 395); ctx.lineTo(660, 395); ctx.lineTo(685, 490); ctx.closePath();
       ctx.fill();
+      ctx.stroke();
     } else {
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.fillStyle = "#1e242a";
+      // Close-Up Lab: High-Definition Human Head & Handheld Optical Scanner
+      ctx.fillStyle = "#1e293b";
+      ctx.strokeStyle = isColor ? "#34d399" : "#e2e8f0";
       ctx.lineWidth = 3;
+
+      // Human Anatomical Face Contour Silhouette (StudioBinder Pencil Portrait)
       ctx.beginPath();
-      ctx.arc(640, 280, 95, 0, Math.PI * 2);
+      ctx.arc(640, 260, 95, 0, Math.PI * 2);
       ctx.fill();
       ctx.stroke();
 
-      ctx.strokeStyle = "#f8fafc";
-      ctx.lineWidth = 2;
+      // Facial Chiaroscuro Shading / Shadow Side
+      ctx.fillStyle = "rgba(0,0,0,0.45)";
       ctx.beginPath();
-      ctx.moveTo(590, 275); ctx.lineTo(630, 270);
-      ctx.moveTo(650, 270); ctx.lineTo(690, 275);
+      ctx.arc(640, 260, 95, Math.PI * 0.4, Math.PI * 1.6);
+      ctx.fill();
+
+      // Eyebrow and Eye Gaze Crosshatching
+      ctx.strokeStyle = "#ffffff";
+      ctx.lineWidth = 2.5;
+      ctx.beginPath();
+      ctx.moveTo(585, 255); ctx.lineTo(625, 250);
+      ctx.moveTo(655, 250); ctx.lineTo(695, 255);
       ctx.stroke();
 
-      // Handheld Tactical Scanner tool
-      ctx.fillStyle = "#334155";
-      ctx.strokeStyle = "#38bdf8";
-      ctx.lineWidth = 3;
-      ctx.fillRect(560, 430, 160, 180);
-      ctx.strokeRect(560, 430, 160, 180);
-      ctx.strokeStyle = "#7dd3fc";
-      ctx.strokeRect(580, 450, 120, 80);
+      // Dramatic Hand & Handheld Scanner Device in Foreground
+      ctx.fillStyle = "#0f172a";
+      ctx.strokeStyle = isColor ? "#10b981" : "#ffffff";
+      ctx.lineWidth = 3.5;
+      ctx.fillRect(540, 420, 200, 190);
+      ctx.strokeRect(540, 420, 200, 190);
+
+      // Scanner Optical Display Screen
+      ctx.fillStyle = isColor ? "#064e3b" : "#334155";
+      ctx.fillRect(565, 445, 150, 90);
+      ctx.strokeRect(565, 445, 150, 90);
+
+      // Projection Beam lines
+      ctx.strokeStyle = isColor ? "#34d399" : "rgba(255,255,255,0.7)";
       ctx.beginPath();
-      ctx.moveTo(580, 490); ctx.lineTo(700, 490);
+      ctx.moveTo(565, 490); ctx.lineTo(715, 490);
+      ctx.moveTo(640, 445); ctx.lineTo(640, 535);
       ctx.stroke();
     }
   } else if (isHarbor) {
     if (isWide) {
-      ctx.strokeStyle = "#cbd5e1";
+      // Wide Harbor: Containers, Wet Tarmac Reflections, Van
+      ctx.fillStyle = "#1e293b";
+      ctx.strokeStyle = isColor ? "#38bdf8" : "#cbd5e1";
       ctx.lineWidth = 2.5;
-      ctx.strokeRect(80, 260, 240, 160);
-      ctx.strokeRect(960, 260, 240, 160);
-      ctx.strokeRect(980, 140, 200, 120);
 
-      // Van silhouette
-      ctx.fillStyle = "#262e35";
+      // Stacked Maritime Shipping Freight Containers (Left & Right)
+      ctx.strokeRect(70, 240, 260, 170);
+      ctx.strokeRect(950, 240, 260, 170);
+      ctx.strokeRect(970, 120, 220, 120);
+
+      // Cargo Container Corrugation Lines
+      for (let x = 90; x < 320; x += 22) {
+        ctx.beginPath(); ctx.moveTo(x, 240); ctx.lineTo(x, 410); ctx.stroke();
+      }
+
+      // Tactical Van Shaded Silhouette
+      ctx.fillStyle = "#090d12";
       ctx.strokeStyle = "#e2e8f0";
       ctx.beginPath();
-      ctx.moveTo(480, 480); ctx.lineTo(500, 390); ctx.lineTo(660, 390); ctx.lineTo(740, 430); ctx.lineTo(780, 440); ctx.lineTo(780, 480); ctx.closePath();
-      ctx.fill();
-      ctx.stroke();
+      ctx.moveTo(460, 480); ctx.lineTo(485, 380); ctx.lineTo(665, 380); ctx.lineTo(745, 425); ctx.lineTo(790, 435); ctx.lineTo(790, 480); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(525, 485, 24, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
+      ctx.beginPath(); ctx.arc(730, 485, 24, 0, Math.PI * 2); ctx.fill(); ctx.stroke();
 
-      ctx.beginPath();
-      ctx.arc(540, 485, 20, 0, Math.PI * 2);
-      ctx.arc(720, 485, 20, 0, Math.PI * 2);
-      ctx.stroke();
-
-      // Rain Hatching
-      ctx.strokeStyle = "rgba(148, 163, 184, 0.4)";
-      ctx.lineWidth = 1.5;
-      for (let r = 100; r < 1200; r += 45) {
-        ctx.beginPath();
-        ctx.moveTo(r, 60); ctx.lineTo(r - 50, 220);
-        ctx.moveTo(r + 20, 240); ctx.lineTo(r - 30, 400);
-        ctx.stroke();
+      // Realistic Heavy Downpour Rain Hatching (Crosshatch Streaks)
+      ctx.strokeStyle = "rgba(148, 163, 184, 0.45)";
+      ctx.lineWidth = 1.8;
+      for (let r = 80; r < 1220; r += 35) {
+        ctx.beginPath(); ctx.moveTo(r, 40); ctx.lineTo(r - 55, 220); ctx.stroke();
+        ctx.beginPath(); ctx.moveTo(r + 15, 260); ctx.lineTo(r - 40, 440); ctx.stroke();
       }
     } else {
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.fillStyle = "#1e242a";
+      // Close-Up Harbor: Covert Operative with Tactical Binoculars in Rain
+      ctx.fillStyle = "#1e293b";
+      ctx.strokeStyle = isColor ? "#38bdf8" : "#e2e8f0";
       ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(640, 270, 110, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
 
-      ctx.fillStyle = "#334155";
+      // Hooded Silhouette
       ctx.beginPath();
-      ctx.arc(580, 360, 45, 0, Math.PI * 2);
-      ctx.arc(700, 360, 45, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.stroke();
-      ctx.strokeRect(615, 345, 50, 30);
+      ctx.arc(640, 260, 115, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+
+      // Binoculars Cylinders in High Contrast
+      ctx.fillStyle = "#090d12";
+      ctx.beginPath();
+      ctx.arc(575, 360, 52, 0, Math.PI * 2);
+      ctx.arc(705, 360, 52, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
+      ctx.fillRect(610, 340, 60, 35);
+      ctx.strokeRect(610, 340, 60, 35);
+
+      // Lens Reflections
+      ctx.fillStyle = isColor ? "rgba(56, 189, 248, 0.35)" : "rgba(255, 255, 255, 0.3)";
+      ctx.beginPath(); ctx.arc(575, 360, 38, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(705, 360, 38, 0, Math.PI * 2); ctx.fill();
     }
   } else if (isControl) {
     if (isWide) {
-      ctx.strokeStyle = "#cbd5e1";
+      // Wide Control Room: Massive Screen Array, Emergency Alarm Lighting
+      ctx.fillStyle = "#1e293b";
+      ctx.strokeStyle = isColor ? "#f87171" : "#cbd5e1";
       ctx.lineWidth = 2.5;
-      ctx.strokeRect(180, 140, 920, 200);
-      ctx.strokeRect(220, 160, 260, 160);
-      ctx.strokeRect(510, 160, 260, 160);
-      ctx.strokeRect(800, 160, 260, 160);
 
-      // Warning beacon
-      ctx.strokeStyle = "#ef4444";
-      ctx.lineWidth = 3;
-      ctx.beginPath();
-      ctx.arc(640, 100, 20, 0, Math.PI * 2);
-      ctx.stroke();
-      ctx.beginPath();
-      ctx.moveTo(600, 80); ctx.lineTo(580, 60);
-      ctx.moveTo(680, 80); ctx.lineTo(700, 60);
-      ctx.stroke();
-    } else {
-      ctx.strokeStyle = "#e2e8f0";
-      ctx.fillStyle = "#1e242a";
-      ctx.lineWidth = 3;
-      ctx.strokeRect(340, 160, 600, 380);
-      ctx.strokeRect(380, 200, 520, 80);
+      ctx.strokeRect(160, 120, 960, 240);
+      ctx.strokeRect(200, 150, 260, 180);
+      ctx.strokeRect(510, 150, 260, 180);
+      ctx.strokeRect(820, 150, 260, 180);
 
-      // Hard drive
-      ctx.fillStyle = "#334155";
-      ctx.fillRect(480, 310, 320, 160);
-      ctx.strokeRect(480, 310, 320, 160);
-
+      // Warning Beacon Pulse
       ctx.strokeStyle = "#ef4444";
       ctx.lineWidth = 4;
+      ctx.beginPath(); ctx.arc(640, 90, 24, 0, Math.PI * 2); ctx.stroke();
       ctx.beginPath();
-      ctx.moveTo(480, 310); ctx.lineTo(800, 310);
+      ctx.moveTo(590, 70); ctx.lineTo(560, 45);
+      ctx.moveTo(690, 70); ctx.lineTo(720, 45);
       ctx.stroke();
+
+      // Curved Command Desk
+      ctx.fillStyle = "#0f172a";
+      ctx.beginPath();
+      ctx.moveTo(220, 560); ctx.lineTo(440, 430); ctx.lineTo(840, 430); ctx.lineTo(1060, 560); ctx.closePath();
+      ctx.fill(); ctx.stroke();
+    } else {
+      // Close-Up Control Room: Hand Unplugging Encrypted Military Drive
+      ctx.fillStyle = "#1e293b";
+      ctx.strokeStyle = isColor ? "#f87171" : "#e2e8f0";
+      ctx.lineWidth = 3;
+
+      // Server Chassis Slot Bay
+      ctx.strokeRect(320, 140, 640, 400);
+      for (let y = 180; y < 500; y += 70) {
+        ctx.strokeRect(360, y, 560, 45);
+      }
+
+      // Hard Drive Being Ejected with Motion Lines
+      ctx.fillStyle = "#090d12";
+      ctx.fillRect(480, 290, 320, 170);
+      ctx.strokeRect(480, 290, 320, 170);
+
+      // Red Status Strip on Drive
+      ctx.fillStyle = "#ef4444";
+      ctx.fillRect(500, 310, 280, 18);
+
+      // Operative Hand Silhouette Gripping Drive
+      ctx.fillStyle = "#334155";
+      ctx.beginPath();
+      ctx.ellipse(640, 450, 70, 35, 0, 0, Math.PI * 2);
+      ctx.fill(); ctx.stroke();
     }
   } else {
-    // Dawn / Escape
+    // Dawn Docks / Coastal Yard Escape
+    ctx.fillStyle = "#1e293b";
     ctx.strokeStyle = "#cbd5e1";
     ctx.lineWidth = 2.5;
-    ctx.strokeRect(140, 240, 300, 180);
-    ctx.strokeRect(840, 240, 300, 180);
 
-    ctx.fillStyle = "#e2e8f0";
-    ctx.beginPath();
-    ctx.arc(580, 380, 18, 0, Math.PI * 2);
-    ctx.arc(680, 395, 18, 0, Math.PI * 2);
-    ctx.fill();
+    ctx.strokeRect(120, 220, 280, 190);
+    ctx.strokeRect(880, 220, 280, 190);
+
+    // Two Running Silhouettes
+    ctx.fillStyle = "#020617";
+    ctx.beginPath(); ctx.arc(570, 360, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(670, 380, 22, 0, Math.PI * 2); ctx.fill();
+    ctx.fillRect(555, 385, 30, 60);
+    ctx.fillRect(655, 405, 30, 60);
   }
 
-  // 6. Bottom Metadata Bar
-  ctx.fillStyle = "rgba(5, 10, 8, 0.88)";
-  ctx.fillRect(40, 615, 1200, 70);
-  ctx.strokeStyle = "#10b981";
+  // 6. Professional StudioBinder Metadata Slate Bar
+  ctx.fillStyle = "rgba(3, 7, 5, 0.92)";
+  ctx.fillRect(40, 610, 1200, 80);
+  ctx.strokeStyle = isColor ? "#10b981" : "#475569";
   ctx.lineWidth = 1.5;
-  ctx.strokeRect(40, 615, 1200, 70);
+  ctx.strokeRect(40, 610, 1200, 80);
 
-  ctx.fillStyle = "#10b981";
-  ctx.font = "bold 22px monospace";
+  ctx.fillStyle = isColor ? "#34d399" : "#f1f5f9";
+  ctx.font = "bold 24px monospace";
   ctx.fillText(shotNumber, 70, 658);
 
-  ctx.fillStyle = "#cbd5e1";
+  ctx.fillStyle = "#94a3b8";
   ctx.font = "16px sans-serif";
-  ctx.fillText(
-    isWide ? "WIDE MASTER (WMS) - StudioBinder Charcoal & Ink Sketch" : "CLOSE-UP ACTION (MCU) - StudioBinder Hand-Drawn Sketch",
-    230,
-    657
-  );
+  const desc = isWide ? "WIDE MASTER (WMS) - StudioBinder Charcoal & Ink Sketch" : "CLOSE-UP (MCU) - Dynamic Comic Storyboard Panel";
+  ctx.fillText(desc, 230, 657);
 
   return canvas.toDataURL("image/png");
 }
 
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
+  const [artStyle, setArtStyle] = useState<"sketch_bw" | "graphic_novel">("sketch_bw");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
@@ -276,7 +357,7 @@ export default function StoryboardPage() {
 
     setTimeout(() => {
       const isWide = shot.id.endsWith("-A");
-      const cleanDrawing = renderStudioBinderArt(shot.shotNumber, shot.sceneSlug, isWide);
+      const cleanDrawing = generateStudioBinderFrame(shot.shotNumber, shot.sceneSlug, isWide, artStyle);
       setShots(prev => prev.map(s => s.id === shot.id ? {
         ...s,
         imageUrl: cleanDrawing,
@@ -303,8 +384,8 @@ export default function StoryboardPage() {
               const shotNumA = `SHOT ${String(index + 1).padStart(2, "0")}A`;
               const shotNumB = `SHOT ${String(index + 1).padStart(2, "0")}B`;
 
-              const imgA = renderStudioBinderArt(shotNumA, scene.slugline, true);
-              const imgB = renderStudioBinderArt(shotNumB, scene.slugline, false);
+              const imgA = generateStudioBinderFrame(shotNumA, scene.slugline, true, artStyle);
+              const imgB = generateStudioBinderFrame(shotNumB, scene.slugline, false, artStyle);
 
               newShots.push({
                 id: `shot-${scene.id}-A`,
@@ -315,7 +396,7 @@ export default function StoryboardPage() {
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Master`,
-                actionSubject: `StudioBinder Ink Sketch: Widescreen framing of ${scene.slugline}, environmental perspective and setup.`,
+                actionSubject: `StudioBinder Ink & Charcoal Sketch: Widescreen framing of ${scene.slugline}, architectural depth & lighting.`,
                 isGenerating: isTarget,
                 imageUrl: isTarget ? imgA : ""
               });
@@ -329,7 +410,7 @@ export default function StoryboardPage() {
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Key Action`,
-                actionSubject: `StudioBinder Hand-Drawn Sketch: Focused character action, tools and tactical devices in ${scene.slugline}.`,
+                actionSubject: `StudioBinder Hand-Drawn Sketch: Focused character action, facial expression and props in ${scene.slugline}.`,
                 isGenerating: isTarget,
                 imageUrl: isTarget ? imgB : ""
               });
@@ -340,12 +421,12 @@ export default function StoryboardPage() {
 
             setTimeout(() => {
               setShots(prev => prev.map(s => ({ ...s, isGenerating: false })));
-            }, 500);
+            }, 450);
           }
         } catch { }
       }
     }
-  }, []);
+  }, [artStyle]);
 
   const handleGenerateAll = () => {
     setIsGeneratingAll(true);
@@ -354,7 +435,7 @@ export default function StoryboardPage() {
     setTimeout(() => {
       setShots(prev => prev.map(s => {
         const isWide = s.id.endsWith("-A");
-        const drawing = renderStudioBinderArt(s.shotNumber, s.sceneSlug, isWide);
+        const drawing = generateStudioBinderFrame(s.shotNumber, s.sceneSlug, isWide, artStyle);
         return {
           ...s,
           imageUrl: drawing,
@@ -375,13 +456,13 @@ export default function StoryboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Hand-Drawn Film Storyboard Studio
+            <Sparkles className="w-3.5 h-3.5" /> StudioBinder Film Storyboard Studio
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Ink & Charcoal Shading ආකෘතියෙන් සෑම දර්ශනයකටම ගැළපෙන Hand-Drawn Storyboard Frames.
+            StudioBinder Hand-Drawn Ink & Charcoal Shading ආකෘතියෙන් සෑම දර්ශනයකටම ගැළපෙන Storyboard Frames.
           </p>
         </div>
 
@@ -410,7 +491,7 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Filter Bar */}
+      {/* Filter Bar with Art Style Switcher */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
@@ -440,12 +521,29 @@ export default function StoryboardPage() {
           ))}
         </div>
 
-        <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
-          <span className="px-2.5 py-1 rounded bg-[#0e1d15] border border-emerald-500/20 text-emerald-400 font-mono flex items-center gap-1.5">
-            <Layers className="w-3.5 h-3.5" /> StudioBinder Charcoal & Ink
+        {/* Art Style Toggle */}
+        <div className="flex items-center gap-2 bg-[#050b07] p-1 rounded-xl border border-emerald-950">
+          <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
+            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
-          <span className="text-slate-500">•</span>
-          <span>16:9 Scope</span>
+          <button
+            onClick={() => setArtStyle("sketch_bw")}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "sketch_bw"
+                ? "bg-emerald-500 text-slate-950 shadow"
+                : "text-slate-400 hover:text-white"
+              }`}
+          >
+            StudioBinder (B&W Sketch)
+          </button>
+          <button
+            onClick={() => setArtStyle("graphic_novel")}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "graphic_novel"
+                ? "bg-emerald-500 text-slate-950 shadow"
+                : "text-slate-400 hover:text-white"
+              }`}
+          >
+            Graphic Novel (Noir)
+          </button>
         </div>
       </div>
 
@@ -460,7 +558,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Drawing StudioBinder Hand-Drawn Sketch...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Sketch Panel...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -500,7 +598,7 @@ export default function StoryboardPage() {
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-emerald-400 border border-emerald-950">
-                  StudioBinder Sketch
+                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel Noir"}
                 </span>
               </div>
             </div>
