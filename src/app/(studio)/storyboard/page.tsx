@@ -35,10 +35,10 @@ export default function StoryboardPage() {
 
   const renderedCache = useRef<Record<string, string>>({});
 
-  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean): Promise<boolean> => {
+  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean) => {
     if (renderedCache.current[shotId]) {
       setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: renderedCache.current[shotId], isGenerating: false } : s));
-      return true;
+      return;
     }
 
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
@@ -52,26 +52,18 @@ export default function StoryboardPage() {
 
       const data = await res.json();
       if (data.success && data.imageUrl) {
-        // Pre-load image inside browser cache before completing
-        await new Promise((resolve) => {
-          const img = new Image();
-          img.src = data.imageUrl;
-          img.onload = () => resolve(true);
-          img.onerror = () => resolve(false);
-        });
-
         renderedCache.current[shotId] = data.imageUrl;
         setShots(prev => prev.map(s => s.id === shotId ? {
           ...s,
           imageUrl: data.imageUrl,
           isGenerating: false
         } : s));
-        return true;
+      } else {
+        setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
       }
-    } catch { }
-
-    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
-    return false;
+    } catch {
+      setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
+    }
   };
 
   useEffect(() => {
@@ -129,7 +121,7 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Tab එක තෝරාගත් විට අදාළ Scene එකේ frames ස්වයංක්‍රීයව render වීම
+  // Tab මාරු වන විට අදාළ දර්ශනයේ නොඇඳුණු Frames පිළිවෙළින් auto-load වීම
   useEffect(() => {
     if (shots.length === 0) return;
 
@@ -140,19 +132,13 @@ export default function StoryboardPage() {
     const pending = currentShots.filter(s => !s.imageUrl && !s.isGenerating);
     if (pending.length === 0) return;
 
-    let isMounted = true;
-    const processQueue = async () => {
+    const runQueue = async () => {
       for (const item of pending) {
-        if (!isMounted) break;
         await fetchAiFrame(item.id, item.sceneSlug, item.id.endsWith("-A"));
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise(r => setTimeout(r, 400));
       }
     };
-    processQueue();
-
-    return () => {
-      isMounted = false;
-    };
+    runQueue();
   }, [filterScene, shots.length]);
 
   const handleGenerateAll = async () => {
@@ -161,7 +147,7 @@ export default function StoryboardPage() {
     for (const shot of targetShots) {
       delete renderedCache.current[shot.id];
       await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-      await new Promise(r => setTimeout(r, 600));
+      await new Promise(r => setTimeout(r, 500));
     }
     setIsGeneratingAll(false);
   };
