@@ -27,16 +27,17 @@ interface StoryboardShot {
 }
 
 export default function StoryboardPage() {
-  const [filterScene, setFilterScene] = useState("SCENE-01");
+  const [filterScene, setFilterScene] = useState("SCENE-01"); // Default පළමු scene එක
   const [artStyle, setArtStyle] = useState<"sketch_bw" | "graphic_novel">("sketch_bw");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  // Persistent memory cache
+  // Cache to store rendered image Base64 so they persist across tabs
   const renderedCache = useRef<Record<string, string>>({});
 
-  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean, retries = 2): Promise<boolean> => {
+  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean): Promise<boolean> => {
+    // If already in memory cache, restore instantly
     if (renderedCache.current[shotId]) {
       setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: renderedCache.current[shotId], isGenerating: false } : s));
       return true;
@@ -44,35 +45,31 @@ export default function StoryboardPage() {
 
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
-    for (let attempt = 0; attempt <= retries; attempt++) {
-      try {
-        const res = await fetch("/api/storyboard/generate", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ slugline, isWide, artStyle })
-        });
+    try {
+      const res = await fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ slugline, isWide, artStyle })
+      });
 
-        const data = await res.json();
-        if (data.success && data.imageUrl) {
-          renderedCache.current[shotId] = data.imageUrl;
-          setShots(prev => prev.map(s => s.id === shotId ? {
-            ...s,
-            imageUrl: data.imageUrl,
-            isGenerating: false
-          } : s));
-          return true;
-        }
-      } catch { }
-
-      if (attempt < retries) {
-        await new Promise(r => setTimeout(r, 1500));
+      const data = await res.json();
+      if (data.success && data.imageUrl) {
+        renderedCache.current[shotId] = data.imageUrl;
+        setShots(prev => prev.map(s => s.id === shotId ? {
+          ...s,
+          imageUrl: data.imageUrl,
+          isGenerating: false
+        } : s));
+        return true;
       }
+      throw new Error();
+    } catch {
+      setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
+      return false;
     }
-
-    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
-    return false;
   };
 
+  // 1. Initialize shots from active scenes in localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes = localStorage.getItem("active_screenplay_scenes");
@@ -128,24 +125,27 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Tab එකක් තෝරාගත් විට එම Scene එකේ නොඇඳුණු panels සියල්ල එකින් එක Auto Render වීම
+  // 2. Scene Selector Logic: Tab එකක් click කළ විට හෝ, load වන විට, එම Scene එකේ නොඇඳුණු Panels Sequential Queue එකකින් ඇඳීම
   useEffect(() => {
     if (shots.length === 0) return;
 
-    const currentShots = filterScene === "ALL"
+    const visibleShots = filterScene === "ALL"
       ? shots
       : shots.filter(s => s.sceneId === filterScene);
 
-    const pending = currentShots.filter(s => !s.imageUrl && !s.isGenerating);
-    if (pending.length === 0) return;
+    // Filter targets that need generation
+    const generationNeeded = visibleShots.filter(shot => !shot.imageUrl && !shot.isGenerating);
 
-    const runQueue = async () => {
-      for (const item of pending) {
-        await fetchAiFrame(item.id, item.sceneSlug, item.id.endsWith("-A"));
-        await new Promise(r => setTimeout(r, 600));
+    if (generationNeeded.length === 0) return;
+
+    // Sequential Queue: එකකට පසු අනෙක render වීම
+    const runSequentialGen = async () => {
+      for (const shot of generationNeeded) {
+        await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
       }
     };
-    runQueue();
+    runSequentialGen();
+
   }, [filterScene, shots.length]);
 
   const handleGenerateAll = async () => {
@@ -154,7 +154,6 @@ export default function StoryboardPage() {
     for (const shot of targetShots) {
       delete renderedCache.current[shot.id];
       await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-      await new Promise(r => setTimeout(r, 600));
     }
     setIsGeneratingAll(false);
   };
@@ -241,7 +240,7 @@ export default function StoryboardPage() {
           </span>
           <button
             onClick={() => {
-              renderedCache.current = {};
+              renderedCache.current = {}; // Invalidate cache on style change
               setArtStyle("sketch_bw");
             }}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "sketch_bw"
@@ -277,7 +276,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
