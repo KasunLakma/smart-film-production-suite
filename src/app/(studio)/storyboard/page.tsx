@@ -27,17 +27,15 @@ interface StoryboardShot {
 }
 
 export default function StoryboardPage() {
-  const [filterScene, setFilterScene] = useState("SCENE-01"); // Default පළමු scene එක
+  const [filterScene, setFilterScene] = useState("SCENE-01");
   const [artStyle, setArtStyle] = useState<"sketch_bw" | "graphic_novel">("sketch_bw");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  // Cache to store rendered image Base64 so they persist across tabs
   const renderedCache = useRef<Record<string, string>>({});
 
   const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean): Promise<boolean> => {
-    // If already in memory cache, restore instantly
     if (renderedCache.current[shotId]) {
       setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: renderedCache.current[shotId], isGenerating: false } : s));
       return true;
@@ -45,31 +43,36 @@ export default function StoryboardPage() {
 
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
-    try {
-      const res = await fetch("/api/storyboard/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slugline, isWide, artStyle })
-      });
+    // Try up to 3 times before giving up
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      try {
+        const res = await fetch("/api/storyboard/generate", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ slugline, isWide, artStyle })
+        });
 
-      const data = await res.json();
-      if (data.success && data.imageUrl) {
-        renderedCache.current[shotId] = data.imageUrl;
-        setShots(prev => prev.map(s => s.id === shotId ? {
-          ...s,
-          imageUrl: data.imageUrl,
-          isGenerating: false
-        } : s));
-        return true;
+        const data = await res.json();
+        if (data.success && data.imageUrl) {
+          renderedCache.current[shotId] = data.imageUrl;
+          setShots(prev => prev.map(s => s.id === shotId ? {
+            ...s,
+            imageUrl: data.imageUrl,
+            isGenerating: false
+          } : s));
+          return true;
+        }
+      } catch { }
+
+      if (attempt < 3) {
+        await new Promise(r => setTimeout(r, 1500));
       }
-      throw new Error();
-    } catch {
-      setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
-      return false;
     }
+
+    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
+    return false;
   };
 
-  // 1. Initialize shots from active scenes in localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes = localStorage.getItem("active_screenplay_scenes");
@@ -125,27 +128,32 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // 2. Scene Selector Logic: Tab එකක් click කළ විට හෝ, load වන විට, එම Scene එකේ නොඇඳුණු Panels Sequential Queue එකකින් ඇඳීම
+  // Tab එකක් තෝරාගත් විට අදාළ shots පිළිවෙළින් auto-generate කිරීම
   useEffect(() => {
     if (shots.length === 0) return;
 
-    const visibleShots = filterScene === "ALL"
+    const currentShots = filterScene === "ALL"
       ? shots
       : shots.filter(s => s.sceneId === filterScene);
 
-    // Filter targets that need generation
-    const generationNeeded = visibleShots.filter(shot => !shot.imageUrl && !shot.isGenerating);
+    const pending = currentShots.filter(s => !s.imageUrl && !s.isGenerating);
+    if (pending.length === 0) return;
 
-    if (generationNeeded.length === 0) return;
+    let isCancelled = false;
 
-    // Sequential Queue: එකකට පසු අනෙක render වීම
-    const runSequentialGen = async () => {
-      for (const shot of generationNeeded) {
-        await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
+    const processQueue = async () => {
+      for (const item of pending) {
+        if (isCancelled) break;
+        await fetchAiFrame(item.id, item.sceneSlug, item.id.endsWith("-A"));
+        await new Promise(r => setTimeout(r, 800));
       }
     };
-    runSequentialGen();
 
+    processQueue();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [filterScene, shots.length]);
 
   const handleGenerateAll = async () => {
@@ -154,6 +162,7 @@ export default function StoryboardPage() {
     for (const shot of targetShots) {
       delete renderedCache.current[shot.id];
       await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
+      await new Promise(r => setTimeout(r, 800));
     }
     setIsGeneratingAll(false);
   };
@@ -164,7 +173,6 @@ export default function StoryboardPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -203,7 +211,6 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Filter & Art Style Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
@@ -233,14 +240,13 @@ export default function StoryboardPage() {
           ))}
         </div>
 
-        {/* Style Selector */}
         <div className="flex items-center gap-2 bg-[#050b07] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
             <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
           <button
             onClick={() => {
-              renderedCache.current = {}; // Invalidate cache on style change
+              renderedCache.current = {};
               setArtStyle("sketch_bw");
             }}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "sketch_bw"
@@ -265,7 +271,6 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredShots.map((shot) => (
           <div
@@ -276,7 +281,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Frame with AI...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
