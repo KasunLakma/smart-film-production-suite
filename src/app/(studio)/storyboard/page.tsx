@@ -26,43 +26,65 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// පිටපතේ සෑම Scene එකකටම 100% ක් ගැලපෙන StudioBinder Comic/Sketch Storyboard පුවරු
-const ACCURATE_STORYBOARD_SKETCHES: Record<string, { wide: string; close: string; wideDesc: string; closeDesc: string }> = {
-  "SCENE-01": {
-    // Lab Scene: අඳුරු විද්‍යාගාරය සහ උපකරණ පරීක්ෂා කිරීම
-    wide: "https://images.unsplash.com/photo-1518770660439-4636190af475?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1581092335397-9583fe92d232?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "Storyboard Sketch: Dark cybernetic tech laboratory, glowing terminal screens and holographic work tables in wide perspective.",
-    closeDesc: "Storyboard Sketch: Close-up of technician intensely examining glowing digital scanner tool and electronic circuits."
-  },
-  "SCENE-02": {
-    // Harbor Scene: වැසි සහිත වරාය සහ රහස් නියෝජිතයා
-    wide: "https://images.unsplash.com/photo-1519501025264-65ba15a82390?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "Storyboard Sketch: Industrial harbor checkpoint gate at night under heavy rainfall, dark van parked near barrier.",
-    closeDesc: "Storyboard Sketch: Intense close-up of tactical agent looking through binoculars with water droplets running down."
-  },
-  "SCENE-03": {
-    // Control Room: පාලක මැදිරිය සහ hard drive එක ගැලවීම
-    wide: "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1563770660941-20978e870e26?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "Storyboard Sketch: Command control room with flashing emergency warning alarms and military computer banks.",
-    closeDesc: "Storyboard Sketch: Operative hand swiftly snatching decrypted hard drive drive from terminal console."
-  },
-  "SCENE-04": {
-    // Dawn Docks: උදෑසන බෝට්ටුව දෙසට දිවීම
-    wide: "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1280&h=720&q=85",
-    close: "https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1280&h=720&q=85",
-    wideDesc: "Storyboard Sketch: Misty coastal container yard at dawn, silhouettes running through fog towards waterfront.",
-    closeDesc: "Storyboard Sketch: Medium tracking shot of operatives sprinting urgently toward escape vessel."
+// ඕනෑම Screenplay Scene එකකින් (සිංහල / English) Action එක සහ Subject එක නිවැරදි English Keywords වලට ගැනීම
+function extractActionSubject(scene: any, isWide: boolean): string {
+  const text = `${scene.slugline || ""} ${scene.synopsis || ""}`.toLowerCase();
+
+  // Environment
+  let location = "film scene interior, architectural details";
+  if (/lab|විද්‍යාගාර|computer|technology|cyber/.test(text)) {
+    location = "dark cybernetics laboratory, computer screens, holographic console";
+  } else if (/harbor|port|dock|වරාය|නැව|බෝට්ටු/.test(text)) {
+    location = "wet harbor dock at night, shipping containers, docked vessel";
+  } else if (/street|road|පාර|මාර්ග|city/.test(text)) {
+    location = "city street at night, rain reflections, streetlights";
+  } else if (/control|පාලක|office|command/.test(text)) {
+    location = "command control room, computer terminal banks, warning lights";
+  } else if (/room|house|කාමර|ගෙදර/.test(text)) {
+    location = "dimly lit room, moody atmospheric shadows, window";
   }
-};
+
+  // Character Action
+  let characterAction = isWide
+    ? "man standing in distance, cinematic perspective"
+    : "close up intense man face, holding tactical electronic tool";
+
+  if (/rain|වැස්ස|water/.test(text)) {
+    characterAction += ", rain pouring";
+  }
+
+  return isWide
+    ? `wide shot, ${location}, ${characterAction}`
+    : `close up shot, ${characterAction}, background ${location}`;
+}
+
+// Pollinations Image Generation URL (Strict Hand-Drawn Storyboard Sketch)
+function getStoryboardDrawUrl(actionSubject: string, seed: number): string {
+  // Hand-drawn sketch keywords පමණක් යැවීම
+  const prompt = `storyboard sketch, black and white pencil drawing, studiobinder storyboard, comic ink lines, film concept sketch, ${actionSubject}, no color, no photo, no 3d`;
+  const encoded = encodeURIComponent(prompt);
+  return `https://image.pollinations.ai/prompt/${encoded}?width=800&height=450&model=turbo&nologo=true&seed=${seed}`;
+}
 
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
+
+  const reloadSingleShot = (shotId: string, actionSubject: string) => {
+    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
+    const randomSeed = Math.floor(Math.random() * 900000) + 100000;
+    const url = getStoryboardDrawUrl(actionSubject, randomSeed);
+
+    setTimeout(() => {
+      setShots(prev => prev.map(s => s.id === shotId ? {
+        ...s,
+        imageUrl: url,
+        isGenerating: false
+      } : s));
+    }, 1200);
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -79,7 +101,11 @@ export default function StoryboardPage() {
 
             parsed.forEach((scene: any, index: number) => {
               const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
-              const sceneData = ACCURATE_STORYBOARD_SKETCHES[scene.id] || ACCURATE_STORYBOARD_SKETCHES["SCENE-01"];
+              const actionWide = extractActionSubject(scene, true);
+              const actionClose = extractActionSubject(scene, false);
+
+              const seedA = 10000 + index * 50;
+              const seedB = 20000 + index * 50;
 
               newShots.push({
                 id: `shot-${scene.id}-A`,
@@ -90,9 +116,9 @@ export default function StoryboardPage() {
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Shot`,
-                actionSubject: sceneData.wideDesc,
+                actionSubject: actionWide,
                 isGenerating: isTarget,
-                imageUrl: isTarget ? sceneData.wide : ""
+                imageUrl: isTarget ? getStoryboardDrawUrl(actionWide, seedA) : ""
               });
 
               newShots.push({
@@ -104,9 +130,9 @@ export default function StoryboardPage() {
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Action Shot`,
-                actionSubject: sceneData.closeDesc,
+                actionSubject: actionClose,
                 isGenerating: isTarget,
-                imageUrl: isTarget ? sceneData.close : ""
+                imageUrl: isTarget ? getStoryboardDrawUrl(actionClose, seedB) : ""
               });
             });
 
@@ -115,41 +141,25 @@ export default function StoryboardPage() {
 
             setTimeout(() => {
               setShots(prev => prev.map(s => ({ ...s, isGenerating: false })));
-            }, 800);
+            }, 1000);
           }
         } catch { }
       }
     }
   }, []);
 
-  const reloadSingleShot = (shotId: string, sceneId: string, isWide: boolean) => {
-    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
-    const sceneData = ACCURATE_STORYBOARD_SKETCHES[sceneId] || ACCURATE_STORYBOARD_SKETCHES["SCENE-01"];
-
-    setTimeout(() => {
-      setShots(prev => prev.map(s => s.id === shotId ? {
-        ...s,
-        imageUrl: isWide ? sceneData.wide : sceneData.close,
-        isGenerating: false
-      } : s));
-    }, 900);
-  };
-
   const handleGenerateAll = () => {
     setIsGeneratingAll(true);
     setShots(prev => prev.map(s => ({ ...s, isGenerating: true })));
 
-    setTimeout(() => {
-      setShots(prev => prev.map(s => {
-        const data = ACCURATE_STORYBOARD_SKETCHES[s.sceneId] || ACCURATE_STORYBOARD_SKETCHES["SCENE-01"];
-        return {
-          ...s,
-          imageUrl: s.id.endsWith("-A") ? data.wide : data.close,
-          isGenerating: false
-        };
-      }));
-      setIsGeneratingAll(false);
-    }, 1200);
+    shots.forEach((shot, idx) => {
+      setTimeout(() => {
+        reloadSingleShot(shot.id, shot.actionSubject);
+        if (idx === shots.length - 1) {
+          setIsGeneratingAll(false);
+        }
+      }, idx * 600);
+    });
   };
 
   const filteredShots = filterScene === "ALL"
@@ -158,7 +168,7 @@ export default function StoryboardPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
-      {/* Top Banner */}
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -168,7 +178,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            පිටපතේ දර්ශනයට 100% ක් ගැළපෙන StudioBinder කළු-සුදු Storyboard Frames මෙහි සකස් වේ.
+            තිර පිටපතේ දර්ශන අනුව StudioBinder Hand-Drawn Sketch Storyboard Frames මෙහි සකස් වේ.
           </p>
         </div>
 
@@ -186,7 +196,7 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Rendering All Panels...
+                <Loader2 className="w-4 h-4 animate-spin" /> Drawing All Sketches...
               </>
             ) : (
               <>
@@ -197,11 +207,11 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Control Bar */}
+      {/* Filter Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Scene Filter:
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:
           </span>
           <button
             onClick={() => setFilterScene("ALL")}
@@ -229,26 +239,25 @@ export default function StoryboardPage() {
 
         <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
           <span className="px-2.5 py-1 rounded bg-[#0e1d15] border border-emerald-500/20 text-emerald-400 font-mono">
-            StudioBinder B&W Sketch Mode
+            Hand-Drawn B&W Sketch Mode
           </span>
           <span className="text-slate-500">•</span>
-          <span>16:9 DCI Flat</span>
+          <span>16:9 Aspect Ratio</span>
         </div>
       </div>
 
-      {/* Storyboard Shots Grid */}
+      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredShots.map((shot) => (
           <div
             key={shot.id}
             className="group rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/40 transition-all overflow-hidden flex flex-col shadow-lg"
           >
-            {/* Visual Frame */}
             <div className="relative aspect-video w-full bg-[#050a07] overflow-hidden border-b border-emerald-950/60 flex items-center justify-center">
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Sketch Panel...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Sketch with AI...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -256,11 +265,11 @@ export default function StoryboardPage() {
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 filter grayscale contrast-125 brightness-90"
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 filter grayscale contrast-125"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
-                      onClick={() => reloadSingleShot(shot.id, shot.sceneId, shot.id.endsWith("-A"))}
+                      onClick={() => reloadSingleShot(shot.id, shot.actionSubject)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Redraw Panel
@@ -272,7 +281,7 @@ export default function StoryboardPage() {
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
                   <p className="text-xs text-slate-400 mb-3 font-medium">Panel not drawn yet</p>
                   <button
-                    onClick={() => reloadSingleShot(shot.id, shot.sceneId, shot.id.endsWith("-A"))}
+                    onClick={() => reloadSingleShot(shot.id, shot.actionSubject)}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Draw Panel
@@ -280,7 +289,6 @@ export default function StoryboardPage() {
                 </div>
               )}
 
-              {/* Badges */}
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
                   {shot.shotNumber}
@@ -289,12 +297,11 @@ export default function StoryboardPage() {
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-sm text-[10px] font-mono text-emerald-400 border border-slate-800">
-                  StudioBinder Sketch
+                  Sketch Panel
                 </span>
               </div>
             </div>
 
-            {/* Description */}
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
