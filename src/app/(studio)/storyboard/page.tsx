@@ -10,7 +10,8 @@ import {
   Wand2,
   FileText,
   Sparkles,
-  Palette
+  Palette,
+  CheckCircle2
 } from "lucide-react";
 
 interface StoryboardShot {
@@ -33,12 +34,33 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const renderedCache = useRef<Record<string, string>>({});
+  // Persistent storage key
+  const STORAGE_KEY = `cine_storyboard_cache_${artStyle}`;
 
-  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean) => {
-    if (renderedCache.current[shotId]) {
-      setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: renderedCache.current[shotId], isGenerating: false } : s));
-      return;
+  const getSavedCache = (): Record<string, string> => {
+    if (typeof window === "undefined") return {};
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      return saved ? JSON.parse(saved) : {};
+    } catch {
+      return {};
+    }
+  };
+
+  const saveToCache = (shotId: string, url: string) => {
+    if (typeof window === "undefined") return;
+    try {
+      const current = getSavedCache();
+      current[shotId] = url;
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+    } catch { }
+  };
+
+  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean): Promise<boolean> => {
+    const cached = getSavedCache()[shotId];
+    if (cached) {
+      setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: cached, isGenerating: false } : s));
+      return true;
     }
 
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
@@ -52,24 +74,26 @@ export default function StoryboardPage() {
 
       const data = await res.json();
       if (data.success && data.imageUrl) {
-        renderedCache.current[shotId] = data.imageUrl;
+        saveToCache(shotId, data.imageUrl);
         setShots(prev => prev.map(s => s.id === shotId ? {
           ...s,
           imageUrl: data.imageUrl,
           isGenerating: false
         } : s));
-      } else {
-        setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
+        return true;
       }
-    } catch {
-      setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
-    }
+    } catch { }
+
+    setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
+    return false;
   };
 
+  // 1. Initialize Shots from active Script
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes = localStorage.getItem("active_screenplay_scenes");
       const activeFilter = localStorage.getItem("storyboard_filter") || "SCENE-01";
+      const cached = getSavedCache();
 
       if (storedScenes) {
         try {
@@ -96,7 +120,7 @@ export default function StoryboardPage() {
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Master`,
                 isGenerating: false,
-                imageUrl: renderedCache.current[idA] || ""
+                imageUrl: cached[idA] || ""
               });
 
               newShots.push({
@@ -109,7 +133,7 @@ export default function StoryboardPage() {
                 cameraMovement: "Static Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Key Action`,
                 isGenerating: false,
-                imageUrl: renderedCache.current[idB] || ""
+                imageUrl: cached[idB] || ""
               });
             });
 
@@ -121,7 +145,7 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Tab මාරු වන විට අදාළ දර්ශනයේ නොඇඳුණු Frames පිළිවෙළින් auto-load වීම
+  // 2. Sequential Generator for Current Scene
   useEffect(() => {
     if (shots.length === 0) return;
 
@@ -132,22 +156,34 @@ export default function StoryboardPage() {
     const pending = currentShots.filter(s => !s.imageUrl && !s.isGenerating);
     if (pending.length === 0) return;
 
-    const runQueue = async () => {
+    let isMounted = true;
+    const processQueue = async () => {
       for (const item of pending) {
+        if (!isMounted) break;
         await fetchAiFrame(item.id, item.sceneSlug, item.id.endsWith("-A"));
-        await new Promise(r => setTimeout(r, 400));
+        await new Promise(r => setTimeout(r, 600));
       }
     };
-    runQueue();
+    processQueue();
+
+    return () => {
+      isMounted = false;
+    };
   }, [filterScene, shots.length]);
 
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     const targetShots = filterScene === "ALL" ? shots : shots.filter(s => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      delete renderedCache.current[shot.id];
+      // Clear cache for fresh render
+      try {
+        const cache = getSavedCache();
+        delete cache[shot.id];
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+      } catch { }
+
       await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-      await new Promise(r => setTimeout(r, 500));
+      await new Promise(r => setTimeout(r, 700));
     }
     setIsGeneratingAll(false);
   };
@@ -158,16 +194,17 @@ export default function StoryboardPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> AI Comic Storyboard Engine
+            <Sparkles className="w-3.5 h-3.5" /> Multi-Scene Storyboard Pipeline
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Graphic Novel ශෛලියෙන් සෑම දර්ශනයකටම AI Storyboard Panels මෙහි නිර්මාණය වේ.
+            දිගු පිටපත් සඳහා Persistent Caching සහිත StudioBinder Ink & Comic Storyboard Visualization.
           </p>
         </div>
 
@@ -196,6 +233,7 @@ export default function StoryboardPage() {
         </div>
       </div>
 
+      {/* Filter & Art Style Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
@@ -225,15 +263,13 @@ export default function StoryboardPage() {
           ))}
         </div>
 
+        {/* Style Selector */}
         <div className="flex items-center gap-2 bg-[#050b07] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
             <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
           <button
-            onClick={() => {
-              renderedCache.current = {};
-              setArtStyle("sketch_bw");
-            }}
+            onClick={() => setArtStyle("sketch_bw")}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "sketch_bw"
                 ? "bg-emerald-500 text-slate-950 shadow"
                 : "text-slate-400 hover:text-white"
@@ -242,10 +278,7 @@ export default function StoryboardPage() {
             StudioBinder (B&W Sketch)
           </button>
           <button
-            onClick={() => {
-              renderedCache.current = {};
-              setArtStyle("graphic_novel");
-            }}
+            onClick={() => setArtStyle("graphic_novel")}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "graphic_novel"
                 ? "bg-emerald-500 text-slate-950 shadow"
                 : "text-slate-400 hover:text-white"
@@ -256,6 +289,7 @@ export default function StoryboardPage() {
         </div>
       </div>
 
+      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredShots.map((shot) => (
           <div
@@ -266,7 +300,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Frame with AI...</span>
+                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -275,11 +309,14 @@ export default function StoryboardPage() {
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
                       onClick={() => {
-                        delete renderedCache.current[shot.id];
+                        const cache = getSavedCache();
+                        delete cache[shot.id];
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
                         fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
                       }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
@@ -293,10 +330,7 @@ export default function StoryboardPage() {
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
                   <p className="text-xs text-slate-400 mb-3 font-medium">Panel not rendered yet</p>
                   <button
-                    onClick={() => {
-                      delete renderedCache.current[shot.id];
-                      fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-                    }}
+                    onClick={() => fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"))}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Render Panel
@@ -310,9 +344,14 @@ export default function StoryboardPage() {
                 </span>
               </div>
 
-              <div className="absolute bottom-2 right-2 pointer-events-none">
-                <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-emerald-400 border border-emerald-950">
-                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel Art"}
+              <div className="absolute bottom-2 right-2 pointer-events-none flex items-center gap-1.5">
+                {shot.imageUrl && (
+                  <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-[10px] text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
+                    <CheckCircle2 className="w-3 h-3" /> Saved
+                  </span>
+                )}
+                <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-800">
+                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel Noir"}
                 </span>
               </div>
             </div>

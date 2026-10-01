@@ -12,27 +12,34 @@ export async function GET(req: Request) {
     }
 
     const encodedPrompt = encodeURIComponent(prompt);
-    const targetUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=960&height=540&model=turbo&nologo=true&seed=${seed}`;
 
-    try {
-        const res = await fetch(targetUrl, {
-            cache: "no-store",
-        });
+    const sources = [
+        `https://image.pollinations.ai/prompt/${encodedPrompt}?width=960&height=540&model=turbo&nologo=true&seed=${seed}`,
+        `https://image.pollinations.ai/prompt/${encodedPrompt}?width=800&height=450&nologo=true&seed=${seed}`
+    ];
 
-        if (!res.ok) {
-            return new NextResponse("Image generation failed", { status: 502 });
+    for (const url of sources) {
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+            const res = await fetch(url, { cache: "no-store", signal: controller.signal });
+            clearTimeout(timeout);
+
+            if (res.ok) {
+                const contentType = res.headers.get("content-type") || "image/jpeg";
+                const buffer = await res.arrayBuffer();
+                return new NextResponse(buffer, {
+                    headers: {
+                        "Content-Type": contentType,
+                        "Cache-Control": "public, max-age=604800, immutable",
+                    },
+                });
+            }
+        } catch {
+            continue;
         }
-
-        const contentType = res.headers.get("content-type") || "image/jpeg";
-        const buffer = await res.arrayBuffer();
-
-        return new NextResponse(buffer, {
-            headers: {
-                "Content-Type": contentType,
-                "Cache-Control": "public, max-age=86400, immutable",
-            },
-        });
-    } catch {
-        return new NextResponse("Server proxy error", { status: 500 });
     }
+
+    // If external AI times out, redirect to safe procedural graphic sketch
+    return NextResponse.redirect(new URL("/storyboard-placeholder.png", req.url));
 }
