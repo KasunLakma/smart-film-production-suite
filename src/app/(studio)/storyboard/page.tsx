@@ -69,7 +69,7 @@ export default function StoryboardPage() {
     }
   };
 
-  // Initialize shots
+  // 1. Initialize shots from active scenes in localStorage
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes = localStorage.getItem("active_screenplay_scenes");
@@ -125,7 +125,7 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Tab එක මාරු කරන විට හෝ අලුතින් load වන විට, එම Scene එකේ නොඇඳුණු Panels ඇඳීම
+  // 2. Scene Selector Logic: Tab එකක් click කළ විට හෝ, load වන විට, එම Scene එකේ නොඇඳුණු Panels Sequential Queue එකකින් ඇඳීම[cite: 54, 56, 57].
   useEffect(() => {
     if (shots.length === 0) return;
 
@@ -133,13 +133,19 @@ export default function StoryboardPage() {
       ? shots
       : shots.filter(s => s.sceneId === filterScene);
 
-    visibleShots.forEach((shot, index) => {
-      if (!shot.imageUrl && !shot.isGenerating) {
-        setTimeout(() => {
-          fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-        }, index * 1000);
+    // Filter targets that need generation
+    const generationNeeded = visibleShots.filter(shot => !shot.imageUrl && !shot.isGenerating);
+
+    if (generationNeeded.length === 0) return;
+
+    // Sequential Queue: එකකට පසු අනෙක render වීම
+    const runSequentialGen = async () => {
+      for (const shot of generationNeeded) {
+        await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
       }
-    });
+    };
+    runSequentialGen();
+
   }, [filterScene, shots.length]);
 
   const handleGenerateAll = async () => {
@@ -282,7 +288,7 @@ export default function StoryboardPage() {
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
                       onClick={() => {
-                        delete renderedCache.current[shot.id];
+                        delete renderedCache.current[shot.id]; // clear specific cache on redraw
                         fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
                       }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
