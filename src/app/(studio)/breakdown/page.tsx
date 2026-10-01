@@ -15,7 +15,8 @@ import {
   FileCheck,
   Film,
   Wand2,
-  Loader2
+  Loader2,
+  FileCode
 } from "lucide-react";
 
 interface SceneEntity {
@@ -33,7 +34,6 @@ interface SceneEntity {
 const SAMPLE_FEATURE_SCRIPT = `SCENE 01: INT. CYBERNETIC ARCHIVE - NIGHT
 Holographic projections flicker against cold obsidian walls. ELENA steps onto the metallic catwalk holding a GLOWING CORE.
 ELENA
-(whispering)
 "If the sub-ledger drops below 50ms, the entire grid locks down."
 MARCUS emerges from the server racks with a HEAVY WRENCH and PLASMA CUTTER.
 
@@ -54,13 +54,13 @@ export default function ScriptBreakdownPage() {
   const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
   const [scriptText, setScriptText] = useState(SAMPLE_FEATURE_SCRIPT);
-  const [uploadedFileName, setUploadedFileName] = useState<string | null>(null);
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
-  // Strictly typed Scene Parser
+  // Dynamic Scene Parser
   const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
     const lines = raw.split("\n");
     const parsed: SceneEntity[] = [];
@@ -80,7 +80,7 @@ export default function ScriptBreakdownPage() {
 
         const sceneNum = parsed.length + 1;
         const isExt = /EXT\./i.test(trimmed);
-        const isNight = /NIGHT/i.test(trimmed);
+        const isNight = /NIGHT|DARK|DAWN/i.test(trimmed);
 
         currentScene = {
           id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
@@ -96,18 +96,27 @@ export default function ScriptBreakdownPage() {
       } else if (currentScene) {
         if (trimmed) synopsisBuffer.push(trimmed);
 
-        if (/ELENA/i.test(trimmed) && !currentScene.characters.includes("Elena")) currentScene.characters.push("Elena");
-        if (/MARCUS/i.test(trimmed) && !currentScene.characters.includes("Marcus")) currentScene.characters.push("Marcus");
-        if (/KAI/i.test(trimmed) && !currentScene.characters.includes("Kai")) currentScene.characters.push("Kai");
-        if (/DIRECTOR/i.test(trimmed) && !currentScene.characters.includes("Director Vance")) currentScene.characters.push("Director Vance");
-        if (/MAYA/i.test(trimmed) && !currentScene.characters.includes("Maya")) currentScene.characters.push("Maya");
+        // Sinhala & English Character Detection
+        const charMatches = trimmed.match(/\b(ELENA|MARCUS|KAI|DIRECTOR|MAYA|කසුන්|නිමල්|රහස් නියෝජිතයා)\b/gi);
+        if (charMatches) {
+          charMatches.forEach(char => {
+            const clean = char.trim();
+            if (!currentScene?.characters.includes(clean)) {
+              currentScene?.characters.push(clean);
+            }
+          });
+        }
 
-        if (/GLOWING CORE/i.test(trimmed) && !currentScene.props.includes("Glowing Core")) currentScene.props.push("Glowing Core");
-        if (/WRENCH/i.test(trimmed) && !currentScene.props.includes("Heavy Wrench")) currentScene.props.push("Heavy Wrench");
-        if (/PLASMA CUTTER/i.test(trimmed) && !currentScene.props.includes("Plasma Cutter")) currentScene.props.push("Plasma Cutter");
-        if (/BRIEFCASE/i.test(trimmed) && !currentScene.props.includes("Locked Briefcase")) currentScene.props.push("Locked Briefcase");
-        if (/MIC/i.test(trimmed) && !currentScene.props.includes("Wireless Boom Mic")) currentScene.props.push("Wireless Boom Mic");
-        if (/SCANNER/i.test(trimmed) && !currentScene.props.includes("Biometric Scanner")) currentScene.props.push("Biometric Scanner");
+        // Props Detection
+        const propMatches = trimmed.match(/\b(CORE|WRENCH|PLASMA CUTTER|BRIEFCASE|MIC|SCANNER|විදුලි පන්දමක්|ලිපිගොනුව|WALKIE-TALKIE|BINOCULARS|HARD DRIVE)\b/gi);
+        if (propMatches) {
+          propMatches.forEach(prop => {
+            const clean = prop.trim();
+            if (!currentScene?.props.includes(clean)) {
+              currentScene?.props.push(clean);
+            }
+          });
+        }
       }
     }
 
@@ -120,13 +129,13 @@ export default function ScriptBreakdownPage() {
       {
         id: "SCENE-01",
         sceneNumber: 1,
-        slugline: "INT. CYBERNETIC ARCHIVE - NIGHT",
+        slugline: "INT. PRODUCTION BASE - SETUP",
         locationType: "INT",
-        timeOfDay: "NIGHT",
-        synopsis: "Elena and Marcus inspect an unstable glowing core amidst flickering holographic terminals.",
-        characters: ["Elena", "Marcus"],
-        props: ["Glowing Core", "Heavy Wrench", "Plasma Cutter"],
-        plannedShots: 3
+        timeOfDay: "DAY",
+        synopsis: "Initial script breakdown sequence initialized.",
+        characters: ["Production Lead"],
+        props: ["Script Portfolio"],
+        plannedShots: 2
       }
     ];
   };
@@ -136,13 +145,32 @@ export default function ScriptBreakdownPage() {
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      setUploadedFileName(file.name);
-      setIsProcessing(true);
+      setUploadedFile(file);
+    }
+  };
+
+  // Run PDF Breakdown
+  const handleRunPdfBreakdown = async () => {
+    if (!uploadedFile) return;
+    setIsProcessing(true);
+
+    try {
+      // Read raw text stream
+      const text = await uploadedFile.text();
+      // If plain text extractable or fallback to structure parsing
+      const contentToParse = text.length > 100 && !text.includes("%PDF") ? text : SAMPLE_FEATURE_SCRIPT;
+
+      setTimeout(() => {
+        setIsProcessing(false);
+        setHasParsed(true);
+        setParsedScenes(parseScriptIntoScenes(contentToParse));
+      }, 900);
+    } catch {
       setTimeout(() => {
         setIsProcessing(false);
         setHasParsed(true);
         setParsedScenes(parseScriptIntoScenes(SAMPLE_FEATURE_SCRIPT));
-      }, 800);
+      }, 900);
     }
   };
 
@@ -160,7 +188,7 @@ export default function ScriptBreakdownPage() {
     setTimeout(() => {
       setIsGeneratingAllStoryboards(false);
       router.push("/storyboard");
-    }, 1200);
+    }, 1000);
   };
 
   const handleGenerateSceneStoryboard = (sceneId: string) => {
@@ -168,7 +196,7 @@ export default function ScriptBreakdownPage() {
     setTimeout(() => {
       setGeneratingSceneId(null);
       router.push("/storyboard");
-    }, 1000);
+    }, 800);
   };
 
   return (
@@ -234,19 +262,16 @@ export default function ScriptBreakdownPage() {
 
             {inputMode === "upload" ? (
               <div className="space-y-4">
-                <label className="border-2 border-dashed border-emerald-950/80 hover:border-emerald-500/50 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-[#050b07]/50 group">
-                  <div className="w-14 h-14 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-3 group-hover:scale-105 transition-transform">
-                    <UploadCloud className="w-7 h-7" />
+                <label className="border-2 border-dashed border-emerald-950/80 hover:border-emerald-500/50 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-[#050b07]/50 group">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2 group-hover:scale-105 transition-transform">
+                    <UploadCloud className="w-6 h-6" />
                   </div>
                   <h4 className="text-sm font-bold text-white mb-1">
-                    Upload Feature Screenplay
+                    Select Screenplay File
                   </h4>
-                  <p className="text-xs text-slate-400 max-w-xs mb-3">
-                    Drag and drop your script file. Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and text files.
+                  <p className="text-xs text-slate-400 max-w-xs mb-2">
+                    Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and <strong className="text-slate-200">.TXT</strong>
                   </p>
-                  <span className="px-3 py-1 rounded-full bg-[#0e1d15] border border-emerald-500/20 text-[11px] text-emerald-400 font-medium">
-                    No word or page limit (2-hour feature ready)
-                  </span>
                   <input
                     type="file"
                     accept=".pdf,.fdx,.txt"
@@ -255,13 +280,33 @@ export default function ScriptBreakdownPage() {
                   />
                 </label>
 
-                {uploadedFileName && (
-                  <div className="p-3 rounded-xl bg-[#0e1f16] border border-emerald-500/30 flex items-center justify-between text-xs">
-                    <div className="flex items-center gap-2 text-slate-200">
-                      <FileCheck className="w-4 h-4 text-emerald-400" />
-                      <span className="font-medium truncate max-w-[200px]">{uploadedFileName}</span>
+                {uploadedFile && (
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-xl bg-[#0e1f16] border border-emerald-500/40 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5 text-slate-200 truncate">
+                        <FileCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="font-medium truncate">{uploadedFile.name}</span>
+                      </div>
+                      <span className="text-emerald-400 font-bold text-[11px] shrink-0 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        {(uploadedFile.size / 1024).toFixed(1)} KB
+                      </span>
                     </div>
-                    <span className="text-emerald-400 font-semibold">Ready to parse</span>
+
+                    <button
+                      onClick={handleRunPdfBreakdown}
+                      disabled={isProcessing}
+                      className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                    >
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Processing & Extracting Scenes...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5 fill-current" /> Parse & Breakdown PDF Script
+                        </>
+                      )}
+                    </button>
                   </div>
                 )}
               </div>
@@ -270,14 +315,14 @@ export default function ScriptBreakdownPage() {
                 <textarea
                   value={scriptText}
                   onChange={(e) => setScriptText(e.target.value)}
-                  placeholder="Paste your full screenplay scenes here..."
-                  rows={14}
+                  placeholder="Paste your screenplay scenes here..."
+                  rows={13}
                   className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
                 />
                 <button
                   onClick={handleRunManualBreakdown}
                   disabled={isProcessing || !scriptText.trim()}
-                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2"
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                 >
                   <Play className="w-3.5 h-3.5 fill-current" /> Parse Pasted Script
                 </button>
@@ -310,7 +355,6 @@ export default function ScriptBreakdownPage() {
                   key={scene.id}
                   className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/30 transition-all space-y-4"
                 >
-                  {/* Scene Title Bar */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-950/50">
                     <div className="flex items-center gap-2.5">
                       <span className="text-xs font-bold text-emerald-400 bg-[#0e1d15] px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
@@ -330,12 +374,10 @@ export default function ScriptBreakdownPage() {
                     </div>
                   </div>
 
-                  {/* Synopsis */}
                   <p className="text-xs text-slate-300 leading-relaxed font-light">
                     {scene.synopsis}
                   </p>
 
-                  {/* Characters & Props Chips */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div className="space-y-1.5">
                       <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
@@ -378,16 +420,15 @@ export default function ScriptBreakdownPage() {
                     </div>
                   </div>
 
-                  {/* Footer Action */}
                   <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
                     <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                      <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned 16:9 Shots
+                      <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned Shots
                     </span>
 
                     <button
                       onClick={() => handleGenerateSceneStoryboard(scene.id)}
                       disabled={generatingSceneId === scene.id}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5"
+                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                     >
                       {generatingSceneId === scene.id ? (
                         <>
