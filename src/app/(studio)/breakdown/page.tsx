@@ -15,8 +15,14 @@ import {
   FileCheck,
   Film,
   Wand2,
-  Loader2
+  Loader2,
+  MessageSquare
 } from "lucide-react";
+
+interface DialogueItem {
+  speaker: string;
+  line: string;
+}
 
 interface SceneEntity {
   id: string;
@@ -27,56 +33,72 @@ interface SceneEntity {
   synopsis: string;
   characters: string[];
   props: string[];
+  dialogues: DialogueItem[];
   plannedShots: number;
 }
 
-// සිංහල සහ ඉංග්‍රීසි ආදර්ශ පිටපත (Bilingual Script)
-const DEFAULT_BILINGUAL_SCRIPT = `SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT
+// පිරිසිදු සිංහල සම්මත ආදර්ශ පිටපත (Clean Sinhala Screenplay)
+const SINHALA_SCRIPT_TEMPLATE = `SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT
 අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හෝලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. ඔහුගේ අතේ කුඩා විදුලි පන්දමක් සහ ඩිජිටල් ස්කෑනරයක් ඇත.
+
+නිමල්
+"කසුන්... තව විනාඩි දහයකින් මුළු ග්‍රිඩ් එකම ඩවුන් වෙනවා. ඔය ෆයිල් එක ගත්තද?"
+
 කසුන්
-"ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර තිහක් ඕනේ."
-නිමල් කළු පැහැති WALKIE-TALKIE එක අතට ගනී.
+"ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර තිහක් ඕනේ. දොර ළඟට වෙලා බලාගෙන ඉන්න."
 
 SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS
 තද වැස්ස මාර්ගය මත පතිත වේ. කළු පැහැති වැන් රථයක් නවත්වයි. රහස් නියෝජිතයා BINOCULARS උපකරණයෙන් ගේට්ටුව දෙස බලා සිටියි.
+
 රහස් නියෝජිතයා
-"ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ."
+"ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ. පිටවීමේ සලකුණක් නෑ."
 
 SCENE 03: INT. ප්‍රධාන පාලක මැදිරිය - NIGHT
 පරිගණක තිරයේ දත්ත හුවමාරුව අවසන් වේ. කසුන් ENCRYPTED HARD DRIVE එක ගලවා ගනී. හදිසි අනතුරු ඇඟවීමේ රතු ලාම්පු දැල්වෙයි.
-නිමල්
-"උන් මේන් පවර් එක කැපුවා! දැන්ම යන්න වෙනවා!"
 
-SCENE 04: EXT. CYBERNETIC ARCHIVE - DAWN
-Cold obsidian walls reflect the early morning light. MARCUS and ELENA inspect the remaining cargo containers near the harbor gate.`;
+නිමල්
+"උන් මේන් පවර් එක කැපුවා! දැන්ම මෙතනින් යන්න වෙනවා!"
+
+කසුන්
+"දෘඪ තැටිය ගත්තා. පිටුපස දොරෙන් එළියට බහිමු!"
+
+SCENE 04: EXT. වරාය අංගනය - DAWN
+අලුයම මීදුමෙන් වැසුණු වරාය පරිශ්‍රය. කසුන් සහ නිමල් බහාලුම් අතරින් බෝට්ටුව දෙසට වේගයෙන් දිව යති.
+
+නිමල්
+"බෝට්ටුව තියෙන්නේ තුන්වෙනි ජැටිය ළඟ. ඉක්මන් කරන්න!"`;
 
 export default function ScriptBreakdownPage() {
   const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
-  const [scriptText, setScriptText] = useState(DEFAULT_BILINGUAL_SCRIPT);
+  const [scriptText, setScriptText] = useState(SINHALA_SCRIPT_TEMPLATE);
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
-  // Sinhala & English Unified Dynamic Parser
+  // Accurate Parser separating Actions, Characters, and Dialogues
   const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
     const lines = raw.split("\n");
     const parsed: SceneEntity[] = [];
     let currentScene: SceneEntity | null = null;
     let synopsisBuffer: string[] = [];
+    let currentSpeaker: string | null = null;
 
-    for (const line of lines) {
-      const trimmed = line.trim();
-      // Handles: SCENE 01, දර්ශනය 01, INT., EXT., අභ්‍යන්තර, බාහිර
+    for (const rawLine of lines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) continue;
+
+      // Slugline detection
       const isSlugline = /^(SCENE\s*\d+:?|දර්ශනය\s*\d+:?|(INT\.|EXT\.|I\/E\.|අභ්‍යන්තර|බාහිර))/i.test(trimmed);
 
       if (isSlugline) {
         if (currentScene) {
-          currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ ක්‍රියාදාමය සහ දෙබස් පෙළගැස්ම.";
+          currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ පසුතල විස්තරය සහ පසුබිම් ක්‍රියාදාමය.";
           parsed.push(currentScene);
           synopsisBuffer = [];
+          currentSpeaker = null;
         }
 
         const sceneNum = parsed.length + 1;
@@ -92,55 +114,62 @@ export default function ScriptBreakdownPage() {
           synopsis: "",
           characters: [],
           props: [],
+          dialogues: [],
           plannedShots: 3
         };
       } else if (currentScene) {
-        if (trimmed) synopsisBuffer.push(trimmed);
+        // Speaker line identification
+        const isCharacterCue = /^(කසුන්|නිමල්|රහස් නියෝජිතයා|ELENA|MARCUS|KAI|DIRECTOR|MAYA)$/i.test(trimmed);
 
-        // Sinhala & English Characters Detection
-        const charMatches = trimmed.match(/\b(ELENA|MARCUS|KAI|DIRECTOR|MAYA|කසුන්|නිමල්|රහස් නියෝජිතයා)\b/gi);
-        if (charMatches) {
-          charMatches.forEach((char) => {
-            const clean = char.trim();
-            if (!currentScene?.characters.includes(clean)) {
-              currentScene?.characters.push(clean);
-            }
+        if (isCharacterCue) {
+          currentSpeaker = trimmed;
+          if (!currentScene.characters.includes(trimmed)) {
+            currentScene.characters.push(trimmed);
+          }
+        } else if (trimmed.startsWith('"') || (currentSpeaker && trimmed.length > 2)) {
+          // Dialogue line
+          const dialogueSpeaker = currentSpeaker || "Character";
+          currentScene.dialogues.push({
+            speaker: dialogueSpeaker,
+            line: trimmed.replace(/^["“]|["”]$/g, "")
           });
+          currentSpeaker = null;
+        } else {
+          // Action Description
+          synopsisBuffer.push(trimmed);
+
+          // Inline character search
+          const inlineChars = trimmed.match(/\b(කසුන්|නිමල්|රහස් නියෝජිතයා|ELENA|MARCUS|KAI)\b/gi);
+          if (inlineChars) {
+            inlineChars.forEach((c) => {
+              const cleaned = c.trim();
+              if (!currentScene?.characters.includes(cleaned)) {
+                currentScene?.characters.push(cleaned);
+              }
+            });
+          }
         }
 
-        // Sinhala & English Props Detection
+        // Props Identification
         if (/විදුලි පන්දමක්|පන්දම/i.test(trimmed) && !currentScene.props.includes("විදුලි පන්දම")) currentScene.props.push("විදුලි පන්දම");
         if (/ස්කෑනරයක්|ස්කෑනර්/i.test(trimmed) && !currentScene.props.includes("ඩිජිටල් ස්කෑනරය")) currentScene.props.push("ඩිජිටල් ස්කෑනරය");
         if (/WALKIE-TALKIE|සන්නිවේදන/i.test(trimmed) && !currentScene.props.includes("Walkie-Talkie")) currentScene.props.push("Walkie-Talkie");
         if (/BINOCULARS|දුරදක්නය/i.test(trimmed) && !currentScene.props.includes("දුරදක්නය (Binoculars)")) currentScene.props.push("දුරදක්නය (Binoculars)");
         if (/HARD DRIVE|දෘඪ තැටිය/i.test(trimmed) && !currentScene.props.includes("Encrypted Hard Drive")) currentScene.props.push("Encrypted Hard Drive");
         if (/බහාලුම්|CONTAINER/i.test(trimmed) && !currentScene.props.includes("බහාලුම් (Containers)")) currentScene.props.push("බහාලුම් (Containers)");
-        if (/CORE/i.test(trimmed) && !currentScene.props.includes("Glowing Core")) currentScene.props.push("Glowing Core");
-        if (/WRENCH/i.test(trimmed) && !currentScene.props.includes("Heavy Wrench")) currentScene.props.push("Heavy Wrench");
+        if (/හෝලෝග්‍රැෆික්/i.test(trimmed) && !currentScene.props.includes("හෝලෝග්‍රැෆික් උපකරණය")) currentScene.props.push("හෝලෝග්‍රැෆික් උපකරණය");
       }
     }
 
     if (currentScene) {
-      currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ ක්‍රියාදාමය සහ පසුතල විස්තරය.";
+      currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ පසුතල විස්තරය සහ පසුබිම් ක්‍රියාදාමය.";
       parsed.push(currentScene);
     }
 
-    return parsed.length > 0 ? parsed : [
-      {
-        id: "SCENE-01",
-        sceneNumber: 1,
-        slugline: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
-        locationType: "INT (අභ්‍යන්තර)",
-        timeOfDay: "NIGHT",
-        synopsis: "අඳුරු කාමරය මැද කසුන් හෝලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. නිමල් සන්නිවේදන උපකරණයෙන් පණිවිඩයක් ලබා ගනී.",
-        characters: ["කසුන්", "නිමල්"],
-        props: ["විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "Walkie-Talkie"],
-        plannedShots: 3
-      }
-    ];
+    return parsed;
   };
 
-  const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>(() => parseScriptIntoScenes(DEFAULT_BILINGUAL_SCRIPT));
+  const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>(() => parseScriptIntoScenes(SINHALA_SCRIPT_TEMPLATE));
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -153,12 +182,12 @@ export default function ScriptBreakdownPage() {
     if (!uploadedFile) return;
     setIsProcessing(true);
 
-    // Parses uploaded script into scenes seamlessly
     setTimeout(() => {
       setIsProcessing(false);
       setHasParsed(true);
-      setParsedScenes(parseScriptIntoScenes(DEFAULT_BILINGUAL_SCRIPT));
-    }, 1000);
+      // Clean parse without any old leftover scenes
+      setParsedScenes(parseScriptIntoScenes(SINHALA_SCRIPT_TEMPLATE));
+    }, 900);
   };
 
   const handleRunManualBreakdown = () => {
@@ -198,7 +227,7 @@ export default function ScriptBreakdownPage() {
             Script Breakdown Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            සිංහල හෝ ඉංග්‍රීසි තිර පිටපත (PDF / Text) Scene-by-Scene වෙන් කර Storyboard වෙත යොමු කරන්න.
+            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් (Dialogues) වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
           </p>
         </div>
 
@@ -286,7 +315,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> සිංහල පිටපත Process කරමින් පවතී...
+                          <Loader2 className="w-4 h-4 animate-spin" /> පිටපතේ Scenes වෙන් කරමින් පවතී...
                         </>
                       ) : (
                         <>
@@ -302,7 +331,7 @@ export default function ScriptBreakdownPage() {
                 <textarea
                   value={scriptText}
                   onChange={(e) => setScriptText(e.target.value)}
-                  placeholder="ඔබේ සිංහල හෝ ඉංග්‍රීසි තිර පිටපත මෙහි paste කරන්න..."
+                  placeholder="ඔබේ තිර පිටපත මෙහි paste කරන්න..."
                   rows={13}
                   className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
                 />
@@ -333,7 +362,7 @@ export default function ScriptBreakdownPage() {
             <div className="p-16 rounded-2xl bg-[#09130e] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
               <h3 className="text-sm font-semibold text-white">තිර පිටපත පරීක්ෂා කරමින් පවතී...</h3>
-              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත සහ උපකරණ වෙන් කරමින් පවතී.</p>
+              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කරමින් පවතී.</p>
             </div>
           ) : hasParsed && parsedScenes.length > 0 ? (
             <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1">
@@ -342,6 +371,7 @@ export default function ScriptBreakdownPage() {
                   key={scene.id}
                   className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/30 transition-all space-y-4"
                 >
+                  {/* Scene Title Bar */}
                   <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-950/50">
                     <div className="flex items-center gap-2.5">
                       <span className="text-xs font-bold text-emerald-400 bg-[#0e1d15] px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
@@ -361,10 +391,12 @@ export default function ScriptBreakdownPage() {
                     </div>
                   </div>
 
+                  {/* Action / Setting Synopsis */}
                   <p className="text-xs text-slate-300 leading-relaxed font-light">
                     {scene.synopsis}
                   </p>
 
+                  {/* Characters & Props Chips */}
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                     <div className="space-y-1.5">
                       <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
@@ -381,7 +413,7 @@ export default function ScriptBreakdownPage() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-500 italic">දෙබස් සටහන් වී නැත</span>
+                          <span className="text-xs text-slate-500 italic">පසුබිම් චරිත පමණි</span>
                         )}
                       </div>
                     </div>
@@ -401,12 +433,34 @@ export default function ScriptBreakdownPage() {
                             </span>
                           ))
                         ) : (
-                          <span className="text-xs text-slate-500 italic">සාමාන්‍‍ය පසුතල සැකසුම</span>
+                          <span className="text-xs text-slate-500 italic">සාමාන්‍ය පසුතල සැකසුම</span>
                         )}
                       </div>
                     </div>
                   </div>
 
+                  {/* Dialogues Section */}
+                  {scene.dialogues && scene.dialogues.length > 0 && (
+                    <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
+                      <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
+                        <MessageSquare className="w-3 h-3 text-emerald-400" /> දෙබස් / Key Dialogues ({scene.dialogues.length})
+                      </span>
+                      <div className="space-y-1.5 divide-y divide-emerald-950/30">
+                        {scene.dialogues.map((dlg, dIdx) => (
+                          <div key={dIdx} className="pt-1.5 first:pt-0 text-xs">
+                            <span className="font-semibold text-emerald-300 font-mono text-[11px] mr-2">
+                              {dlg.speaker}:
+                            </span>
+                            <span className="text-slate-300 italic font-light">
+                              "{dlg.line}"
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Footer Action */}
                   <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
                     <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
                       <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned Shots
