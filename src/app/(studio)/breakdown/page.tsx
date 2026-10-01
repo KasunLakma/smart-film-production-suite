@@ -61,7 +61,7 @@ SCENE 03: INT. ප්‍රධාන පාලක මැදිරිය - NIGHT
 පරිගණක තිරයේ දත්ත හුවමාරුව අවසන් වේ. කසුන් ENCRYPTED HARD DRIVE එක ගලවා ගනී. හදිසි අනතුරු ඇඟවීමේ රතු ලාම්පු දැල්වෙයි.
 
 නිමල්
-"උන් මේන් පවර් එක කැපුවා! දැන්ම මෙතනින් යන්න වෙනවා!"
+"උන් මේන් පවර් එක කැපුවා! දැන්ම යන්න වෙනවා!"
 
 කසුන්
 "දෘඪ තැටිය ගත්තා. පිටුපස දොරෙන් එළියට බහිමු!"
@@ -82,7 +82,6 @@ export default function ScriptBreakdownPage() {
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
-  // Selection & Editing State
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
@@ -199,13 +198,11 @@ export default function ScriptBreakdownPage() {
     }, 600);
   };
 
-  // Delete Single Scene
   const handleDeleteScene = (id: string) => {
     setParsedScenes(prev => prev.filter(s => s.id !== id));
     setSelectedSceneIds(prev => prev.filter(selectedId => selectedId !== id));
   };
 
-  // Toggle Select Single
   const handleToggleSelect = (id: string) => {
     if (selectedSceneIds.includes(id)) {
       setSelectedSceneIds(prev => prev.filter(item => item !== id));
@@ -214,7 +211,6 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // Select All Toggle
   const handleToggleSelectAll = () => {
     if (selectedSceneIds.length === parsedScenes.length) {
       setSelectedSceneIds([]);
@@ -223,19 +219,16 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // Delete Selected
   const handleDeleteSelected = () => {
     setParsedScenes(prev => prev.filter(s => !selectedSceneIds.includes(s.id)));
     setSelectedSceneIds([]);
   };
 
-  // Clear All Scenes
   const handleClearAllScenes = () => {
     setParsedScenes([]);
     setSelectedSceneIds([]);
   };
 
-  // Save Edited Scene
   const handleSaveEditedScene = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingScene) return;
@@ -244,20 +237,29 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
+  // Navigate & Pass Data to Storyboard
   const handleGenerateAllStoryboards = () => {
     setIsGeneratingAllStoryboards(true);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("active_screenplay_scenes", JSON.stringify(parsedScenes));
+      localStorage.setItem("storyboard_filter", "ALL");
+    }
     setTimeout(() => {
       setIsGeneratingAllStoryboards(false);
       router.push("/storyboard");
-    }, 1000);
+    }, 900);
   };
 
   const handleGenerateSceneStoryboard = (sceneId: string) => {
     setGeneratingSceneId(sceneId);
+    if (typeof window !== "undefined") {
+      localStorage.setItem("active_screenplay_scenes", JSON.stringify(parsedScenes));
+      localStorage.setItem("storyboard_filter", sceneId);
+    }
     setTimeout(() => {
       setGeneratingSceneId(null);
       router.push("/storyboard");
-    }, 800);
+    }, 700);
   };
 
   return (
@@ -392,7 +394,6 @@ export default function ScriptBreakdownPage() {
 
         {/* Right Column */}
         <div className="lg:col-span-7 space-y-4">
-          {/* Action Toolbar: Select All / Delete */}
           <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
             <div className="flex items-center gap-3">
               <button
@@ -445,7 +446,6 @@ export default function ScriptBreakdownPage() {
                     className={`p-5 rounded-2xl bg-[#09130e] border transition-all space-y-4 ${isSelected ? "border-emerald-500 bg-[#0d1d14]" : "border-emerald-950/70 hover:border-emerald-500/30"
                       }`}
                   >
-                    {/* Scene Title Bar with Checkbox, Edit & Delete */}
                     <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-950/50">
                       <div className="flex items-center gap-3">
                         <button
@@ -474,7 +474,6 @@ export default function ScriptBreakdownPage() {
                           {scene.timeOfDay}
                         </span>
 
-                        {/* Edit Button */}
                         <button
                           onClick={() => setEditingScene(scene)}
                           className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-300 border border-emerald-950/80 transition-all ml-1"
@@ -483,7 +482,6 @@ export default function ScriptBreakdownPage() {
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
 
-                        {/* Delete Button */}
                         <button
                           onClick={() => handleDeleteScene(scene.id)}
                           className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-emerald-950/80 transition-all"
@@ -494,12 +492,10 @@ export default function ScriptBreakdownPage() {
                       </div>
                     </div>
 
-                    {/* Synopsis */}
                     <p className="text-xs text-slate-300 leading-relaxed font-light">
                       {scene.synopsis}
                     </p>
 
-                    {/* Characters & Props Chips */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
@@ -542,7 +538,6 @@ export default function ScriptBreakdownPage() {
                       </div>
                     </div>
 
-                    {/* Dialogues */}
                     {scene.dialogues && scene.dialogues.length > 0 && (
                       <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
                         <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
@@ -563,7 +558,6 @@ export default function ScriptBreakdownPage() {
                       </div>
                     )}
 
-                    {/* Footer Action */}
                     <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
                       <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
                         <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned Shots
