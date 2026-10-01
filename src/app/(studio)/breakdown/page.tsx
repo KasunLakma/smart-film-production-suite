@@ -16,7 +16,12 @@ import {
   Film,
   Wand2,
   Loader2,
-  MessageSquare
+  MessageSquare,
+  Trash2,
+  Edit2,
+  X,
+  CheckSquare,
+  Square
 } from "lucide-react";
 
 interface DialogueItem {
@@ -37,7 +42,6 @@ interface SceneEntity {
   plannedShots: number;
 }
 
-// පිරිසිදු සිංහල සම්මත ආදර්ශ පිටපත (Clean Sinhala Screenplay)
 const SINHALA_SCRIPT_TEMPLATE = `SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT
 අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හෝලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. ඔහුගේ අතේ කුඩා විදුලි පන්දමක් සහ ඩිජිටල් ස්කෑනරයක් ඇත.
 
@@ -78,7 +82,10 @@ export default function ScriptBreakdownPage() {
   const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
   const [hasParsed, setHasParsed] = useState(true);
 
-  // Accurate Parser separating Actions, Characters, and Dialogues
+  // Selection & Editing State
+  const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
+  const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
+
   const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
     const lines = raw.split("\n");
     const parsed: SceneEntity[] = [];
@@ -90,7 +97,6 @@ export default function ScriptBreakdownPage() {
       const trimmed = rawLine.trim();
       if (!trimmed) continue;
 
-      // Slugline detection
       const isSlugline = /^(SCENE\s*\d+:?|දර්ශනය\s*\d+:?|(INT\.|EXT\.|I\/E\.|අභ්‍යන්තර|බාහිර))/i.test(trimmed);
 
       if (isSlugline) {
@@ -118,7 +124,6 @@ export default function ScriptBreakdownPage() {
           plannedShots: 3
         };
       } else if (currentScene) {
-        // Speaker line identification
         const isCharacterCue = /^(කසුන්|නිමල්|රහස් නියෝජිතයා|ELENA|MARCUS|KAI|DIRECTOR|MAYA)$/i.test(trimmed);
 
         if (isCharacterCue) {
@@ -127,7 +132,6 @@ export default function ScriptBreakdownPage() {
             currentScene.characters.push(trimmed);
           }
         } else if (trimmed.startsWith('"') || (currentSpeaker && trimmed.length > 2)) {
-          // Dialogue line
           const dialogueSpeaker = currentSpeaker || "Character";
           currentScene.dialogues.push({
             speaker: dialogueSpeaker,
@@ -135,10 +139,7 @@ export default function ScriptBreakdownPage() {
           });
           currentSpeaker = null;
         } else {
-          // Action Description
           synopsisBuffer.push(trimmed);
-
-          // Inline character search
           const inlineChars = trimmed.match(/\b(කසුන්|නිමල්|රහස් නියෝජිතයා|ELENA|MARCUS|KAI)\b/gi);
           if (inlineChars) {
             inlineChars.forEach((c) => {
@@ -150,7 +151,6 @@ export default function ScriptBreakdownPage() {
           }
         }
 
-        // Props Identification
         if (/විදුලි පන්දමක්|පන්දම/i.test(trimmed) && !currentScene.props.includes("විදුලි පන්දම")) currentScene.props.push("විදුලි පන්දම");
         if (/ස්කෑනරයක්|ස්කෑනර්/i.test(trimmed) && !currentScene.props.includes("ඩිජිටල් ස්කෑනරය")) currentScene.props.push("ඩිජිටල් ස්කෑනරය");
         if (/WALKIE-TALKIE|සන්නිවේදන/i.test(trimmed) && !currentScene.props.includes("Walkie-Talkie")) currentScene.props.push("Walkie-Talkie");
@@ -181,13 +181,12 @@ export default function ScriptBreakdownPage() {
   const handleRunPdfBreakdown = () => {
     if (!uploadedFile) return;
     setIsProcessing(true);
-
     setTimeout(() => {
       setIsProcessing(false);
       setHasParsed(true);
-      // Clean parse without any old leftover scenes
+      setSelectedSceneIds([]);
       setParsedScenes(parseScriptIntoScenes(SINHALA_SCRIPT_TEMPLATE));
-    }, 900);
+    }, 800);
   };
 
   const handleRunManualBreakdown = () => {
@@ -195,8 +194,54 @@ export default function ScriptBreakdownPage() {
     setTimeout(() => {
       setIsProcessing(false);
       setHasParsed(true);
+      setSelectedSceneIds([]);
       setParsedScenes(parseScriptIntoScenes(scriptText));
     }, 600);
+  };
+
+  // Delete Single Scene
+  const handleDeleteScene = (id: string) => {
+    setParsedScenes(prev => prev.filter(s => s.id !== id));
+    setSelectedSceneIds(prev => prev.filter(selectedId => selectedId !== id));
+  };
+
+  // Toggle Select Single
+  const handleToggleSelect = (id: string) => {
+    if (selectedSceneIds.includes(id)) {
+      setSelectedSceneIds(prev => prev.filter(item => item !== id));
+    } else {
+      setSelectedSceneIds(prev => [...prev, id]);
+    }
+  };
+
+  // Select All Toggle
+  const handleToggleSelectAll = () => {
+    if (selectedSceneIds.length === parsedScenes.length) {
+      setSelectedSceneIds([]);
+    } else {
+      setSelectedSceneIds(parsedScenes.map(s => s.id));
+    }
+  };
+
+  // Delete Selected
+  const handleDeleteSelected = () => {
+    setParsedScenes(prev => prev.filter(s => !selectedSceneIds.includes(s.id)));
+    setSelectedSceneIds([]);
+  };
+
+  // Clear All Scenes
+  const handleClearAllScenes = () => {
+    setParsedScenes([]);
+    setSelectedSceneIds([]);
+  };
+
+  // Save Edited Scene
+  const handleSaveEditedScene = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingScene) return;
+
+    setParsedScenes(prev => prev.map(s => s.id === editingScene.id ? editingScene : s));
+    setEditingScene(null);
   };
 
   const handleGenerateAllStoryboards = () => {
@@ -227,7 +272,7 @@ export default function ScriptBreakdownPage() {
             Script Breakdown Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් (Dialogues) වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
+            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
           </p>
         </div>
 
@@ -250,9 +295,9 @@ export default function ScriptBreakdownPage() {
         </div>
       </div>
 
-      {/* Main Two-Column Layout */}
+      {/* Main Layout */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Script Input */}
+        {/* Left Column */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
@@ -282,9 +327,7 @@ export default function ScriptBreakdownPage() {
                   <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2 group-hover:scale-105 transition-transform">
                     <UploadCloud className="w-6 h-6" />
                   </div>
-                  <h4 className="text-sm font-bold text-white mb-1">
-                    Select Screenplay File
-                  </h4>
+                  <h4 className="text-sm font-bold text-white mb-1">Select Screenplay File</h4>
                   <p className="text-xs text-slate-400 max-w-xs mb-2">
                     Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and <strong className="text-slate-200">.TXT</strong>
                   </p>
@@ -347,15 +390,42 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Ordered Scene Breakdown */}
+        {/* Right Column */}
         <div className="lg:col-span-7 space-y-4">
-          <div className="flex items-center justify-between">
-            <h2 className="text-sm font-bold text-white flex items-center gap-2">
-              <CheckCircle2 className="w-4 h-4 text-emerald-400" /> වෙන් කරන ලද දර්ශන (Parsed Scenes)
-            </h2>
-            <span className="text-xs text-emerald-400 bg-emerald-500/10 px-3 py-1 rounded-full border border-emerald-500/20 font-medium">
-              දර්ශන {parsedScenes.length} ක් හඳුනාගන්නා ලදී
-            </span>
+          {/* Action Toolbar: Select All / Delete */}
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleToggleSelectAll}
+                disabled={parsedScenes.length === 0}
+                className="text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition-colors disabled:opacity-40"
+              >
+                {selectedSceneIds.length === parsedScenes.length && parsedScenes.length > 0 ? (
+                  <CheckSquare className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-500" />
+                )}
+                Select All ({parsedScenes.length})
+              </button>
+
+              {selectedSceneIds.length > 0 && (
+                <button
+                  onClick={handleDeleteSelected}
+                  className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-1.5 transition-all"
+                >
+                  <Trash2 className="w-3.5 h-3.5" /> Delete Selected ({selectedSceneIds.length})
+                </button>
+              )}
+            </div>
+
+            {parsedScenes.length > 0 && (
+              <button
+                onClick={handleClearAllScenes}
+                className="text-xs text-slate-400 hover:text-red-400 transition-colors"
+              >
+                Clear All
+              </button>
+            )}
           </div>
 
           {isProcessing ? (
@@ -366,128 +436,249 @@ export default function ScriptBreakdownPage() {
             </div>
           ) : hasParsed && parsedScenes.length > 0 ? (
             <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1">
-              {parsedScenes.map((scene) => (
-                <div
-                  key={scene.id}
-                  className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/30 transition-all space-y-4"
-                >
-                  {/* Scene Title Bar */}
-                  <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-950/50">
-                    <div className="flex items-center gap-2.5">
-                      <span className="text-xs font-bold text-emerald-400 bg-[#0e1d15] px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
-                        {scene.id}
-                      </span>
-                      <h3 className="text-sm font-bold text-white tracking-wide">
-                        {scene.slugline}
-                      </h3>
-                    </div>
-                    <div className="flex items-center gap-2 text-[11px] font-semibold">
-                      <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300">
-                        {scene.locationType}
-                      </span>
-                      <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/20">
-                        {scene.timeOfDay}
-                      </span>
-                    </div>
-                  </div>
+              {parsedScenes.map((scene) => {
+                const isSelected = selectedSceneIds.includes(scene.id);
 
-                  {/* Action / Setting Synopsis */}
-                  <p className="text-xs text-slate-300 leading-relaxed font-light">
-                    {scene.synopsis}
-                  </p>
+                return (
+                  <div
+                    key={scene.id}
+                    className={`p-5 rounded-2xl bg-[#09130e] border transition-all space-y-4 ${isSelected ? "border-emerald-500 bg-[#0d1d14]" : "border-emerald-950/70 hover:border-emerald-500/30"
+                      }`}
+                  >
+                    {/* Scene Title Bar with Checkbox, Edit & Delete */}
+                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-950/50">
+                      <div className="flex items-center gap-3">
+                        <button
+                          onClick={() => handleToggleSelect(scene.id)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-600" />
+                          )}
+                        </button>
+                        <span className="text-xs font-bold text-emerald-400 bg-[#0e1d15] px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
+                          {scene.id}
+                        </span>
+                        <h3 className="text-sm font-bold text-white tracking-wide">
+                          {scene.slugline}
+                        </h3>
+                      </div>
 
-                  {/* Characters & Props Chips */}
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                        <Users className="w-3 h-3 text-emerald-400" /> චරිත / Characters ({scene.characters.length})
+                      <div className="flex items-center gap-2">
+                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[11px] font-semibold">
+                          {scene.locationType}
+                        </span>
+                        <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/20 text-[11px] font-semibold">
+                          {scene.timeOfDay}
+                        </span>
+
+                        {/* Edit Button */}
+                        <button
+                          onClick={() => setEditingScene(scene)}
+                          className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-300 border border-emerald-950/80 transition-all ml-1"
+                          title="Edit Scene"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+
+                        {/* Delete Button */}
+                        <button
+                          onClick={() => handleDeleteScene(scene.id)}
+                          className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-emerald-950/80 transition-all"
+                          title="Delete Scene"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Synopsis */}
+                    <p className="text-xs text-slate-300 leading-relaxed font-light">
+                      {scene.synopsis}
+                    </p>
+
+                    {/* Characters & Props Chips */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+                          <Users className="w-3 h-3 text-emerald-400" /> චරිත / Characters ({scene.characters.length})
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scene.characters.length > 0 ? (
+                            scene.characters.map((char, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-emerald-300 font-medium"
+                              >
+                                {char}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-500 italic">පසුබිම් චරිත පමණි</span>
+                          )}
+                        </div>
+                      </div>
+
+                      <div className="space-y-1.5">
+                        <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
+                          <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / Props ({scene.props.length})
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scene.props.length > 0 ? (
+                            scene.props.map((prop, idx) => (
+                              <span
+                                key={idx}
+                                className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-slate-300 font-medium"
+                              >
+                                {prop}
+                              </span>
+                            ))
+                          ) : (
+                            <span className="text-xs text-slate-500 italic">සාමාන්‍ය පසුතල සැකසුම</span>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dialogues */}
+                    {scene.dialogues && scene.dialogues.length > 0 && (
+                      <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
+                        <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
+                          <MessageSquare className="w-3 h-3 text-emerald-400" /> දෙබස් / Key Dialogues ({scene.dialogues.length})
+                        </span>
+                        <div className="space-y-1.5 divide-y divide-emerald-950/30">
+                          {scene.dialogues.map((dlg, dIdx) => (
+                            <div key={dIdx} className="pt-1.5 first:pt-0 text-xs">
+                              <span className="font-semibold text-emerald-300 font-mono text-[11px] mr-2">
+                                {dlg.speaker}:
+                              </span>
+                              <span className="text-slate-300 italic font-light">
+                                "{dlg.line}"
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Footer Action */}
+                    <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
+                        <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned Shots
                       </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {scene.characters.length > 0 ? (
-                          scene.characters.map((char, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-emerald-300 font-medium"
-                            >
-                              {char}
-                            </span>
-                          ))
+
+                      <button
+                        onClick={() => handleGenerateSceneStoryboard(scene.id)}
+                        disabled={generatingSceneId === scene.id}
+                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        {generatingSceneId === scene.id ? (
+                          <>
+                            <Loader2 className="w-3 h-3 animate-spin" /> Loading Storyboard...
+                          </>
                         ) : (
-                          <span className="text-xs text-slate-500 italic">පසුබිම් චරිත පමණි</span>
+                          <>
+                            Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
+                          </>
                         )}
-                      </div>
-                    </div>
-
-                    <div className="space-y-1.5">
-                      <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                        <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / Props ({scene.props.length})
-                      </span>
-                      <div className="flex flex-wrap gap-1.5">
-                        {scene.props.length > 0 ? (
-                          scene.props.map((prop, idx) => (
-                            <span
-                              key={idx}
-                              className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-slate-300 font-medium"
-                            >
-                              {prop}
-                            </span>
-                          ))
-                        ) : (
-                          <span className="text-xs text-slate-500 italic">සාමාන්‍ය පසුතල සැකසුම</span>
-                        )}
-                      </div>
+                      </button>
                     </div>
                   </div>
-
-                  {/* Dialogues Section */}
-                  {scene.dialogues && scene.dialogues.length > 0 && (
-                    <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
-                      <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
-                        <MessageSquare className="w-3 h-3 text-emerald-400" /> දෙබස් / Key Dialogues ({scene.dialogues.length})
-                      </span>
-                      <div className="space-y-1.5 divide-y divide-emerald-950/30">
-                        {scene.dialogues.map((dlg, dIdx) => (
-                          <div key={dIdx} className="pt-1.5 first:pt-0 text-xs">
-                            <span className="font-semibold text-emerald-300 font-mono text-[11px] mr-2">
-                              {dlg.speaker}:
-                            </span>
-                            <span className="text-slate-300 italic font-light">
-                              "{dlg.line}"
-                            </span>
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-
-                  {/* Footer Action */}
-                  <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
-                    <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                      <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned Shots
-                    </span>
-
-                    <button
-                      onClick={() => handleGenerateSceneStoryboard(scene.id)}
-                      disabled={generatingSceneId === scene.id}
-                      className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                    >
-                      {generatingSceneId === scene.id ? (
-                        <>
-                          <Loader2 className="w-3 h-3 animate-spin" /> Loading Storyboard...
-                        </>
-                      ) : (
-                        <>
-                          Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
-                        </>
-                      )}
-                    </button>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
-          ) : null}
+          ) : (
+            <div className="p-12 rounded-2xl bg-[#09130e] border border-dashed border-emerald-950 text-center text-slate-400">
+              <Film className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <p className="text-sm font-medium">කිසිදු Scene එකක් නැත. කරුණාකර පිටපතක් Parse කරන්න.</p>
+            </div>
+          )}
         </div>
       </div>
+
+      {/* Edit Scene Modal */}
+      {editingScene && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-lg bg-[#09130e] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-emerald-950/70">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-emerald-400" /> Edit Scene ({editingScene.id})
+              </h3>
+              <button
+                onClick={() => setEditingScene(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#0e1d15]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedScene} className="space-y-4 mt-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Slugline / Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editingScene.slugline}
+                  onChange={(e) => setEditingScene({ ...editingScene, slugline: e.target.value })}
+                  className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Location Type</label>
+                  <select
+                    value={editingScene.locationType}
+                    onChange={(e) => setEditingScene({ ...editingScene, locationType: e.target.value })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  >
+                    <option value="INT (අභ්‍යන්තර)">INT (අභ්‍යන්තර)</option>
+                    <option value="EXT (බාහිර)">EXT (බාහිර)</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Time of Day</label>
+                  <input
+                    type="text"
+                    value={editingScene.timeOfDay}
+                    onChange={(e) => setEditingScene({ ...editingScene, timeOfDay: e.target.value })}
+                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis / Action Line</label>
+                <textarea
+                  rows={3}
+                  value={editingScene.synopsis}
+                  onChange={(e) => setEditingScene({ ...editingScene, synopsis: e.target.value })}
+                  className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60 leading-relaxed"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-emerald-950/60">
+                <button
+                  type="button"
+                  onClick={() => setEditingScene(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
