@@ -33,8 +33,7 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  // Server-Side Route (/api/storyboard/generate) හරහා AI Storyboard Image එක ලබාගැනීම
-  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean) => {
+  const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean): Promise<boolean> => {
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
     try {
@@ -51,11 +50,12 @@ export default function StoryboardPage() {
           imageUrl: data.imageUrl,
           isGenerating: false
         } : s));
-      } else {
-        throw new Error();
+        return true;
       }
+      throw new Error();
     } catch {
       setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: false } : s));
+      return false;
     }
   };
 
@@ -73,7 +73,6 @@ export default function StoryboardPage() {
             const newShots: StoryboardShot[] = [];
 
             parsed.forEach((scene: any, index: number) => {
-              const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
               const shotNumA = `SHOT ${String(index + 1).padStart(2, "0")}A`;
               const shotNumB = `SHOT ${String(index + 1).padStart(2, "0")}B`;
 
@@ -86,7 +85,7 @@ export default function StoryboardPage() {
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Master`,
-                isGenerating: isTarget,
+                isGenerating: false,
                 imageUrl: ""
               });
 
@@ -99,7 +98,7 @@ export default function StoryboardPage() {
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Key Action`,
-                isGenerating: isTarget,
+                isGenerating: false,
                 imageUrl: ""
               });
             });
@@ -107,29 +106,27 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
 
-            // Sequenced Server-side render queue
+            // Sequential Queue: එකකට පසු අනෙක render වීම
             const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
-            targetShots.forEach((shot, idx) => {
-              setTimeout(() => {
-                fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-              }, idx * 1200);
-            });
+            const runSequence = async () => {
+              for (const shot of targetShots) {
+                await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
+              }
+            };
+            runSequence();
           }
         } catch { }
       }
     }
   }, [artStyle]);
 
-  const handleGenerateAll = () => {
+  const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
-    shots.forEach((shot, idx) => {
-      setTimeout(() => {
-        fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-        if (idx === shots.length - 1) {
-          setIsGeneratingAll(false);
-        }
-      }, idx * 1500);
-    });
+    const targetShots = filterScene === "ALL" ? shots : shots.filter(s => s.sceneId === filterScene);
+    for (const shot of targetShots) {
+      await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
+    }
+    setIsGeneratingAll(false);
   };
 
   const filteredShots = filterScene === "ALL"
