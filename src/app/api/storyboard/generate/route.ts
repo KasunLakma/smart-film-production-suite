@@ -26,7 +26,7 @@ export async function POST(req: Request) {
             environment = "high security operations control room with flashing emergency alarm beacon sirens and mainframe computer banks";
             characterAction = isWide
                 ? "wide establishing master shot of server consoles, flashing alarm warning beacons casting deep shadows"
-                : "intense close-up action frame of operative hand pulling out an encrypted military hard drive cartridge from server chassis, motion lines";
+                : "intense close-up action frame of operative hand swiftly extracting an encrypted military hard drive cartridge from server chassis, motion lines";
         } else {
             environment = "misty coastal container shipyard docks at early morning dawn with dense fog rolling over water";
             characterAction = isWide
@@ -69,7 +69,7 @@ export async function POST(req: Request) {
                 const controller2 = new AbortController();
                 const timeout2 = setTimeout(() => controller2.abort(), 18000);
                 const res2 = await fetch(secondaryUrl, { cache: "no-store", signal: controller2.signal });
-                clearTimeout2(timeout2);
+                clearTimeout(timeout2);
                 if (res2.ok) {
                     imageBuffer = await res2.arrayBuffer();
                     contentType = res2.headers.get("content-type") || "image/jpeg";
