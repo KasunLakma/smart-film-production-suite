@@ -13,7 +13,8 @@ import {
   Compass,
   Building2,
   Warehouse,
-  Ship
+  Ship,
+  X
 } from "lucide-react";
 
 interface LocationItem {
@@ -74,14 +75,65 @@ const initialLocations: LocationItem[] = [
 
 export default function LocationsPage() {
   const [filter, setFilter] = useState("ALL");
-  const [locations] = useState<LocationItem[]>(initialLocations);
+  const [locations, setLocations] = useState<LocationItem[]>(initialLocations);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+
+  // Form State
+  const [formData, setFormData] = useState({
+    name: "",
+    sceneTag: "SCENE 04 / EXT. ABANDONED PIER",
+    address: "",
+    category: "Industrial Docks",
+    powerGrid: "Mobile 40kVA Generator",
+    rigging: "Portable Light Stands",
+    dailyFee: "$3,800",
+    gpsCoords: "6.9310° N, 79.8420° E"
+  });
+
+  const handleAddLocation = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!formData.name) return;
+
+    const iconTypeMap: Record<string, "soundstage" | "street" | "docks"> = {
+      "Soundstage": "soundstage",
+      "Exterior Street": "street",
+      "Industrial Docks": "docks"
+    };
+
+    const newLoc: LocationItem = {
+      id: `loc-${Date.now()}`,
+      name: formData.name,
+      sceneTag: formData.sceneTag,
+      address: formData.address || "Colombo Harbor Road",
+      category: formData.category,
+      status: "Under Review",
+      iconType: iconTypeMap[formData.category] || "docks",
+      powerGrid: formData.powerGrid,
+      rigging: formData.rigging,
+      dailyFee: formData.dailyFee,
+      gpsCoords: formData.gpsCoords
+    };
+
+    setLocations(prev => [newLoc, ...prev]);
+    setIsModalOpen(false);
+    setFormData({
+      name: "",
+      sceneTag: "SCENE 04 / EXT. ABANDONED PIER",
+      address: "",
+      category: "Industrial Docks",
+      powerGrid: "Mobile 40kVA Generator",
+      rigging: "Portable Light Stands",
+      dailyFee: "$3,800",
+      gpsCoords: "6.9310° N, 79.8420° E"
+    });
+  };
 
   const filteredLocations = filter === "ALL"
     ? locations
     : locations.filter(l => l.category.toLowerCase().includes(filter.toLowerCase()));
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
+    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 relative">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
@@ -97,7 +149,10 @@ export default function LocationsPage() {
         </div>
 
         <div className="flex items-center gap-3">
-          <button className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer">
+          <button
+            onClick={() => setIsModalOpen(true)}
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer active:scale-95"
+          >
             <Plus className="w-4 h-4" /> Add Scouted Location
           </button>
           <Link
@@ -113,13 +168,17 @@ export default function LocationsPage() {
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
           <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">Scouted Sites</span>
-          <div className="text-xl font-bold text-white">3 Locations</div>
+          <div className="text-xl font-bold text-white">{locations.length} Locations</div>
           <span className="text-[11px] text-emerald-400 mt-1 block">Fully mapped</span>
         </div>
         <div className="p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
           <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">Permit Readiness</span>
-          <div className="text-xl font-bold text-emerald-400">2 Cleared</div>
-          <span className="text-[11px] text-amber-400 mt-1 block">1 Under review</span>
+          <div className="text-xl font-bold text-emerald-400">
+            {locations.filter(l => l.status === "Cleared").length} Cleared
+          </div>
+          <span className="text-[11px] text-amber-400 mt-1 block">
+            {locations.filter(l => l.status === "Under Review").length} Under review
+          </span>
         </div>
         <div className="p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
           <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">Primary Hub</span>
@@ -172,9 +231,8 @@ export default function LocationsPage() {
             key={loc.id}
             className="group rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/40 transition-all overflow-hidden flex flex-col shadow-lg"
           >
-            {/* Visual Vector Grid Canvas (No external photos, 100% bug-free) */}
+            {/* Visual Vector Grid Canvas */}
             <div className="relative aspect-video w-full bg-[#050a07] border-b border-emerald-950/60 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
-              {/* Background Architectural Grid Lines */}
               <div
                 className="absolute inset-0 opacity-15"
                 style={{
@@ -253,6 +311,123 @@ export default function LocationsPage() {
           </div>
         ))}
       </div>
+
+      {/* Add Scouted Location Modal */}
+      {isModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="w-full max-w-lg bg-[#09130e] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl relative animate-in fade-in zoom-in-95 duration-200">
+            <button
+              onClick={() => setIsModalOpen(false)}
+              className="absolute top-4 right-4 text-slate-400 hover:text-white p-1 rounded-lg hover:bg-emerald-950/50"
+            >
+              <X className="w-5 h-5" />
+            </button>
+
+            <div className="flex items-center gap-2 mb-4">
+              <MapPin className="w-5 h-5 text-emerald-400" />
+              <h2 className="text-lg font-bold text-white">Add New Scouted Location</h2>
+            </div>
+
+            <form onSubmit={handleAddLocation} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Location Site Name
+                </label>
+                <input
+                  type="text"
+                  required
+                  placeholder="e.g. Abandoned Port Cargo Terminal"
+                  value={formData.name}
+                  onChange={e => setFormData({ ...formData, name: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-[#050a07] border border-emerald-950 focus:border-emerald-500 text-sm text-white outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    Category
+                  </label>
+                  <select
+                    value={formData.category}
+                    onChange={e => setFormData({ ...formData, category: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-[#050a07] border border-emerald-950 focus:border-emerald-500 text-sm text-white outline-none"
+                  >
+                    <option value="Soundstage">Soundstage</option>
+                    <option value="Exterior Street">Exterior Street</option>
+                    <option value="Industrial Docks">Industrial Docks</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    Est. Daily Fee
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.dailyFee}
+                    onChange={e => setFormData({ ...formData, dailyFee: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-[#050a07] border border-emerald-950 focus:border-emerald-500 text-sm text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                  Address / Staging Hub
+                </label>
+                <input
+                  type="text"
+                  placeholder="e.g. Colombo Port Northern Pier Gate 04"
+                  value={formData.address}
+                  onChange={e => setFormData({ ...formData, address: e.target.value })}
+                  className="w-full px-3 py-2 rounded-xl bg-[#050a07] border border-emerald-950 focus:border-emerald-500 text-sm text-white outline-none"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    Power Grid
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.powerGrid}
+                    onChange={e => setFormData({ ...formData, powerGrid: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-[#050a07] border border-emerald-950 text-xs text-white outline-none"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 uppercase mb-1">
+                    Rigging Spec
+                  </label>
+                  <input
+                    type="text"
+                    value={formData.rigging}
+                    onChange={e => setFormData({ ...formData, rigging: e.target.value })}
+                    className="w-full px-3 py-2 rounded-xl bg-[#050a07] border border-emerald-950 text-xs text-white outline-none"
+                  />
+                </div>
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-emerald-950/60">
+                <button
+                  type="button"
+                  onClick={() => setIsModalOpen(false)}
+                  className="px-4 py-2 rounded-xl text-xs text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
+                >
+                  Register Location
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
