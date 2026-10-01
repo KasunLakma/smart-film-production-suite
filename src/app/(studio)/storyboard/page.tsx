@@ -26,38 +26,30 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// දර්ශනයේ සාරාංශය සහ විස්තරය අනුව ගැළපෙන Cinematic English Prompt එකක් සෑදීම
-const generateCinematicPrompt = (scene: any, isWide: boolean): string => {
-  const fullText = `${scene.slugline || ""} ${scene.synopsis || ""}`.toLowerCase();
+// පිරිසිදු English Cinematic Prompts පමණක් ලබා දීම
+const getCinematicPromptByContext = (sceneSlug: string, isWide: boolean): string => {
+  const text = sceneSlug.toLowerCase();
 
-  const isNight = /night|රාත්‍රී|රෑ|dark|අඳුරු/.test(fullText);
-  const timeDesc = isNight ? "night time, dramatic cinematic lighting, neon and rim lights" : "daylight, atmospheric natural film lighting";
-
-  let environment = "cinematic film scene inside high tech underground laboratory, glowing monitors, server racks";
-  if (/වරාය|port|harbor|dock|street|පාර/.test(fullText)) {
-    environment = "cinematic rainy harbor dock street, shipping containers, wet asphalt reflections, parked dark vehicle";
-  } else if (/පාලක|control|command|server/.test(fullText)) {
-    environment = "dark technical control room, emergency red lights flashing, computer mainframe consoles";
+  if (text.includes("lab") || text.includes("විද්‍යාගාර") || text.includes("archive")) {
+    return isWide
+      ? "cinematic wide establishing shot of dark high-tech cyber research lab, glowing holographic screens, server racks, volumetric blue and green rim lighting, 35mm anamorphic photography, photorealistic"
+      : "cinematic intense medium close-up of a focused young South Asian male technician inspecting a glowing cyber scanner device, dramatic shallow depth of field, neon teal reflections, Arri Alexa LF 8k";
   }
 
-  const characters = scene.characters && scene.characters.length > 0
-    ? scene.characters.join(", ")
-    : "Sri Lankan young Asian male operative";
-
-  const props = scene.props && scene.props.length > 0
-    ? `holding ${scene.props.slice(0, 2).join(" and ")}`
-    : "tactical equipment";
-
-  if (isWide) {
-    return `cinematic film still, 16:9 widescreen, master establishing wide shot of ${environment}, ${timeDesc}, ${characters} in distance, 35mm film photography, 8k resolution, photorealistic masterpiece, directed by Denis Villeneuve`;
-  } else {
-    return `cinematic film still, 16:9 widescreen, intense medium close up of ${characters}, ${props}, emotional tension, cinematic shallow depth of field, ${timeDesc}, Arri Alexa LF footage, highly detailed`;
+  if (text.includes("port") || text.includes("dock") || text.includes("වරාය") || text.includes("street")) {
+    return isWide
+      ? "cinematic wide master shot of dark wet shipping docks at night, heavy rain, container cranes, reflections on wet asphalt, black tactical van, noir cinematic lighting"
+      : "cinematic close-up of tactical agent looking through binoculars, water droplets on face, high contrast cinematic film lighting, shallow depth of field, dramatic movie still";
   }
+
+  return isWide
+    ? "cinematic wide master shot of dramatic movie sequence, moody atmospheric lighting, widescreen 16:9, directed by Denis Villeneuve, 8k resolution"
+    : "cinematic intense character close-up in dramatic lighting, emotional expression, shallow depth of field, 50mm prime lens, movie still";
 };
 
-const getAiImageUrl = (prompt: string, seed: number) => {
-  const encoded = encodeURIComponent(prompt);
-  return `https://image.pollinations.ai/prompt/${encoded}?width=1280&height=720&model=flux&nologo=true&seed=${seed}`;
+const getAiUrl = (prompt: string, seed: number) => {
+  const clean = encodeURIComponent(prompt);
+  return `https://image.pollinations.ai/prompt/${clean}?width=1280&height=720&nologo=true&seed=${seed}`;
 };
 
 export default function StoryboardPage() {
@@ -81,8 +73,6 @@ export default function StoryboardPage() {
 
             parsed.forEach((scene, index) => {
               const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
-              const widePrompt = generateCinematicPrompt(scene, true);
-              const closePrompt = generateCinematicPrompt(scene, false);
 
               newShots.push({
                 id: `shot-${scene.id}-A`,
@@ -92,8 +82,8 @@ export default function StoryboardPage() {
                 shotType: "Wide Master Shot (WMS)",
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
-                visualPrompt: `${scene.slugline} - පසුතලය සහ ආලෝක සැකැස්ම`,
-                englishPrompt: widePrompt,
+                visualPrompt: `${scene.slugline} - Wide Establishing Frame`,
+                englishPrompt: getCinematicPromptByContext(scene.slugline, true),
                 isGenerating: isTarget,
                 imageUrl: ""
               });
@@ -106,8 +96,8 @@ export default function StoryboardPage() {
                 shotType: "Medium Close Action (MCU)",
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
-                visualPrompt: `ක්‍රියාදාමය සහ චරිත ආවේගය`,
-                englishPrompt: closePrompt,
+                visualPrompt: `Focused Character & Props Interaction`,
+                englishPrompt: getCinematicPromptByContext(scene.slugline, false),
                 isGenerating: isTarget,
                 imageUrl: ""
               });
@@ -116,20 +106,27 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
 
-            // ඉල්ලූ Scene එකට අදාළ සිනමාත්මක රූප Load කිරීම
+            // Shot A මුලින් generate කිරීම
             setTimeout(() => {
-              setShots(prev => prev.map((shot, idx) => {
-                const isTarget = activeFilter === "ALL" || activeFilter === shot.sceneId;
+              setShots(prev => prev.map((s, idx) => {
+                const isTarget = (activeFilter === "ALL" || activeFilter === s.sceneId) && s.id.endsWith("-A");
                 if (isTarget) {
-                  return {
-                    ...shot,
-                    isGenerating: false,
-                    imageUrl: getAiImageUrl(shot.englishPrompt, 100 + idx * 77)
-                  };
+                  return { ...s, isGenerating: false, imageUrl: getAiUrl(s.englishPrompt, 110 + idx * 25) };
                 }
-                return { ...shot, isGenerating: false };
+                return s;
               }));
             }, 600);
+
+            // Shot B තත්පර 1.5 කට පසු generate කර rate limit වීම වැළැක්වීම
+            setTimeout(() => {
+              setShots(prev => prev.map((s, idx) => {
+                const isTarget = (activeFilter === "ALL" || activeFilter === s.sceneId) && s.id.endsWith("-B");
+                if (isTarget) {
+                  return { ...s, isGenerating: false, imageUrl: getAiUrl(s.englishPrompt, 770 + idx * 35) };
+                }
+                return s;
+              }));
+            }, 1800);
           }
         } catch { }
       }
@@ -145,7 +142,7 @@ export default function StoryboardPage() {
           return {
             ...s,
             isGenerating: false,
-            imageUrl: getAiImageUrl(s.englishPrompt, Math.floor(Math.random() * 99999))
+            imageUrl: getAiUrl(s.englishPrompt, Math.floor(Math.random() * 999999))
           };
         }
         return s;
@@ -161,10 +158,10 @@ export default function StoryboardPage() {
       setShots(prev => prev.map((s, idx) => ({
         ...s,
         isGenerating: false,
-        imageUrl: getAiImageUrl(s.englishPrompt, 500 + idx * 33)
+        imageUrl: getAiUrl(s.englishPrompt, 300 + idx * 45)
       })));
       setIsGeneratingAll(false);
-    }, 1800);
+    }, 2500);
   };
 
   const filteredShots = filterScene === "ALL"
@@ -182,7 +179,7 @@ export default function StoryboardPage() {
             Production Storyboard Visualizer
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            දර්ශනයේ විස්තරය මත AI මඟින් ජනනය කළ සැබෑ සිනමාත්මක 16:9 Shot Frames.
+            Breakdown දර්ශනය අනුව AI මඟින් ජනනය කළ 16:9 සිනමාත්මක Shot Frames.
           </p>
         </div>
 
@@ -245,7 +242,7 @@ export default function StoryboardPage() {
             16:9 DCI Scope
           </span>
           <span className="text-slate-500">•</span>
-          <span>FLUX Cinematic Render</span>
+          <span>FLUX HD Render</span>
         </div>
       </div>
 
@@ -259,13 +256,18 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Rendering Cinematic Shot with AI...</span>
+                  <span className="text-xs font-medium tracking-wide">Rendering Cinematic Shot...</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
+                    onError={(e) => {
+                      (e.target as HTMLImageElement).src = shot.id.endsWith("-A")
+                        ? "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80"
+                        : "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80";
+                    }}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-95 contrast-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
