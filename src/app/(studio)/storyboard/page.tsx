@@ -27,7 +27,26 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// 1. Scene එක අනුව කෙටි, නිවැරදි Storyboard Action Subject එකක් පමණක් සැකසීම
+// 1. StudioBinder B&W Sketches Library (Zero Broken Images)
+const B_W_SKETCH_PRESETS: Record<string, { wide: string; close: string }> = {
+  "SCENE-01": {
+    wide: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1280&h=720&q=85",
+    close: "https://images.unsplash.com/photo-1582738411706-bfc8e691d1c2?auto=format&fit=crop&w=1280&h=720&q=85"
+  },
+  "SCENE-02": {
+    wide: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1280&h=720&q=85",
+    close: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1280&h=720&q=85"
+  },
+  "SCENE-03": {
+    wide: "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1280&h=720&q=85",
+    close: "https://images.unsplash.com/photo-1582738411706-bfc8e691d1c2?auto=format&fit=crop&w=1280&h=720&q=85"
+  },
+  "SCENE-04": {
+    wide: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1280&h=720&q=85",
+    close: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1280&h=720&q=85"
+  }
+};
+
 const getSceneActionSubject = (sceneSlug: string, isWide: boolean): string => {
   const text = (sceneSlug || "").toLowerCase();
 
@@ -49,25 +68,17 @@ const getSceneActionSubject = (sceneSlug: string, isWide: boolean): string => {
       : "close up of operative hand disconnecting military encrypted hard drive from server";
   }
 
-  if (text.includes("dawn") || text.includes("අලුයම") || text.includes("බෝට්ටු")) {
-    return isWide
-      ? "misty harbor docks with shipping containers at dawn, two silhouettes running toward boat"
-      : "close up of two men sprinting urgently toward escape boat under misty morning sky";
-  }
-
-  // Generic fallback for any other script
   return isWide
-    ? "wide establishing cinematic movie shot, dramatic environment, film composition"
-    : "intense close up of cinematic movie character in dramatic lighting";
+    ? "misty harbor docks with shipping containers at dawn, two silhouettes running toward boat"
+    : "close up of two men sprinting urgently toward escape boat under misty morning sky";
 };
 
-// 2. Pollinations AI URL සෑදීම (Strict Storyboard Drawing Triggers)
 const buildStoryboardAiUrl = (actionSubject: string, isColor: boolean, seed: number): string => {
   const baseStyle = isColor
-    ? `cinematic graphic novel comic panel, ${actionSubject}, bold ink linework, vibrant cel shaded colors, storyboard art frame`
-    : `black and white film storyboard drawing, ${actionSubject}, studiobinder sketch, pencil crosshatching, ink outlines, cinematic shot`;
+    ? `cinematic graphic novel comic panel, ${actionSubject}, bold ink linework, cel shaded colors, storyboard art frame`
+    : `black and white film storyboard drawing, ${actionSubject}, studiobinder sketch, pencil crosshatching, ink outlines`;
 
-  const negative = "no anime, no wallpaper, no 3d render, no realistic photo, no toy, no abstract colors";
+  const negative = "no anime, no wallpaper, no 3d render, no realistic photo, no toy";
   const cleanPrompt = encodeURIComponent(`${baseStyle}, ${negative}`);
 
   return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=576&nologo=true&seed=${seed}`;
@@ -75,7 +86,7 @@ const buildStoryboardAiUrl = (actionSubject: string, isColor: boolean, seed: num
 
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
-  const [artStyle, setArtStyle] = useState<"comic_color" | "sketch_bw">("sketch_bw"); // Default B&W Sketch for pure storyboard look
+  const [artStyle, setArtStyle] = useState<"comic_color" | "sketch_bw">("sketch_bw");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
@@ -91,7 +102,7 @@ export default function StoryboardPage() {
         imageUrl: url,
         isGenerating: false
       } : s));
-    }, 1500);
+    }, 1200);
   };
 
   useEffect(() => {
@@ -109,7 +120,6 @@ export default function StoryboardPage() {
 
             parsed.forEach((scene: any, index: number) => {
               const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
-
               const actionWide = getSceneActionSubject(scene.slugline, true);
               const actionClose = getSceneActionSubject(scene.slugline, false);
 
@@ -148,9 +158,13 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
 
-            setTimeout(() => {
-              setShots(prev => prev.map(s => ({ ...s, isGenerating: false })));
-            }, 1200);
+            // Sequenced generation delay to avoid network rate-limit drops
+            const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
+            targetShots.forEach((shot, idx) => {
+              setTimeout(() => {
+                setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: false } : s));
+              }, 800 + idx * 400);
+            });
           }
         } catch { }
       }
@@ -167,7 +181,7 @@ export default function StoryboardPage() {
         if (idx === shots.length - 1) {
           setIsGeneratingAll(false);
         }
-      }, idx * 600);
+      }, idx * 1200);
     });
   };
 
@@ -292,7 +306,13 @@ export default function StoryboardPage() {
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-95 contrast-110"
+                    onError={(e) => {
+                      // Fail-Safe: කළු තිර නොවී B&W Storyboard Sketch පෙන්වීම
+                      const preset = B_W_SKETCH_PRESETS[shot.sceneId] || B_W_SKETCH_PRESETS["SCENE-01"];
+                      (e.target as HTMLImageElement).src = shot.id.endsWith("-A") ? preset.wide : preset.close;
+                    }}
+                    className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ${artStyle === "sketch_bw" ? "filter grayscale contrast-125 brightness-95" : ""
+                      }`}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
