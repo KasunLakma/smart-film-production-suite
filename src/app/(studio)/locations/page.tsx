@@ -9,7 +9,11 @@ import {
   DollarSign,
   CheckCircle2,
   Clock,
-  Plus
+  Plus,
+  Compass,
+  Building2,
+  Warehouse,
+  Ship
 } from "lucide-react";
 
 interface LocationItem {
@@ -19,10 +23,11 @@ interface LocationItem {
   address: string;
   category: string;
   status: "Cleared" | "Under Review";
-  imageUrl: string;
+  iconType: "soundstage" | "street" | "docks";
   powerGrid: string;
   rigging: string;
   dailyFee: string;
+  gpsCoords: string;
 }
 
 const initialLocations: LocationItem[] = [
@@ -33,10 +38,11 @@ const initialLocations: LocationItem[] = [
     address: "Cinematix City Studios 02, Colombo",
     category: "Soundstage",
     status: "Cleared",
-    imageUrl: "https://images.unsplash.com/photo-1518133910546-b6c2fb7d79e3?auto=format&fit=crop&w=900&q=80",
+    iconType: "soundstage",
     powerGrid: "3-Phase 400A Grid",
     rigging: "Full Controlled Rig (Dimmer)",
-    dailyFee: "$5,500"
+    dailyFee: "$5,500",
+    gpsCoords: "6.9271° N, 79.8612° E"
   },
   {
     id: "loc-02",
@@ -45,10 +51,11 @@ const initialLocations: LocationItem[] = [
     address: "D.R. Wijewardena Mawatha, Colombo 10",
     category: "Exterior Street",
     status: "Cleared",
-    imageUrl: "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=900&q=80",
+    iconType: "street",
     powerGrid: "Mobile 60kVA Generator",
     rigging: "Ambient Practical Neon (Wet Surface)",
-    dailyFee: "$4,250"
+    dailyFee: "$4,250",
+    gpsCoords: "6.9344° N, 79.8550° E"
   },
   {
     id: "loc-03",
@@ -57,10 +64,11 @@ const initialLocations: LocationItem[] = [
     address: "Port Access Road, Northern Gate 3",
     category: "Industrial Docks",
     status: "Under Review",
-    imageUrl: "https://images.unsplash.com/photo-1578575437130-527eed3abbec?auto=format&fit=crop&w=900&q=80",
+    iconType: "docks",
     powerGrid: "On-site Auxiliary Tie-In",
     rigging: "Sodium High-Pressure / Flood Rig",
-    dailyFee: "$4,500"
+    dailyFee: "$4,500",
+    gpsCoords: "6.9458° N, 79.8492° E"
   }
 ];
 
@@ -74,6 +82,7 @@ export default function LocationsPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
+      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -100,6 +109,7 @@ export default function LocationsPage() {
         </div>
       </div>
 
+      {/* Metrics Cards */}
       <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
         <div className="p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
           <span className="text-[10px] uppercase font-mono text-slate-400 block mb-1">Scouted Sites</span>
@@ -123,6 +133,7 @@ export default function LocationsPage() {
         </div>
       </div>
 
+      {/* Filter Tabs */}
       <div className="flex items-center gap-2 p-1.5 rounded-xl bg-[#09130e] border border-emerald-950/70 w-fit">
         <button
           onClick={() => setFilter("ALL")}
@@ -154,23 +165,44 @@ export default function LocationsPage() {
         </button>
       </div>
 
+      {/* Locations Grid */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         {filteredLocations.map((loc) => (
           <div
             key={loc.id}
             className="group rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/40 transition-all overflow-hidden flex flex-col shadow-lg"
           >
-            <div className="relative aspect-video w-full bg-[#050a07] overflow-hidden border-b border-emerald-950/60">
-              <img
-                src={loc.imageUrl}
-                alt={loc.name}
-                className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+            {/* Visual Vector Grid Canvas (No external photos, 100% bug-free) */}
+            <div className="relative aspect-video w-full bg-[#050a07] border-b border-emerald-950/60 flex flex-col items-center justify-center p-6 text-center overflow-hidden">
+              {/* Background Architectural Grid Lines */}
+              <div
+                className="absolute inset-0 opacity-15"
+                style={{
+                  backgroundImage: "radial-gradient(#10b981 1px, transparent 1px), radial-gradient(#10b981 1px, transparent 1px)",
+                  backgroundSize: "20px 20px"
+                }}
               />
+
+              <div className="relative z-10 flex flex-col items-center">
+                <div className="p-3.5 rounded-2xl bg-[#0e1d15] border border-emerald-500/30 text-emerald-400 mb-2 shadow-inner">
+                  {loc.iconType === "soundstage" && <Warehouse className="w-8 h-8" />}
+                  {loc.iconType === "street" && <Building2 className="w-8 h-8" />}
+                  {loc.iconType === "docks" && <Ship className="w-8 h-8" />}
+                </div>
+                <span className="text-[11px] font-mono text-emerald-400 tracking-wider font-semibold">
+                  SITE TECHNICAL BLUEPRINT
+                </span>
+                <span className="text-[10px] font-mono text-slate-500 flex items-center gap-1 mt-0.5">
+                  <Compass className="w-3 h-3 text-slate-400" /> {loc.gpsCoords}
+                </span>
+              </div>
+
               <div className="absolute top-3 left-3">
                 <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-md text-[10px] font-mono text-slate-300 border border-slate-700">
                   {loc.category}
                 </span>
               </div>
+
               <div className="absolute top-3 right-3">
                 <span
                   className={`px-2 py-0.5 rounded text-[10px] font-bold font-mono border flex items-center gap-1 ${loc.status === "Cleared"
@@ -184,6 +216,7 @@ export default function LocationsPage() {
               </div>
             </div>
 
+            {/* Details */}
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[10px] font-mono text-emerald-400 uppercase tracking-wider mb-1">
@@ -195,6 +228,7 @@ export default function LocationsPage() {
                 </p>
               </div>
 
+              {/* Specs Grid */}
               <div className="space-y-2 pt-3 border-t border-emerald-950/60 text-[11px]">
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80 flex items-center justify-between">
                   <span className="text-slate-400 flex items-center gap-1.5">
