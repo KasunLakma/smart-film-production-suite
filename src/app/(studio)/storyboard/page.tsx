@@ -21,86 +21,69 @@ interface StoryboardShot {
   shotType: string;
   lens: string;
   cameraMovement: string;
-  cleanActionPrompt: string;
+  displayTitle: string;
+  actionSubject: string;
   imageUrl?: string;
   isGenerating?: boolean;
 }
 
-// 1. සිංහල හෝ ඉංග්‍රීසි ඕනෑම script එකක් 100% ක් පිරිසිදු English Comic Prompt එකක් බවට හැරවීම
-function getCleanComicPrompt(sceneSlug: string, isWide: boolean, style: "comic_color" | "sketch_bw"): string {
+// 1. Scene එක අනුව කෙටි, නිවැරදි Storyboard Action Subject එකක් පමණක් සැකසීම
+const getSceneActionSubject = (sceneSlug: string, isWide: boolean): string => {
   const text = (sceneSlug || "").toLowerCase();
 
-  let setting = "underground cybernetics laboratory, glowing computer terminal screens, holographic devices";
-  let action = isWide
-    ? "wide shot of operative inside high-tech control lab, monitors and server consoles"
-    : "close-up of focused Asian male operative inspecting glowing tactical device";
-
-  if (text.includes("වරාය") || text.includes("port") || text.includes("dock") || text.includes("harbor")) {
-    setting = "rainy industrial harbor entrance at night, cargo shipping containers, dark van";
-    action = isWide
-      ? "wide shot of dark tactical van parked near harbor gates in heavy rain"
-      : "close-up of secret tactical agent with binoculars looking through rainy window";
-  } else if (text.includes("පාලක") || text.includes("control") || text.includes("room")) {
-    setting = "central operations control room with flashing emergency red alarm lights";
-    action = isWide
-      ? "wide shot of flashing emergency red lights across mainframe consoles"
-      : "close-up of hand pulling encrypted military drive under red emergency lighting";
-  } else if (text.includes("dawn") || text.includes("අලුයම") || text.includes("බෝට්ටුව")) {
-    setting = "foggy coastal harbor shipping yard at dawn, cargo containers, misty morning";
-    action = isWide
-      ? "wide shot of two operatives running past cargo containers toward dock at dawn"
-      : "medium shot of two male operatives sprinting towards docked escape boat";
-  } else if (text.includes("කාමර") || text.includes("room") || text.includes("house")) {
-    setting = "dimly lit room interior, dramatic shadows, moody window light";
-    action = isWide
-      ? "wide shot of characters in tense discussion inside dimly lit room"
-      : "close up portrait of character expressing shock and tension";
-  }
-
-  if (style === "comic_color") {
+  if (text.includes("lab") || text.includes("විද්‍යාගාර")) {
     return isWide
-      ? `graphic novel comic book illustration, dynamic comic panel, ${setting}, ${action}, bold black ink lines, vibrant cel shaded colors, GTA comic art style, clean storyboard frame`
-      : `graphic novel comic character art, GTA loading screen illustration style, bold comic ink outlines, cel shading, ${action}, intense eyes, dramatic comic panel`;
-  } else {
-    return isWide
-      ? `black and white film storyboard drawing, studiobinder ink sketch, dynamic wide angle comic panel, crosshatching pencil shading, ${setting}, ${action}, ink linework storyboard frame`
-      : `black and white storyboard closeup panel, dramatic pencil ink sketch, crosshatched shading, ${action}, expressive comic linework, studiobinder storyboard template`;
+      ? "dark high tech computer lab room, glowing monitors and holographic table, technician in distance"
+      : "close-up of male technician holding glowing digital scanner tool and small flashlight";
   }
-}
 
-// 2. විශ්වාසදායක Comic Art Fallback Images (Network drop / timeout වුවහොත් කළු තිර නොවී පෙනීමට)
-const COMIC_FALLBACKS: Record<string, { colorWide: string; colorClose: string; bwWide: string; bwClose: string }> = {
-  lab: {
-    colorWide: "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?auto=format&fit=crop&w=1280&h=720&q=85",
-    colorClose: "https://images.unsplash.com/photo-1563089145-599997674d42?auto=format&fit=crop&w=1280&h=720&q=85",
-    bwWide: "https://images.unsplash.com/photo-1579783900882-c0d3dad7b119?auto=format&fit=crop&w=1280&h=720&q=85",
-    bwClose: "https://images.unsplash.com/photo-1582738411706-bfc8e691d1c2?auto=format&fit=crop&w=1280&h=720&q=85"
-  },
-  harbor: {
-    colorWide: "https://images.unsplash.com/photo-1578632767115-351597cf2477?auto=format&fit=crop&w=1280&h=720&q=85",
-    colorClose: "https://images.unsplash.com/photo-1607604276583-eef5d076aa5f?auto=format&fit=crop&w=1280&h=720&q=85",
-    bwWide: "https://images.unsplash.com/photo-1600585154340-be6161a56a0c?auto=format&fit=crop&w=1280&h=720&q=85",
-    bwClose: "https://images.unsplash.com/photo-1544717305-2782549b5136?auto=format&fit=crop&w=1280&h=720&q=85"
+  if (text.includes("port") || text.includes("dock") || text.includes("harbor") || text.includes("වරාය")) {
+    return isWide
+      ? "rainy night harbor dock gate, black van parked near metal fence, street lights reflections"
+      : "close up of secret agent holding binoculars in pouring rain looking out car window";
   }
+
+  if (text.includes("control") || text.includes("පාලක")) {
+    return isWide
+      ? "emergency control room with flashing warning alarm sirens and mainframe computer screens"
+      : "close up of operative hand disconnecting military encrypted hard drive from server";
+  }
+
+  if (text.includes("dawn") || text.includes("අලුයම") || text.includes("බෝට්ටු")) {
+    return isWide
+      ? "misty harbor docks with shipping containers at dawn, two silhouettes running toward boat"
+      : "close up of two men sprinting urgently toward escape boat under misty morning sky";
+  }
+
+  // Generic fallback for any other script
+  return isWide
+    ? "wide establishing cinematic movie shot, dramatic environment, film composition"
+    : "intense close up of cinematic movie character in dramatic lighting";
+};
+
+// 2. Pollinations AI URL සෑදීම (Strict Storyboard Drawing Triggers)
+const buildStoryboardAiUrl = (actionSubject: string, isColor: boolean, seed: number): string => {
+  const baseStyle = isColor
+    ? `cinematic graphic novel comic panel, ${actionSubject}, bold ink linework, vibrant cel shaded colors, storyboard art frame`
+    : `black and white film storyboard drawing, ${actionSubject}, studiobinder sketch, pencil crosshatching, ink outlines, cinematic shot`;
+
+  const negative = "no anime, no wallpaper, no 3d render, no realistic photo, no toy, no abstract colors";
+  const cleanPrompt = encodeURIComponent(`${baseStyle}, ${negative}`);
+
+  return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=576&nologo=true&seed=${seed}`;
 };
 
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
-  const [artStyle, setArtStyle] = useState<"comic_color" | "sketch_bw">("comic_color");
+  const [artStyle, setArtStyle] = useState<"comic_color" | "sketch_bw">("sketch_bw"); // Default B&W Sketch for pure storyboard look
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const buildAiImageUrl = (prompt: string, seed: number) => {
-    // කෙටි, පිරිසිදු English prompt එකක් පමණක් URL එකට යැවීම
-    const encoded = encodeURIComponent(prompt.slice(0, 180));
-    return `https://image.pollinations.ai/prompt/${encoded}?width=1024&height=576&nologo=true&seed=${seed}`;
-  };
-
-  const reloadSingleShot = (shotId: string, promptText: string) => {
+  const reloadSingleShot = (shotId: string, actionSubject: string) => {
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
     const randomSeed = Math.floor(Math.random() * 899999) + 100000;
-    const url = buildAiImageUrl(promptText, randomSeed);
+    const url = buildStoryboardAiUrl(actionSubject, artStyle === "comic_color", randomSeed);
 
     setTimeout(() => {
       setShots(prev => prev.map(s => s.id === shotId ? {
@@ -108,7 +91,7 @@ export default function StoryboardPage() {
         imageUrl: url,
         isGenerating: false
       } : s));
-    }, 1200);
+    }, 1500);
   };
 
   useEffect(() => {
@@ -127,11 +110,11 @@ export default function StoryboardPage() {
             parsed.forEach((scene: any, index: number) => {
               const isTarget = activeFilter === "ALL" || activeFilter === scene.id;
 
-              const widePrompt = getCleanComicPrompt(scene.slugline, true, artStyle);
-              const closePrompt = getCleanComicPrompt(scene.slugline, false, artStyle);
+              const actionWide = getSceneActionSubject(scene.slugline, true);
+              const actionClose = getSceneActionSubject(scene.slugline, false);
 
-              const seedA = 20000 + index * 150 + (artStyle === "comic_color" ? 11 : 22);
-              const seedB = 60000 + index * 150 + (artStyle === "comic_color" ? 33 : 44);
+              const seedA = 33000 + index * 120 + (artStyle === "comic_color" ? 5 : 9);
+              const seedB = 77000 + index * 120 + (artStyle === "comic_color" ? 7 : 3);
 
               newShots.push({
                 id: `shot-${scene.id}-A`,
@@ -141,9 +124,10 @@ export default function StoryboardPage() {
                 shotType: "Wide Master Framing (WMS)",
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
-                cleanActionPrompt: widePrompt,
+                displayTitle: `${scene.id}: Wide Establishing Shot`,
+                actionSubject: actionWide,
                 isGenerating: isTarget,
-                imageUrl: isTarget ? buildAiImageUrl(widePrompt, seedA) : ""
+                imageUrl: isTarget ? buildStoryboardAiUrl(actionWide, artStyle === "comic_color", seedA) : ""
               });
 
               newShots.push({
@@ -154,9 +138,10 @@ export default function StoryboardPage() {
                 shotType: "Medium Close Action (MCU)",
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Static Eye-Level",
-                cleanActionPrompt: closePrompt,
+                displayTitle: `${scene.id}: Close-Up Action Shot`,
+                actionSubject: actionClose,
                 isGenerating: isTarget,
-                imageUrl: isTarget ? buildAiImageUrl(closePrompt, seedB) : ""
+                imageUrl: isTarget ? buildStoryboardAiUrl(actionClose, artStyle === "comic_color", seedB) : ""
               });
             });
 
@@ -165,7 +150,7 @@ export default function StoryboardPage() {
 
             setTimeout(() => {
               setShots(prev => prev.map(s => ({ ...s, isGenerating: false })));
-            }, 1000);
+            }, 1200);
           }
         } catch { }
       }
@@ -178,7 +163,7 @@ export default function StoryboardPage() {
 
     shots.forEach((shot, idx) => {
       setTimeout(() => {
-        reloadSingleShot(shot.id, shot.cleanActionPrompt);
+        reloadSingleShot(shot.id, shot.actionSubject);
         if (idx === shots.length - 1) {
           setIsGeneratingAll(false);
         }
@@ -196,13 +181,13 @@ export default function StoryboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> AI Comic Storyboard Engine
+            <Sparkles className="w-3.5 h-3.5" /> StudioBinder Film Storyboard Engine
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Comic Storyboard Visualizer
+            Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder & Graphic Novel ශෛලියෙන් තිර පිටපතේ දර්ශන සඳහා AI Comic Storyboard Panels සකස් කරයි.
+            පිටපතේ දර්ශන අනුව StudioBinder Sketch සහ Graphic Novel Storyboard Panels මෙහි සකස් වේ.
           </p>
         </div>
 
@@ -231,7 +216,7 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Control Bar: Scene Selector & Art Style Switcher */}
+      {/* Control Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
@@ -267,15 +252,6 @@ export default function StoryboardPage() {
             <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
           <button
-            onClick={() => setArtStyle("comic_color")}
-            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "comic_color"
-                ? "bg-emerald-500 text-slate-950 shadow"
-                : "text-slate-400 hover:text-white"
-              }`}
-          >
-            Graphic Novel (Color)
-          </button>
-          <button
             onClick={() => setArtStyle("sketch_bw")}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "sketch_bw"
                 ? "bg-emerald-500 text-slate-950 shadow"
@@ -283,6 +259,15 @@ export default function StoryboardPage() {
               }`}
           >
             StudioBinder (B&W Sketch)
+          </button>
+          <button
+            onClick={() => setArtStyle("comic_color")}
+            className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "comic_color"
+                ? "bg-emerald-500 text-slate-950 shadow"
+                : "text-slate-400 hover:text-white"
+              }`}
+          >
+            Graphic Novel (Color)
           </button>
         </div>
       </div>
@@ -294,12 +279,12 @@ export default function StoryboardPage() {
             key={shot.id}
             className="group rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/40 transition-all overflow-hidden flex flex-col shadow-lg"
           >
-            {/* Visual Container */}
+            {/* Visual Frame */}
             <div className="relative aspect-video w-full bg-[#050a07] overflow-hidden border-b border-emerald-950/60 flex items-center justify-center">
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Drawing Comic Storyboard Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Drawing Storyboard Sketch Panel...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -307,21 +292,11 @@ export default function StoryboardPage() {
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    onError={(e) => {
-                      // Broken image නොවී comic fallback එකක් දැමීම
-                      const isHarbor = shot.sceneSlug.includes("වරාය") || shot.sceneSlug.includes("port");
-                      const pack = isHarbor ? COMIC_FALLBACKS.harbor : COMIC_FALLBACKS.lab;
-                      const fallback = artStyle === "comic_color"
-                        ? (shot.id.endsWith("-A") ? pack.colorWide : pack.colorClose)
-                        : (shot.id.endsWith("-A") ? pack.bwWide : pack.bwClose);
-                      (e.target as HTMLImageElement).src = fallback;
-                    }}
-                    className={`w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 ${artStyle === "sketch_bw" ? "filter grayscale contrast-125" : ""
-                      }`}
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-95 contrast-110"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
-                      onClick={() => reloadSingleShot(shot.id, shot.cleanActionPrompt)}
+                      onClick={() => reloadSingleShot(shot.id, shot.actionSubject)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Redraw Panel
@@ -331,9 +306,9 @@ export default function StoryboardPage() {
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08] border border-dashed border-emerald-950/80 rounded-t-2xl">
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
-                  <p className="text-xs text-slate-400 mb-3 font-medium">Panel not rendered yet</p>
+                  <p className="text-xs text-slate-400 mb-3 font-medium">Panel not drawn yet</p>
                   <button
-                    onClick={() => reloadSingleShot(shot.id, shot.cleanActionPrompt)}
+                    onClick={() => reloadSingleShot(shot.id, shot.actionSubject)}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Draw Panel
@@ -349,8 +324,8 @@ export default function StoryboardPage() {
               </div>
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
-                <span className="px-2 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[10px] font-mono text-emerald-400 border border-emerald-950">
-                  {artStyle === "comic_color" ? "Graphic Novel Art" : "StudioBinder Sketch"}
+                <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-sm text-[10px] font-mono text-slate-200 border border-slate-700">
+                  {artStyle === "sketch_bw" ? "B&W Storyboard Sketch" : "Graphic Novel Art"}
                 </span>
               </div>
             </div>
@@ -359,13 +334,13 @@ export default function StoryboardPage() {
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                  {shot.sceneSlug}
+                  {shot.displayTitle}
                 </p>
                 <h3 className="text-sm font-bold text-white mb-2">
                   {shot.shotType}
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed font-light line-clamp-3">
-                  "{shot.cleanActionPrompt}"
+                  "{shot.actionSubject}"
                 </p>
               </div>
 
