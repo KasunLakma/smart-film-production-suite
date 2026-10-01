@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal,
@@ -27,13 +27,22 @@ interface StoryboardShot {
 }
 
 export default function StoryboardPage() {
-  const [filterScene, setFilterScene] = useState("ALL");
+  const [filterScene, setFilterScene] = useState("SCENE-01"); // Default පළමු scene එක
   const [artStyle, setArtStyle] = useState<"sketch_bw" | "graphic_novel">("sketch_bw");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
+  // Cache to store rendered image Base64 so they persist across tabs
+  const renderedCache = useRef<Record<string, string>>({});
+
   const fetchAiFrame = async (shotId: string, slugline: string, isWide: boolean): Promise<boolean> => {
+    // If already in memory cache, restore instantly
+    if (renderedCache.current[shotId]) {
+      setShots(prev => prev.map(s => s.id === shotId ? { ...s, imageUrl: renderedCache.current[shotId], isGenerating: false } : s));
+      return true;
+    }
+
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
     try {
@@ -45,6 +54,7 @@ export default function StoryboardPage() {
 
       const data = await res.json();
       if (data.success && data.imageUrl) {
+        renderedCache.current[shotId] = data.imageUrl;
         setShots(prev => prev.map(s => s.id === shotId ? {
           ...s,
           imageUrl: data.imageUrl,
@@ -59,10 +69,11 @@ export default function StoryboardPage() {
     }
   };
 
+  // Initialize shots
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes = localStorage.getItem("active_screenplay_scenes");
-      const activeFilter = localStorage.getItem("storyboard_filter") || "ALL";
+      const activeFilter = localStorage.getItem("storyboard_filter") || "SCENE-01";
 
       if (storedScenes) {
         try {
@@ -76,8 +87,11 @@ export default function StoryboardPage() {
               const shotNumA = `SHOT ${String(index + 1).padStart(2, "0")}A`;
               const shotNumB = `SHOT ${String(index + 1).padStart(2, "0")}B`;
 
+              const idA = `shot-${scene.id}-A`;
+              const idB = `shot-${scene.id}-B`;
+
               newShots.push({
-                id: `shot-${scene.id}-A`,
+                id: idA,
                 sceneId: scene.id,
                 shotNumber: shotNumA,
                 sceneSlug: scene.slugline,
@@ -86,11 +100,11 @@ export default function StoryboardPage() {
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Master`,
                 isGenerating: false,
-                imageUrl: ""
+                imageUrl: renderedCache.current[idA] || ""
               });
 
               newShots.push({
-                id: `shot-${scene.id}-B`,
+                id: idB,
                 sceneId: scene.id,
                 shotNumber: shotNumB,
                 sceneSlug: scene.slugline,
@@ -99,26 +113,34 @@ export default function StoryboardPage() {
                 cameraMovement: "Static Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Key Action`,
                 isGenerating: false,
-                imageUrl: ""
+                imageUrl: renderedCache.current[idB] || ""
               });
             });
 
             setShots(newShots);
             setFilterScene(activeFilter);
-
-            // Sequential Queue: එකකට පසු අනෙක render වීම
-            const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
-            const runSequence = async () => {
-              for (const shot of targetShots) {
-                await fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
-              }
-            };
-            runSequence();
           }
         } catch { }
       }
     }
   }, [artStyle]);
+
+  // Tab එක මාරු කරන විට හෝ අලුතින් load වන විට, එම Scene එකේ නොඇඳුණු Panels ඇඳීම
+  useEffect(() => {
+    if (shots.length === 0) return;
+
+    const visibleShots = filterScene === "ALL"
+      ? shots
+      : shots.filter(s => s.sceneId === filterScene);
+
+    visibleShots.forEach((shot, index) => {
+      if (!shot.imageUrl && !shot.isGenerating) {
+        setTimeout(() => {
+          fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
+        }, index * 1000);
+      }
+    });
+  }, [filterScene, shots.length]);
 
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
@@ -167,7 +189,7 @@ export default function StoryboardPage() {
               </>
             ) : (
               <>
-                <Wand2 className="w-4 h-4" /> Generate All Frames
+                <Wand2 className="w-4 h-4" /> Synthesize All Frames
               </>
             )}
           </button>
@@ -210,7 +232,10 @@ export default function StoryboardPage() {
             <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
           <button
-            onClick={() => setArtStyle("sketch_bw")}
+            onClick={() => {
+              renderedCache.current = {}; // Invalidate cache on style change
+              setArtStyle("sketch_bw");
+            }}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "sketch_bw"
                 ? "bg-emerald-500 text-slate-950 shadow"
                 : "text-slate-400 hover:text-white"
@@ -219,7 +244,10 @@ export default function StoryboardPage() {
             StudioBinder (B&W Sketch)
           </button>
           <button
-            onClick={() => setArtStyle("graphic_novel")}
+            onClick={() => {
+              renderedCache.current = {};
+              setArtStyle("graphic_novel");
+            }}
             className={`px-3 py-1 rounded-lg text-xs font-semibold transition-all ${artStyle === "graphic_novel"
                 ? "bg-emerald-500 text-slate-950 shadow"
                 : "text-slate-400 hover:text-white"
@@ -253,7 +281,10 @@ export default function StoryboardPage() {
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
-                      onClick={() => fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"))}
+                      onClick={() => {
+                        delete renderedCache.current[shot.id];
+                        fetchAiFrame(shot.id, shot.sceneSlug, shot.id.endsWith("-A"));
+                      }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Re-render Frame
