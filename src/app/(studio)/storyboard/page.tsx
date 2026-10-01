@@ -26,24 +26,12 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-// සිනමාත්මක සැබෑ Cinematic Visuals එකතුව
-const CINEMATIC_VISUAL_PRESETS: Record<string, string[]> = {
-  "SCENE-01": [
-    "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80", // Cyber dark room
-    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"  // Tech terminal
-  ],
-  "SCENE-02": [
-    "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80", // Wet neon rainy street
-    "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80"  // Surveillance look
-  ],
-  "SCENE-03": [
-    "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1200&q=80", // Control room / servers
-    "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80"  // Hard drive / glowing lights
-  ],
-  "SCENE-04": [
-    "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1200&q=80", // Foggy docks container yard
-    "https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1200&q=80"  // Harbor boat dawn
-  ]
+// Storyboard AI Prompt Generator (Black & White Comic Sketch Style)
+const buildStoryboardAiUrl = (promptText: string, seed: number) => {
+  const cleanPrompt = encodeURIComponent(
+    `black and white film storyboard sketch, graphic novel comic ink drawing, dynamic framing, cinematic pencil sketch, ${promptText}`
+  );
+  return `https://image.pollinations.ai/prompt/${cleanPrompt}?width=800&height=450&nologo=true&seed=${seed}`;
 };
 
 export default function StoryboardPage() {
@@ -63,37 +51,36 @@ export default function StoryboardPage() {
           if (Array.isArray(parsed) && parsed.length > 0) {
             setSceneList(parsed.map(s => ({ id: s.id, slugline: s.slugline })));
 
-            // Generate initial shot structures
             const generatedShots: StoryboardShot[] = [];
 
             parsed.forEach((scene, scnIdx) => {
               const isTargetScene = activeFilter === "ALL" || activeFilter === scene.id;
 
-              // Shot A
+              const shotA_Prompt = `${scene.slugline}, wide angle establishing shot, ${scene.synopsis.slice(0, 90)}, key props: ${scene.props.join(", ") || "set details"}`;
+              const shotB_Prompt = `medium close-up shot, character focus ${scene.characters.join(" and ") || "lead character"}, expressive intense reaction, scene dialogue action`;
+
               generatedShots.push({
                 id: `shot-${scene.id}-A`,
                 sceneId: scene.id,
                 shotNumber: `SHOT ${String(scnIdx + 1).padStart(2, "0")}A`,
                 sceneSlug: scene.slugline,
-                shotType: "Wide Master Framing (WMS)",
+                shotType: "High Angle Wide Storyboard",
                 lens: "24mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
-                visualPrompt: `${scene.synopsis.slice(0, 100)}... පසුතල උපකරණ: ${scene.props.join(", ") || "ස්වාභාවික සැකසුම"}`,
-                // Target scene එක පමණක් generate වීම simulate කරයි
+                visualPrompt: shotA_Prompt,
                 isGenerating: isTargetScene,
                 imageUrl: ""
               });
 
-              // Shot B
               generatedShots.push({
                 id: `shot-${scene.id}-B`,
                 sceneId: scene.id,
                 shotNumber: `SHOT ${String(scnIdx + 1).padStart(2, "0")}B`,
                 sceneSlug: scene.slugline,
-                shotType: "Medium Close Action (MCU)",
+                shotType: "Tight Close-Up Frame",
                 lens: "50mm Prime T1.5",
-                cameraMovement: "Static Eye-level",
-                visualPrompt: `චරිත කෙරෙහි අවධානය: ${scene.characters.join(" & ") || "ප්‍රධාන චරිත"}`,
+                cameraMovement: "Eye-Level Static",
+                visualPrompt: shotB_Prompt,
                 isGenerating: isTargetScene,
                 imageUrl: ""
               });
@@ -102,26 +89,20 @@ export default function StoryboardPage() {
             setShots(generatedShots);
             setFilterScene(activeFilter);
 
-            // Simulation: තෝරාගත් target scene එකේ shots ටික පමණක් තත්පර 1.2 කින් render වී Image එක වැටීම
+            // තෝරාගත් Scene එකට අදාළව පමණක් AI Image Synthesis ආරම්භ වීම
             setTimeout(() => {
-              setShots(prev => prev.map(shot => {
+              setShots(prev => prev.map((shot, idx) => {
                 const isTarget = activeFilter === "ALL" || activeFilter === shot.sceneId;
                 if (isTarget) {
-                  const presets = CINEMATIC_VISUAL_PRESETS[shot.sceneId] || [
-                    "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1200&q=80",
-                    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"
-                  ];
-                  const img = shot.id.endsWith("-A") ? presets[0] : presets[1];
-
                   return {
                     ...shot,
                     isGenerating: false,
-                    imageUrl: img
+                    imageUrl: buildStoryboardAiUrl(shot.visualPrompt, 1000 + idx * 37)
                   };
                 }
                 return { ...shot, isGenerating: false };
               }));
-            }, 1200);
+            }, 1000);
           }
         } catch {
           // fallback
@@ -135,22 +116,17 @@ export default function StoryboardPage() {
     setShots(prev => prev.map(s => s.id === shotId ? { ...s, isGenerating: true } : s));
 
     setTimeout(() => {
-      setShots(prev => prev.map(s => {
+      setShots(prev => prev.map((s, idx) => {
         if (s.id === shotId) {
-          const presets = CINEMATIC_VISUAL_PRESETS[s.sceneId] || [
-            "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80",
-            "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80"
-          ];
-          const img = s.id.endsWith("-A") ? presets[0] : presets[1];
           return {
             ...s,
             isGenerating: false,
-            imageUrl: img
+            imageUrl: buildStoryboardAiUrl(s.visualPrompt, Math.floor(Math.random() * 99999))
           };
         }
         return s;
       }));
-    }, 1200);
+    }, 1500);
   };
 
   // Generate All Scenes
@@ -159,19 +135,13 @@ export default function StoryboardPage() {
     setShots(prev => prev.map(s => ({ ...s, isGenerating: true })));
 
     setTimeout(() => {
-      setShots(prev => prev.map(s => {
-        const presets = CINEMATIC_VISUAL_PRESETS[s.sceneId] || [
-          "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80",
-          "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80"
-        ];
-        return {
-          ...s,
-          isGenerating: false,
-          imageUrl: s.id.endsWith("-A") ? presets[0] : presets[1]
-        };
-      }));
+      setShots(prev => prev.map((s, idx) => ({
+        ...s,
+        isGenerating: false,
+        imageUrl: buildStoryboardAiUrl(s.visualPrompt, 2000 + idx * 43)
+      })));
       setIsGeneratingAll(false);
-    }, 1500);
+    }, 2000);
   };
 
   const filteredShots = filterScene === "ALL"
@@ -184,13 +154,13 @@ export default function StoryboardPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> AI Visual Shot Sequencing
+            <Sparkles className="w-3.5 h-3.5" /> AI Comic & Sketch Storyboard Generator
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             16:9 Cinematic Storyboard
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Breakdown එකෙන් තෝරාගත් දර්ශන සඳහා පමණක් 16:9 සිනමාත්මක visuals නිවැරදිව මෙහි Generate වේ.
+            Breakdown එකෙන් තෝරාගත් දර්ශන සඳහා StudioBinder ශෛලියේ කළු-සුදු AI Storyboard Frames මෙහි සකස් වේ.
           </p>
         </div>
 
@@ -208,7 +178,7 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Synthesizing All Sequences...
+                <Loader2 className="w-4 h-4 animate-spin" /> Synthesizing All Frames...
               </>
             ) : (
               <>
@@ -251,10 +221,10 @@ export default function StoryboardPage() {
 
         <div className="flex items-center gap-2 text-xs font-medium text-slate-400">
           <span className="px-2.5 py-1 rounded bg-[#0e1d15] border border-emerald-500/20 text-emerald-400 font-mono">
-            16:9 Cinema Scope
+            Comic / Ink Sketch Mode
           </span>
           <span className="text-slate-500">•</span>
-          <span>FLUX Visual Pipeline</span>
+          <span>16:9 Aspect Ratio</span>
         </div>
       </div>
 
@@ -265,26 +235,26 @@ export default function StoryboardPage() {
             key={shot.id}
             className="group rounded-2xl bg-[#09130e] border border-emerald-950/70 hover:border-emerald-500/40 transition-all overflow-hidden flex flex-col shadow-lg"
           >
-            {/* 16:9 Visual Container */}
+            {/* 16:9 Sketch Visual Container */}
             <div className="relative aspect-video w-full bg-[#050a07] overflow-hidden border-b border-emerald-950/60 flex items-center justify-center">
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Synthesizing 16:9 Shot Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Rendering Ink Storyboard Sketch...</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-90 contrast-110"
+                    className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 filter grayscale contrast-125"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/70 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
                     <button
                       onClick={() => handleGenerateFrame(shot.id)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Regenerate
+                      <RefreshCw className="w-3 h-3" /> Redraw Frame
                     </button>
                   </div>
                 </>
@@ -301,21 +271,21 @@ export default function StoryboardPage() {
                 </div>
               )}
 
-              {/* Badges */}
+              {/* Storyboard Header Badges */}
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
-                <span className="px-2 py-0.5 rounded bg-slate-950/80 backdrop-blur-md border border-emerald-500/30 text-emerald-300 text-[11px] font-bold font-mono">
+                <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
                   {shot.shotNumber}
                 </span>
               </div>
 
               <div className="absolute bottom-2 right-2 pointer-events-none">
-                <span className="px-2 py-0.5 rounded bg-black/75 backdrop-blur-sm text-[10px] font-mono text-slate-300">
-                  16:9 DCI
+                <span className="px-2 py-0.5 rounded bg-black/80 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-700">
+                  Sketch Frame
                 </span>
               </div>
             </div>
 
-            {/* Details */}
+            {/* Details (StudioBinder Comic Style) */}
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
@@ -332,11 +302,11 @@ export default function StoryboardPage() {
               {/* Optics */}
               <div className="pt-3 border-t border-emerald-950/60 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Optics / Lens</span>
+                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>
                   <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.lens}</span>
                 </div>
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>
+                  <span className="text-slate-500 block text-[10px] uppercase">Camera Movement</span>
                   <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.cameraMovement}</span>
                 </div>
               </div>
