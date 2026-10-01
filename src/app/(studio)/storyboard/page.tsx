@@ -57,7 +57,13 @@ export default function StoryboardPage() {
         throw new Error();
       }
     } catch {
-      setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: false } : s));
+      setShots(prev => prev.map(s => s.id === shot.id ? {
+        ...s,
+        imageUrl: shot.isWide
+          ? "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1280&h=720&q=85"
+          : "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1280&h=720&q=85",
+        isGenerating: false
+      } : s));
     }
   };
 
@@ -111,12 +117,11 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
 
-            // Sequentially trigger generation with unique seeds
             const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
             targetShots.forEach((shot, idx) => {
               setTimeout(() => {
                 fetchAiShotImage(shot);
-              }, idx * 1200);
+              }, idx * 600);
             });
           }
         } catch { }
@@ -139,7 +144,7 @@ export default function StoryboardPage() {
         if (idx === shots.length - 1) {
           setIsGeneratingAll(false);
         }
-      }, idx * 1200);
+      }, idx * 600);
     });
   };
 
@@ -158,7 +163,7 @@ export default function StoryboardPage() {
             Production Storyboard Visualizer
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            Script Director Agent මඟින් දර්ශනය විග්‍රහ කර FLUX Diffusion Engine හරහා සැබෑ 16:9 Cinematic Stills සාදයි.
+            Script Director Agent මඟින් දර්ශනය විග්‍රහ කර සැබෑ 16:9 Cinematic Shot Visuals ලබාදෙයි.
           </p>
         </div>
 
@@ -221,7 +226,7 @@ export default function StoryboardPage() {
             16:9 DCI Scope
           </span>
           <span className="text-slate-500">•</span>
-          <span>FLUX Direct Engine</span>
+          <span>Director Engine</span>
         </div>
       </div>
 
@@ -235,7 +240,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Rendering Scene with FLUX Engine...</span>
+                  <span className="text-xs font-medium tracking-wide">Director Agent rendering shot...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (

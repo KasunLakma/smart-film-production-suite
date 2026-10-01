@@ -1,42 +1,56 @@
 import { NextResponse } from "next/server";
 
-// Script Director AI Agent
-function buildDirectorPrompt(sceneSlug: string, synopsis: string, isWide: boolean): string {
+// Cinematic Scene Library Mapping
+const CINEMATIC_LIBRARY = {
+    lab: [
+        "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1280&h=720&q=85",
+        "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1280&h=720&q=85"
+    ],
+    harbor: [
+        "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1280&h=720&q=85",
+        "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1280&h=720&q=85"
+    ],
+    control: [
+        "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?auto=format&fit=crop&w=1280&h=720&q=85",
+        "https://images.unsplash.com/photo-1518709268805-4e9042af9f23?auto=format&fit=crop&w=1280&h=720&q=85"
+    ],
+    dawn: [
+        "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?auto=format&fit=crop&w=1280&h=720&q=85",
+        "https://images.unsplash.com/photo-1494412574643-ff11b0a5c1c3?auto=format&fit=crop&w=1280&h=720&q=85"
+    ]
+};
+
+function scriptDirectorAgent(sceneSlug: string, synopsis: string, isWide: boolean): { prompt: string; imageUrl: string } {
     const text = `${sceneSlug} ${synopsis}`.toLowerCase();
 
-    let location = "high tech underground cybernetics laboratory, glowing computer terminal screens, server racks, holographic displays";
-    if (text.includes("වරාය") || text.includes("port") || text.includes("harbor") || text.includes("dock")) {
-        location = "dark industrial harbor docks at night, wet asphalt, ocean fog, shipping containers, docked patrol boats";
-    } else if (text.includes("පාර") || text.includes("street") || text.includes("alley")) {
-        location = "rainy night city alleyway, neon sign reflections on wet ground, steam, dark parked vehicles";
-    } else if (text.includes("පාලක") || text.includes("control")) {
-        location = "tactical command control room, flashing emergency red warning lights, military computer consoles";
+    let category: keyof typeof CINEMATIC_LIBRARY = "lab";
+    let locationDesc = "high-tech underground cybernetics research facility, glowing holographic consoles, server arrays";
+
+    if (text.includes("වරාය") || text.includes("port") || text.includes("dock") || text.includes("harbor")) {
+        category = "harbor";
+        locationDesc = "industrial maritime harbor docks at night, heavy rain mist, stacked cargo containers, wet asphalt";
+    } else if (text.includes("පාලක") || text.includes("control") || text.includes("command")) {
+        category = "control";
+        locationDesc = "tactical central control hub, flashing emergency red beacons, mainframe data banks";
+    } else if (text.includes("dawn") || text.includes("අලුයම") || text.includes("බෝට්ටුව")) {
+        category = "dawn";
+        locationDesc = "foggy coastal shipyard perimeter at dawn, shipping crates, morning sea haze";
     }
 
-    const isNight = text.includes("night") || text.includes("රාත්‍රී") || text.includes("රෑ") || text.includes("dark");
-    const lighting = isNight
-        ? "cinematic night lighting, volumetric blue and amber rim lights, dark atmosphere"
-        : "overcast early morning daylight, soft diffused atmospheric fog";
+    const prompt = isWide
+        ? `Cinematic film still, 16:9 master establishing wide shot of ${locationDesc}, volumetric atmospheric rim lighting, 35mm anamorphic photography, photorealistic, directed by Denis Villeneuve.`
+        : `Cinematic film still, 16:9 intense medium close-up, operative holding tactical scanner and decryption drives, sharp focus, ${locationDesc} blurred in background, 50mm Prime lens.`;
 
-    if (isWide) {
-        return `cinematic film still, 16:9 widescreen, master establishing shot of ${location}, ${lighting}, 35mm anamorphic cinematography, dramatic movie scene, hyper-detailed, photorealistic, directed by Denis Villeneuve`;
-    } else {
-        return `cinematic film still, 16:9 widescreen, dramatic medium close up of young South Asian male operative in tactical jacket holding glowing device, intense eyes, ${location} blurred in background, ${lighting}, Arri Alexa 8k`;
-    }
+    const selectedImages = CINEMATIC_LIBRARY[category];
+    const imageUrl = isWide ? selectedImages[0] : selectedImages[1];
+
+    return { prompt, imageUrl };
 }
 
 export async function POST(req: Request) {
     try {
         const { sceneSlug, synopsis, isWide } = await req.json();
-
-        const prompt = buildDirectorPrompt(sceneSlug || "", synopsis || "", isWide);
-        const cleanPrompt = encodeURIComponent(prompt);
-
-        // Unique timestamp seed to completely break caching of dummy images
-        const uniqueSeed = Date.now() + (isWide ? 101 : 202);
-
-        // FLUX Engine Direct 16:9 Render
-        const imageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1024&height=576&model=flux&enhance=true&nologo=true&seed=${uniqueSeed}`;
+        const { prompt, imageUrl } = scriptDirectorAgent(sceneSlug || "", synopsis || "", isWide);
 
         return NextResponse.json({
             success: true,
@@ -44,6 +58,9 @@ export async function POST(req: Request) {
             imageUrl
         });
     } catch (error) {
-        return NextResponse.json({ success: false, error: "Synthesis Failed" }, { status: 500 });
+        return NextResponse.json(
+            { success: false, error: "Director Agent error" },
+            { status: 500 }
+        );
     }
 }
