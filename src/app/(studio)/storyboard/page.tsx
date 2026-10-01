@@ -27,24 +27,13 @@ interface StoryboardShot {
   isGenerating?: boolean;
 }
 
-const FALLBACK_IMAGES: Record<string, string[]> = {
-  lab: [
-    "https://images.unsplash.com/photo-1508739773434-c26b3d09e071?auto=format&fit=crop&w=1200&q=80",
-    "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?auto=format&fit=crop&w=1200&q=80"
-  ],
-  port: [
-    "https://images.unsplash.com/photo-1514565131-fce0801e5785?auto=format&fit=crop&w=1200&q=80",
-    "https://images.unsplash.com/photo-1509198397868-475647b2a1e5?auto=format&fit=crop&w=1200&q=80"
-  ]
-};
-
 export default function StoryboardPage() {
   const [filterScene, setFilterScene] = useState("ALL");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const triggerAiAgentForShot = async (shot: StoryboardShot) => {
+  const fetchAiShotImage = async (shot: StoryboardShot) => {
     try {
       const res = await fetch("/api/storyboard/generate", {
         method: "POST",
@@ -65,20 +54,10 @@ export default function StoryboardPage() {
           isGenerating: false
         } : s));
       } else {
-        throw new Error("Failed");
+        throw new Error();
       }
     } catch {
-      // Fallback if network drops
-      const fallbackList = shot.sceneSlug.includes("වරාය") || shot.sceneSlug.includes("port")
-        ? FALLBACK_IMAGES.port
-        : FALLBACK_IMAGES.lab;
-      const fallbackImg = shot.isWide ? fallbackList[0] : fallbackList[1];
-
-      setShots(prev => prev.map(s => s.id === shot.id ? {
-        ...s,
-        imageUrl: fallbackImg,
-        isGenerating: false
-      } : s));
+      setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: false } : s));
     }
   };
 
@@ -132,11 +111,12 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
 
+            // Sequentially trigger generation with unique seeds
             const targetShots = newShots.filter(s => activeFilter === "ALL" || activeFilter === s.sceneId);
             targetShots.forEach((shot, idx) => {
               setTimeout(() => {
-                triggerAiAgentForShot(shot);
-              }, idx * 1000);
+                fetchAiShotImage(shot);
+              }, idx * 1200);
             });
           }
         } catch { }
@@ -146,7 +126,7 @@ export default function StoryboardPage() {
 
   const handleRegenerateFrame = (shot: StoryboardShot) => {
     setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: true } : s));
-    triggerAiAgentForShot(shot);
+    fetchAiShotImage(shot);
   };
 
   const handleGenerateAll = () => {
@@ -155,11 +135,11 @@ export default function StoryboardPage() {
 
     shots.forEach((shot, idx) => {
       setTimeout(() => {
-        triggerAiAgentForShot(shot);
+        fetchAiShotImage(shot);
         if (idx === shots.length - 1) {
           setIsGeneratingAll(false);
         }
-      }, idx * 1000);
+      }, idx * 1200);
     });
   };
 
@@ -241,7 +221,7 @@ export default function StoryboardPage() {
             16:9 DCI Scope
           </span>
           <span className="text-slate-500">•</span>
-          <span>FLUX Agent</span>
+          <span>FLUX Direct Engine</span>
         </div>
       </div>
 
@@ -255,7 +235,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">AI Director Agent synthesizing shot...</span>
+                  <span className="text-xs font-medium tracking-wide">Rendering Scene with FLUX Engine...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -263,11 +243,6 @@ export default function StoryboardPage() {
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
-                    onError={(e) => {
-                      // Fallback image if network times out
-                      const fallbackList = shot.sceneSlug.includes("වරාය") ? FALLBACK_IMAGES.port : FALLBACK_IMAGES.lab;
-                      (e.target as HTMLImageElement).src = shot.isWide ? fallbackList[0] : fallbackList[1];
-                    }}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500 brightness-95 contrast-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
@@ -275,14 +250,14 @@ export default function StoryboardPage() {
                       onClick={() => handleRegenerateFrame(shot)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Re-synthesize
+                      <RefreshCw className="w-3 h-3" /> Re-render Frame
                     </button>
                   </div>
                 </>
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08] border border-dashed border-emerald-950/80 rounded-t-2xl">
                   <Video className="w-8 h-8 text-slate-600 mb-2" />
-                  <p className="text-xs text-slate-400 mb-3 font-medium">Shot not synthesized yet</p>
+                  <p className="text-xs text-slate-400 mb-3 font-medium">Shot not rendered yet</p>
                   <button
                     onClick={() => handleRegenerateFrame(shot)}
                     className="px-3 py-1.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold shadow-md transition-all flex items-center gap-1.5 cursor-pointer"
