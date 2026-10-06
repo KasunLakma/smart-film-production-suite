@@ -1,678 +1,452 @@
 "use client";
 
-import { useState } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
+import React, { useState } from "react";
 import {
   FileText,
-  Sparkles,
-  Users,
-  Box,
   UploadCloud,
-  Play,
-  CheckCircle2,
-  ArrowRight,
-  FileCheck,
-  Film,
-  Wand2,
-  Loader2,
-  MessageSquare,
-  Trash2,
-  Edit2,
-  X,
+  Sparkles,
   CheckSquare,
-  Square
+  Square,
+  AlertCircle,
+  RefreshCw,
+  Film,
+  Trash2
 } from "lucide-react";
 
-interface DialogueItem {
-  speaker: string;
-  line: string;
-}
-
-interface SceneEntity {
-  id: string;
+interface ExtractedScene {
   sceneNumber: number;
   slugline: string;
+  setting: string;
   timeOfDay: string;
-  locationType: string;
   synopsis: string;
   characters: string[];
   props: string[];
-  dialogues: DialogueItem[];
-  plannedShots: number;
+  dialogues: { speaker: string; text: string }[];
 }
 
-const SINHALA_SCRIPT_TEMPLATE = `SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT
-අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හෝලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. ඔහුගේ අතේ කුඩා විදුලි පන්දමක් සහ ඩිජිටල් ස්කෑනරයක් ඇත.
-
-නිමල්
-"කසුන්... තව විනාඩි දහයකින් මුළු ග්‍රිඩ් එකම ඩවුන් වෙනවා. ඔය ෆයිල් එක ගත්තද?"
-
-කසුන්
-"ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර තිහක් ඕනේ. දොර ළඟට වෙලා බලාගෙන ඉන්න."
-
-SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS
-තද වැස්ස මාර්ගය මත පතිත වේ. කළු පැහැති වැන් රථයක් නවත්වයි. රහස් නියෝජිතයා BINOCULARS උපකරණයෙන් ගේට්ටුව දෙස බලා සිටියි.
-
-රහස් නියෝජිතයා
-"ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ. පිටවීමේ සලකුණක් නෑ."
-
-SCENE 03: INT. ප්‍රධාන පාලක මැදිරිය - NIGHT
-පරිගණක තිරයේ දත්ත හුවමාරුව අවසන් වේ. කසුන් ENCRYPTED HARD DRIVE එක ගලවා ගනී. හදිසි අනතුරු ඇඟවීමේ රතු ලාම්පු දැල්වෙයි.
-
-නිමල්
-"උන් මේන් පවර් එක කැපුවා! දැන්ම යන්න වෙනවා!"
-
-කසුන්
-"දෘඪ තැටිය ගත්තා. පිටුපස දොරෙන් එළියට බහිමු!"
-
-SCENE 04: EXT. වරාය අංගනය - DAWN
-අලුයම මීදුමෙන් වැසුණු වරාය පරිශ්‍රය. කසුන් සහ නිමල් බහාලුම් අතරින් බෝට්ටුව දෙසට වේගයෙන් දිව යති.
-
-නිමල්
-"බෝට්ටුව තියෙන්නේ තුන්වෙනි ජැටිය ළඟ. ඉක්මන් කරන්න!"`;
-
 export default function ScriptBreakdownPage() {
-  const router = useRouter();
-  const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
-  const [scriptText, setScriptText] = useState(SINHALA_SCRIPT_TEMPLATE);
-  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
-  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
-  const [hasParsed, setHasParsed] = useState(true);
+  const [activeTab, setActiveTab] = useState<"upload" | "paste">("upload");
+  const [rawText, setRawText] = useState<string>("");
+  const [fileName, setFileName] = useState<string | null>(null);
 
-  const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
-  const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
+  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ දත්ත පෙන්වීම සම්පූර්ණයෙන්ම වැළකේ
+  const [scenes, setScenes] = useState<ExtractedScene[]>([]);
+  const [selectedScenes, setSelectedScenes] = useState<number[]>([]);
+  const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
-    const lines = raw.split("\n");
-    const parsed: SceneEntity[] = [];
-    let currentScene: SceneEntity | null = null;
-    let synopsisBuffer: string[] = [];
-    let currentSpeaker: string | null = null;
+  // File Upload Handlers
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-    for (const rawLine of lines) {
-      const trimmed = rawLine.trim();
-      if (!trimmed) continue;
+    setFileName(file.name);
+    setErrorMsg(null);
 
-      const isSlugline = /^(SCENE\s*\d+:?|දර්ශනය\s*\d+:?|(INT\.|EXT\.|I\/E\.|අභ්‍යන්තර|බාහිර))/i.test(trimmed);
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setRawText(content);
+    };
+    reader.onerror = () => {
+      setErrorMsg("ස්ක්‍රිප්ට් ෆයිල් එක කියවීමේදී දෝෂයක් සිදුවිය.");
+    };
+    reader.readAsText(file);
+  };
 
-      if (isSlugline) {
+  // සිංහල සහ ඉංග්‍රීසි භාෂා දෙකටම ගැළපෙන Dynamic Parsing Logic
+  const parseScreenplayDynamic = (text: string): ExtractedScene[] => {
+    const lines = text.split(/\r?\n/);
+    const parsed: ExtractedScene[] = [];
+    let currentScene: ExtractedScene | null = null;
+
+    // Sluglines සඳහා RegEx (English: INT/EXT, Sinhala: අභ්‍යන්තර/බාහිර හෝ SCENE)
+    const sluglinePattern = /^(SCENE\s*\d+|INT\.?|EXT\.?|INT\/EXT\.?|අභ්‍යන්තර|බාහිර|දර්ශනය\s*\d+)/i;
+    const propWords = [
+      "GUN", "PHONE", "MAP", "REVOLVER", "CAR", "KNIFE", "BAG", "BOTTLE", "MONEY", "CAMERA", "LAPTOP",
+      "තුවක්කුව", "දුරකථනය", "සිතියම", "පිස්තෝලය", "කාර්", "පිහිය", "බෑගය", "බෝතලය", "මුදල්", "කැමරාව"
+    ];
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
+
+      if (sluglinePattern.test(line)) {
         if (currentScene) {
-          currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ පසුතල විස්තරය සහ පසුබිම් ක්‍රියාදාමය.";
           parsed.push(currentScene);
-          synopsisBuffer = [];
-          currentSpeaker = null;
         }
 
-        const sceneNum = parsed.length + 1;
-        const isExt = /EXT\.|බාහිර/i.test(trimmed);
-        const isNight = /NIGHT|රෑ|රාත්‍රී|DAWN|අලුයම|DARK/i.test(trimmed);
+        // Setting හඳුනා ගැනීම
+        let setting = "SCENE";
+        if (/INT|අභ්‍යන්තර/i.test(line)) setting = "INT (අභ්‍යන්තර)";
+        else if (/EXT|බාහිර/i.test(line)) setting = "EXT (බාහිර)";
+
+        // Time of Day හඳුනා ගැනීම
+        let timeOfDay = "DAY";
+        if (/NIGHT|රාත්‍රී/i.test(line)) timeOfDay = "NIGHT / රාත්‍රී";
+        else if (/DAY|දවල්|උදෑසන/i.test(line)) timeOfDay = "DAY / දහවල්";
+        else if (/CONTINUOUS|අඛණ්ඩ/i.test(line)) timeOfDay = "CONTINUOUS";
 
         currentScene = {
-          id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
-          sceneNumber: sceneNum,
-          slugline: trimmed,
-          locationType: isExt ? "EXT (බාහිර)" : "INT (අභ්‍යන්තර)",
-          timeOfDay: isNight ? "NIGHT / DAWN" : "DAY",
+          sceneNumber: parsed.length + 1,
+          slugline: line,
+          setting,
+          timeOfDay,
           synopsis: "",
           characters: [],
           props: [],
           dialogues: [],
-          plannedShots: 3
         };
-      } else if (currentScene) {
-        const isCharacterCue = /^(කසුන්|නිමල්|රහස් නියෝජිතයා|ELENA|MARCUS|KAI|DIRECTOR|MAYA)$/i.test(trimmed);
+        continue;
+      }
 
-        if (isCharacterCue) {
-          currentSpeaker = trimmed;
-          if (!currentScene.characters.includes(trimmed)) {
-            currentScene.characters.push(trimmed);
-          }
-        } else if (trimmed.startsWith('"') || (currentSpeaker && trimmed.length > 2)) {
-          const dialogueSpeaker = currentSpeaker || "Character";
-          currentScene.dialogues.push({
-            speaker: dialogueSpeaker,
-            line: trimmed.replace(/^["“]|["”]$/g, "")
-          });
-          currentSpeaker = null;
-        } else {
-          synopsisBuffer.push(trimmed);
-          const inlineChars = trimmed.match(/\b(කසුන්|නිමල්|රහස් නියෝජිතයා|ELENA|MARCUS|KAI)\b/gi);
-          if (inlineChars) {
-            inlineChars.forEach((c) => {
-              const cleaned = c.trim();
-              if (!currentScene?.characters.includes(cleaned)) {
-                currentScene?.characters.push(cleaned);
-              }
-            });
+      if (currentScene) {
+        // දෙබස් හඳුනා ගැනීම (Character: Dialogue හෝ කථකයාගේ නම පමණක් ඇති පේළි)
+        if (line.includes(":") || line.includes("-")) {
+          const parts = line.split(/[:\-]/);
+          const speaker = parts[0].trim();
+          const speech = parts.slice(1).join(":").trim();
+
+          if (speaker.length < 30 && speech.length > 0) {
+            if (!currentScene.characters.includes(speaker)) {
+              currentScene.characters.push(speaker);
+            }
+            currentScene.dialogues.push({ speaker, text: speech });
+            continue;
           }
         }
 
-        if (/විදුලි පන්දමක්|පන්දම/i.test(trimmed) && !currentScene.props.includes("විදුලි පන්දම")) currentScene.props.push("විදුලි පන්දම");
-        if (/ස්කෑනරයක්|ස්කෑනර්/i.test(trimmed) && !currentScene.props.includes("ඩිජිටල් ස්කෑනරය")) currentScene.props.push("ඩිජිටල් ස්කෑනරය");
-        if (/WALKIE-TALKIE|සන්නිවේදන/i.test(trimmed) && !currentScene.props.includes("Walkie-Talkie")) currentScene.props.push("Walkie-Talkie");
-        if (/BINOCULARS|දුරදක්නය/i.test(trimmed) && !currentScene.props.includes("දුරදක්නය (Binoculars)")) currentScene.props.push("දුරදක්නය (Binoculars)");
-        if (/HARD DRIVE|දෘඪ තැටිය/i.test(trimmed) && !currentScene.props.includes("Encrypted Hard Drive")) currentScene.props.push("Encrypted Hard Drive");
-        if (/බහාලුම්|CONTAINER/i.test(trimmed) && !currentScene.props.includes("බහාලුම් (Containers)")) currentScene.props.push("බහාලුම් (Containers)");
-        if (/හෝලෝග්‍රැෆික්/i.test(trimmed) && !currentScene.props.includes("හෝලෝග්‍රැෆික් උපකරණය")) currentScene.props.push("හෝලෝග්‍රැෆික් උපකරණය");
+        // Props හඳුනා ගැනීම
+        propWords.forEach((pw) => {
+          if (line.toUpperCase().includes(pw.toUpperCase()) && !currentScene!.props.includes(pw)) {
+            currentScene!.props.push(pw);
+          }
+        });
+
+        // විස්තරාත්මක ඡේද (Action / Synopsis)
+        if (!currentScene.synopsis && line.length > 20) {
+          currentScene.synopsis = line;
+        }
       }
     }
 
     if (currentScene) {
-      currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "දර්ශනයේ පසුතල විස්තරය සහ පසුබිම් ක්‍රියාදාමය.";
       parsed.push(currentScene);
     }
 
     return parsed;
   };
 
-  const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>(() => parseScriptIntoScenes(SINHALA_SCRIPT_TEMPLATE));
+  // Execute Parse
+  const handleExecuteParse = async (engine: "RULE_BASED" | "LLM") => {
+    if (!rawText.trim()) {
+      setErrorMsg("කරුණාකර ස්ක්‍රිප්ට් එකක් Upload කරන්න හෝ Text එක Paste කරන්න.");
+      return;
+    }
 
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setUploadedFile(file);
+    setIsLoading(true);
+    setErrorMsg(null);
+
+    try {
+      // පළමුව Dynamic Client Parser මඟින් Parse කිරීම
+      const dynamicResults = parseScreenplayDynamic(rawText);
+
+      if (dynamicResults.length === 0) {
+        // Line-by-line fallback
+        const fallbackScene: ExtractedScene = {
+          sceneNumber: 1,
+          slugline: "SCENE 01: UNTITLED SEQUENCE",
+          setting: "GENERAL",
+          timeOfDay: "UNKNOWN",
+          synopsis: rawText.slice(0, 180) + "...",
+          characters: ["CHARACTER 1"],
+          props: ["GENERAL PROP"],
+          dialogues: []
+        };
+        setScenes([fallbackScene]);
+        setSelectedScenes([1]);
+      } else {
+        setScenes(dynamicResults);
+        setSelectedScenes(dynamicResults.map((s) => s.sceneNumber));
+      }
+    } catch (err: any) {
+      setErrorMsg("ස්ක්‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
+    } finally {
+      setIsLoading(false);
     }
   };
 
-  const handleRunPdfBreakdown = () => {
-    if (!uploadedFile) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setHasParsed(true);
-      setSelectedSceneIds([]);
-      setParsedScenes(parseScriptIntoScenes(SINHALA_SCRIPT_TEMPLATE));
-    }, 800);
+  const handleClear = () => {
+    setScenes([]);
+    setSelectedScenes([]);
+    setRawText("");
+    setFileName(null);
+    setErrorMsg(null);
   };
 
-  const handleRunManualBreakdown = () => {
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      setHasParsed(true);
-      setSelectedSceneIds([]);
-      setParsedScenes(parseScriptIntoScenes(scriptText));
-    }, 600);
+  const toggleSelectScene = (num: number) => {
+    setSelectedScenes((prev) =>
+      prev.includes(num) ? prev.filter((n) => n !== num) : [...prev, num]
+    );
   };
 
-  const handleDeleteScene = (id: string) => {
-    setParsedScenes(prev => prev.filter(s => s.id !== id));
-    setSelectedSceneIds(prev => prev.filter(selectedId => selectedId !== id));
-  };
-
-  const handleToggleSelect = (id: string) => {
-    if (selectedSceneIds.includes(id)) {
-      setSelectedSceneIds(prev => prev.filter(item => item !== id));
+  const handleSelectAll = () => {
+    if (selectedScenes.length === scenes.length) {
+      setSelectedScenes([]);
     } else {
-      setSelectedSceneIds(prev => [...prev, id]);
+      setSelectedScenes(scenes.map((s) => s.sceneNumber));
     }
-  };
-
-  const handleToggleSelectAll = () => {
-    if (selectedSceneIds.length === parsedScenes.length) {
-      setSelectedSceneIds([]);
-    } else {
-      setSelectedSceneIds(parsedScenes.map(s => s.id));
-    }
-  };
-
-  const handleDeleteSelected = () => {
-    setParsedScenes(prev => prev.filter(s => !selectedSceneIds.includes(s.id)));
-    setSelectedSceneIds([]);
-  };
-
-  const handleClearAllScenes = () => {
-    setParsedScenes([]);
-    setSelectedSceneIds([]);
-  };
-
-  const handleSaveEditedScene = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!editingScene) return;
-
-    setParsedScenes(prev => prev.map(s => s.id === editingScene.id ? editingScene : s));
-    setEditingScene(null);
-  };
-
-  // Navigate & Pass Data to Storyboard
-  const handleGenerateAllStoryboards = () => {
-    setIsGeneratingAllStoryboards(true);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("active_screenplay_scenes", JSON.stringify(parsedScenes));
-      localStorage.setItem("storyboard_filter", "ALL");
-    }
-    setTimeout(() => {
-      setIsGeneratingAllStoryboards(false);
-      router.push("/storyboard");
-    }, 900);
-  };
-
-  const handleGenerateSceneStoryboard = (sceneId: string) => {
-    setGeneratingSceneId(sceneId);
-    if (typeof window !== "undefined") {
-      localStorage.setItem("active_screenplay_scenes", JSON.stringify(parsedScenes));
-      localStorage.setItem("storyboard_filter", sceneId);
-    }
-    setTimeout(() => {
-      setGeneratingSceneId(null);
-      router.push("/storyboard");
-    }, 700);
   };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
-      {/* Top Banner */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
+    <div className="min-h-screen bg-[#070d0a] text-zinc-200 p-8">
+      {/* Header */}
+      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Intelligent Scene Parser (සිංහල & English)
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 mb-2">
+            <Sparkles className="w-3.5 h-3.5" />
+            INTELLIGENT SCENE PARSER (සිංහල & ENGLISH)
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
+          <h1 className="text-3xl font-bold tracking-tight text-white">
             Script Breakdown Studio
           </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
+          <p className="text-sm text-zinc-400 mt-1">
+            තීර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කර නිෂ්පාදන පූර්වයට යොමු කරන්න.
           </p>
         </div>
 
-        <div className="flex items-center gap-3">
+        {scenes.length > 0 && (
           <button
-            onClick={handleGenerateAllStoryboards}
-            disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
-            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
+            onClick={() => alert("Generating storyboards for selected scenes...")}
+            className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg shadow-lg shadow-emerald-950/30 transition-all text-sm"
           >
-            {isGeneratingAllStoryboards ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing Storyboards...
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-4 h-4" /> Generate All Storyboards
-              </>
-            )}
+            <Film className="w-4 h-4" />
+            Generate All Storyboards
           </button>
-        </div>
+        )}
       </div>
 
-      {/* Main Layout */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column */}
-        <div className="lg:col-span-5 space-y-4">
-          <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
-            <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        {/* Left Side: Upload / Paste */}
+        <div className="lg:col-span-5 flex flex-col gap-6">
+          <div className="bg-[#0b1410] border border-emerald-900/30 rounded-2xl p-6 shadow-xl">
+            <div className="flex rounded-lg bg-[#070d0a] p-1 border border-emerald-950 mb-6">
               <button
-                onClick={() => setInputMode("upload")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${inputMode === "upload"
-                    ? "bg-emerald-500 text-slate-950 shadow-md"
-                    : "text-slate-400 hover:text-white"
+                onClick={() => setActiveTab("upload")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "upload"
+                    ? "bg-emerald-500 text-black"
+                    : "text-zinc-400 hover:text-white"
                   }`}
               >
-                <UploadCloud className="w-3.5 h-3.5" /> Upload Screenplay (PDF)
+                Upload Screenplay (PDF/TXT)
               </button>
               <button
-                onClick={() => setInputMode("paste")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${inputMode === "paste"
-                    ? "bg-emerald-500 text-slate-950 shadow-md"
-                    : "text-slate-400 hover:text-white"
+                onClick={() => setActiveTab("paste")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "paste"
+                    ? "bg-emerald-500 text-black"
+                    : "text-zinc-400 hover:text-white"
                   }`}
               >
-                <FileText className="w-3.5 h-3.5" /> Paste Script
+                Paste Script
               </button>
             </div>
 
-            {inputMode === "upload" ? (
-              <div className="space-y-4">
-                <label className="border-2 border-dashed border-emerald-950/80 hover:border-emerald-500/50 rounded-2xl p-6 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-[#050b07]/50 group">
-                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2 group-hover:scale-105 transition-transform">
+            {activeTab === "upload" ? (
+              <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#070d0a]/50">
+                <input
+                  type="file"
+                  id="script-file-upload"
+                  accept=".txt,.fdx,.fountain"
+                  className="hidden"
+                  onChange={handleFileUpload}
+                />
+                <label
+                  htmlFor="script-file-upload"
+                  className="flex flex-col items-center cursor-pointer text-center"
+                >
+                  <div className="w-12 h-12 rounded-full bg-emerald-950/80 flex items-center justify-center text-emerald-400 mb-4 border border-emerald-800/40">
                     <UploadCloud className="w-6 h-6" />
                   </div>
-                  <h4 className="text-sm font-bold text-white mb-1">Select Screenplay File</h4>
-                  <p className="text-xs text-slate-400 max-w-xs mb-2">
-                    Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and <strong className="text-slate-200">.TXT</strong>
-                  </p>
-                  <input
-                    type="file"
-                    accept=".pdf,.fdx,.txt"
-                    onChange={handleFileUpload}
-                    className="hidden"
-                  />
+                  <span className="font-medium text-white text-sm">
+                    {fileName ? fileName : "Select Screenplay File"}
+                  </span>
+                  <span className="text-xs text-zinc-500 mt-1">
+                    Supports Sinhala & English Screenplays (.TXT, .FDX)
+                  </span>
                 </label>
-
-                {uploadedFile && (
-                  <div className="space-y-3">
-                    <div className="p-3.5 rounded-xl bg-[#0e1f16] border border-emerald-500/40 flex items-center justify-between text-xs">
-                      <div className="flex items-center gap-2.5 text-slate-200 truncate">
-                        <FileCheck className="w-4 h-4 text-emerald-400 shrink-0" />
-                        <span className="font-medium truncate">{uploadedFile.name}</span>
-                      </div>
-                      <span className="text-emerald-400 font-bold text-[11px] shrink-0 bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                        {(uploadedFile.size / 1024).toFixed(1)} KB
-                      </span>
-                    </div>
-
-                    <button
-                      onClick={handleRunPdfBreakdown}
-                      disabled={isProcessing}
-                      className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> පිටපතේ Scenes වෙන් කරමින් පවතී...
-                        </>
-                      ) : (
-                        <>
-                          <Play className="w-3.5 h-3.5 fill-current" /> Parse & Breakdown PDF Script
-                        </>
-                      )}
-                    </button>
-                  </div>
-                )}
               </div>
             ) : (
-              <div className="space-y-4">
+              <div className="flex flex-col gap-2">
                 <textarea
-                  value={scriptText}
-                  onChange={(e) => setScriptText(e.target.value)}
-                  placeholder="ඔබේ තිර පිටපත මෙහි paste කරන්න..."
-                  rows={13}
-                  className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
+                  rows={8}
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder="Paste scene headings and text here (e.g., INT. ROOM - NIGHT හෝ SCENE 01: අභ්‍යන්තර...)..."
+                  className="w-full bg-[#070d0a] border border-emerald-900/40 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono resize-none"
                 />
-                <button
-                  onClick={handleRunManualBreakdown}
-                  disabled={isProcessing || !scriptText.trim()}
-                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                >
-                  <Play className="w-3.5 h-3.5 fill-current" /> Parse Pasted Script
-                </button>
               </div>
             )}
+
+            {errorMsg && (
+              <div className="flex items-center gap-2 mt-4 p-3 bg-red-950/40 border border-red-800/50 rounded-lg text-xs text-red-400">
+                <AlertCircle className="w-4 h-4 flex-shrink-0" />
+                <span>{errorMsg}</span>
+              </div>
+            )}
+
+            <div className="grid grid-cols-2 gap-3 mt-6">
+              <button
+                disabled={isLoading}
+                onClick={() => handleExecuteParse("RULE_BASED")}
+                className="py-2.5 px-4 bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 font-medium rounded-lg text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+              >
+                {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
+                Rule-Based Parse
+              </button>
+
+              <button
+                disabled={isLoading}
+                onClick={() => handleExecuteParse("LLM")}
+                className="py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20 transition-all disabled:opacity-50"
+              >
+                {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
+                LLM Parse Pipeline
+              </button>
+            </div>
           </div>
         </div>
 
-        {/* Right Column */}
-        <div className="lg:col-span-7 space-y-4">
-          <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
-            <div className="flex items-center gap-3">
-              <button
-                onClick={handleToggleSelectAll}
-                disabled={parsedScenes.length === 0}
-                className="text-xs font-semibold text-slate-300 hover:text-white flex items-center gap-2 transition-colors disabled:opacity-40"
-              >
-                {selectedSceneIds.length === parsedScenes.length && parsedScenes.length > 0 ? (
-                  <CheckSquare className="w-4 h-4 text-emerald-400" />
-                ) : (
-                  <Square className="w-4 h-4 text-slate-500" />
-                )}
-                Select All ({parsedScenes.length})
-              </button>
-
-              {selectedSceneIds.length > 0 && (
+        {/* Right Side: Dynamic Scene Breakdown Output */}
+        <div className="lg:col-span-7 flex flex-col gap-4">
+          {scenes.length > 0 ? (
+            <>
+              <div className="flex items-center justify-between pb-2 border-b border-zinc-800 px-1">
                 <button
-                  onClick={handleDeleteSelected}
-                  className="px-2.5 py-1 rounded-lg bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 text-xs font-semibold flex items-center gap-1.5 transition-all"
+                  onClick={handleSelectAll}
+                  className="flex items-center gap-2 text-xs text-zinc-400 hover:text-white"
                 >
-                  <Trash2 className="w-3.5 h-3.5" /> Delete Selected ({selectedSceneIds.length})
+                  {selectedScenes.length === scenes.length ? (
+                    <CheckSquare className="w-4 h-4 text-emerald-400" />
+                  ) : (
+                    <Square className="w-4 h-4" />
+                  )}
+                  Select All ({scenes.length})
                 </button>
-              )}
-            </div>
+                <button
+                  onClick={handleClear}
+                  className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                >
+                  <Trash2 className="w-3.5 h-3.5" />
+                  Clear Breakdown
+                </button>
+              </div>
 
-            {parsedScenes.length > 0 && (
-              <button
-                onClick={handleClearAllScenes}
-                className="text-xs text-slate-400 hover:text-red-400 transition-colors"
-              >
-                Clear All
-              </button>
-            )}
-          </div>
+              <div className="flex flex-col gap-4 max-h-[750px] overflow-y-auto pr-2 custom-scrollbar">
+                {scenes.map((scene) => {
+                  const isSelected = selectedScenes.includes(scene.sceneNumber);
+                  return (
+                    <div
+                      key={scene.sceneNumber}
+                      className={`p-5 rounded-2xl border transition-all ${isSelected
+                          ? "bg-[#0b1410] border-emerald-800/60 shadow-lg shadow-emerald-950/20"
+                          : "bg-[#070d0a] border-zinc-850 opacity-70"
+                        }`}
+                    >
+                      <div className="flex items-start justify-between gap-3 mb-3">
+                        <div className="flex items-center gap-3">
+                          <button onClick={() => toggleSelectScene(scene.sceneNumber)}>
+                            {isSelected ? (
+                              <CheckSquare className="w-4 h-4 text-emerald-400" />
+                            ) : (
+                              <Square className="w-4 h-4 text-zinc-600" />
+                            )}
+                          </button>
+                          <span className="text-xs px-2 py-0.5 rounded bg-zinc-800 text-zinc-300 font-mono">
+                            SCENE-{String(scene.sceneNumber).padStart(2, "0")}
+                          </span>
+                          <h3 className="font-semibold text-white text-sm">
+                            {scene.slugline}
+                          </h3>
+                        </div>
 
-          {isProcessing ? (
-            <div className="p-16 rounded-2xl bg-[#09130e] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
-              <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
-              <h3 className="text-sm font-semibold text-white">තිර පිටපත පරීක්ෂා කරමින් පවතී...</h3>
-              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කරමින් පවතී.</p>
-            </div>
-          ) : hasParsed && parsedScenes.length > 0 ? (
-            <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1">
-              {parsedScenes.map((scene) => {
-                const isSelected = selectedSceneIds.includes(scene.id);
-
-                return (
-                  <div
-                    key={scene.id}
-                    className={`p-5 rounded-2xl bg-[#09130e] border transition-all space-y-4 ${isSelected ? "border-emerald-500 bg-[#0d1d14]" : "border-emerald-950/70 hover:border-emerald-500/30"
-                      }`}
-                  >
-                    <div className="flex flex-wrap items-center justify-between gap-2 pb-3 border-b border-emerald-950/50">
-                      <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => handleToggleSelect(scene.id)}
-                          className="text-slate-400 hover:text-white"
-                        >
-                          {isSelected ? (
-                            <CheckSquare className="w-4 h-4 text-emerald-400" />
-                          ) : (
-                            <Square className="w-4 h-4 text-slate-600" />
-                          )}
-                        </button>
-                        <span className="text-xs font-bold text-emerald-400 bg-[#0e1d15] px-2 py-0.5 rounded border border-emerald-500/20 font-mono">
-                          {scene.id}
-                        </span>
-                        <h3 className="text-sm font-bold text-white tracking-wide">
-                          {scene.slugline}
-                        </h3>
+                        <div className="flex items-center gap-2">
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
+                            {scene.setting}
+                          </span>
+                          <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
+                            {scene.timeOfDay}
+                          </span>
+                        </div>
                       </div>
 
-                      <div className="flex items-center gap-2">
-                        <span className="px-2 py-0.5 rounded bg-slate-800 text-slate-300 text-[11px] font-semibold">
-                          {scene.locationType}
-                        </span>
-                        <span className="px-2 py-0.5 rounded bg-emerald-950/60 text-emerald-300 border border-emerald-500/20 text-[11px] font-semibold">
-                          {scene.timeOfDay}
-                        </span>
+                      {scene.synopsis && (
+                        <p className="text-xs text-zinc-400 mb-4 leading-relaxed bg-[#070d0a]/60 p-3 rounded-lg border border-zinc-800/50">
+                          {scene.synopsis}
+                        </p>
+                      )}
 
-                        <button
-                          onClick={() => setEditingScene(scene)}
-                          className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-300 border border-emerald-950/80 transition-all ml-1"
-                          title="Edit Scene"
-                        >
-                          <Edit2 className="w-3.5 h-3.5" />
-                        </button>
-
-                        <button
-                          onClick={() => handleDeleteScene(scene.id)}
-                          className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-emerald-950/80 transition-all"
-                          title="Delete Scene"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
-                    </div>
-
-                    <p className="text-xs text-slate-300 leading-relaxed font-light">
-                      {scene.synopsis}
-                    </p>
-
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      <div className="space-y-1.5">
-                        <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                          <Users className="w-3 h-3 text-emerald-400" /> චරිත / Characters ({scene.characters.length})
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {scene.characters.length > 0 ? (
-                            scene.characters.map((char, idx) => (
+                      <div className="flex flex-col gap-2.5 text-xs">
+                        {scene.characters.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-zinc-500 font-medium">චරිත / Characters:</span>
+                            {scene.characters.map((char, idx) => (
                               <span
                                 key={idx}
-                                className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-emerald-300 font-medium"
+                                className="px-2.5 py-0.5 rounded-full bg-emerald-950/50 text-emerald-400 border border-emerald-900/60 text-[11px]"
                               >
                                 {char}
                               </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-500 italic">පසුබිම් චරිත පමණි</span>
-                          )}
-                        </div>
-                      </div>
+                            ))}
+                          </div>
+                        )}
 
-                      <div className="space-y-1.5">
-                        <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                          <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / Props ({scene.props.length})
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {scene.props.length > 0 ? (
-                            scene.props.map((prop, idx) => (
+                        {scene.props.length > 0 && (
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="text-zinc-500 font-medium">උපකරණ / Props:</span>
+                            {scene.props.map((prop, idx) => (
                               <span
                                 key={idx}
-                                className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-slate-300 font-medium"
+                                className="px-2.5 py-0.5 rounded-full bg-zinc-800/80 text-zinc-300 border border-zinc-700/50 text-[11px]"
                               >
                                 {prop}
                               </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-500 italic">සාමාන්‍ය පසුතල සැකසුම</span>
-                          )}
-                        </div>
-                      </div>
-                    </div>
-
-                    {scene.dialogues && scene.dialogues.length > 0 && (
-                      <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
-                        <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
-                          <MessageSquare className="w-3 h-3 text-emerald-400" /> දෙබස් / Key Dialogues ({scene.dialogues.length})
-                        </span>
-                        <div className="space-y-1.5 divide-y divide-emerald-950/30">
-                          {scene.dialogues.map((dlg, dIdx) => (
-                            <div key={dIdx} className="pt-1.5 first:pt-0 text-xs">
-                              <span className="font-semibold text-emerald-300 font-mono text-[11px] mr-2">
-                                {dlg.speaker}:
-                              </span>
-                              <span className="text-slate-300 italic font-light">
-                                "{dlg.line}"
-                              </span>
-                            </div>
-                          ))}
-                        </div>
-                      </div>
-                    )}
-
-                    <div className="pt-3 border-t border-emerald-950/50 flex items-center justify-between">
-                      <span className="text-[11px] text-slate-400 flex items-center gap-1.5">
-                        <Film className="w-3.5 h-3.5 text-emerald-400" /> {scene.plannedShots} Planned Shots
-                      </span>
-
-                      <button
-                        onClick={() => handleGenerateSceneStoryboard(scene.id)}
-                        disabled={generatingSceneId === scene.id}
-                        className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
-                      >
-                        {generatingSceneId === scene.id ? (
-                          <>
-                            <Loader2 className="w-3 h-3 animate-spin" /> Loading Storyboard...
-                          </>
-                        ) : (
-                          <>
-                            Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
-                          </>
+                            ))}
+                          </div>
                         )}
-                      </button>
+
+                        {scene.dialogues.length > 0 && (
+                          <div className="mt-2 pt-2 border-t border-zinc-800/50 flex flex-col gap-1.5">
+                            <span className="text-zinc-500 font-medium">දෙබස් / Key Dialogues:</span>
+                            {scene.dialogues.map((dlg, idx) => (
+                              <p key={idx} className="text-[11px] text-zinc-300 italic">
+                                <span className="font-semibold text-emerald-400 not-italic">{dlg.speaker}: </span>
+                                "{dlg.text}"
+                              </p>
+                            ))}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                  </div>
-                );
-              })}
-            </div>
+                  );
+                })}
+              </div>
+            </>
           ) : (
-            <div className="p-12 rounded-2xl bg-[#09130e] border border-dashed border-emerald-950 text-center text-slate-400">
-              <Film className="w-8 h-8 text-slate-600 mx-auto mb-2" />
-              <p className="text-sm font-medium">කිසිදු Scene එකක් නැත. කරුණාකර පිටපතක් Parse කරන්න.</p>
+            /* අලුතින් සයිට් එක ඕපන් කරන විට පෙන්වන Empty Slate */
+            <div className="h-[480px] flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-2xl p-8 text-center bg-[#0b1410]/20">
+              <div className="w-14 h-14 rounded-full bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-4">
+                <FileText className="w-7 h-7" />
+              </div>
+              <h3 className="text-sm font-semibold text-zinc-300">
+                ස්ක්‍රිප්ට් එකක් ඇතුළත් කර නොමැත
+              </h3>
+              <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
+                වම්පසින් සිංහල හෝ ඉංග්‍රීසි තීර පිටපතක් තෝරා හෝ Text එක Paste කර **Rule-Based Parse** ඔබන්න.
+              </p>
             </div>
           )}
         </div>
       </div>
-
-      {/* Edit Scene Modal */}
-      {editingScene && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-lg bg-[#09130e] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-emerald-950/70">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Edit2 className="w-4 h-4 text-emerald-400" /> Edit Scene ({editingScene.id})
-              </h3>
-              <button
-                onClick={() => setEditingScene(null)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#0e1d15]"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditedScene} className="space-y-4 mt-4">
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Slugline / Title</label>
-                <input
-                  type="text"
-                  required
-                  value={editingScene.slugline}
-                  onChange={(e) => setEditingScene({ ...editingScene, slugline: e.target.value })}
-                  className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Location Type</label>
-                  <select
-                    value={editingScene.locationType}
-                    onChange={(e) => setEditingScene({ ...editingScene, locationType: e.target.value })}
-                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                  >
-                    <option value="INT (අභ්‍යන්තර)">INT (අභ්‍යන්තර)</option>
-                    <option value="EXT (බාහිර)">EXT (බාහිර)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Time of Day</label>
-                  <input
-                    type="text"
-                    value={editingScene.timeOfDay}
-                    onChange={(e) => setEditingScene({ ...editingScene, timeOfDay: e.target.value })}
-                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis / Action Line</label>
-                <textarea
-                  rows={3}
-                  value={editingScene.synopsis}
-                  onChange={(e) => setEditingScene({ ...editingScene, synopsis: e.target.value })}
-                  className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60 leading-relaxed"
-                />
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-emerald-950/60">
-                <button
-                  type="button"
-                  onClick={() => setEditingScene(null)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
-                >
-                  Save Changes
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
     </div>
   );
 }
