@@ -28,39 +28,46 @@ export default function ScriptBreakdownPage() {
   const [activeTab, setActiveTab] = useState<"upload" | "paste">("upload");
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ දත්ත පෙන්වීම සම්පූර්ණයෙන්ම වැළකේ
+  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script දත්ත පෙන්වීම සම්පූර්ණයෙන්ම වැළකේ
   const [scenes, setScenes] = useState<ExtractedScene[]>([]);
   const [selectedScenes, setSelectedScenes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // File Upload Handlers
+  // File Upload Handlers (Supports PDF, TXT, FDX)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
+    setSelectedFile(file);
     setFileName(file.name);
     setErrorMsg(null);
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      setRawText(content);
-    };
-    reader.onerror = () => {
-      setErrorMsg("ස්ක්‍රිප්ට් ෆයිල් එක කියවීමේදී දෝෂයක් සිදුවිය.");
-    };
-    reader.readAsText(file);
+    // TXT හෝ Fountain නම් client-side කියවීම
+    if (file.name.endsWith(".txt") || file.name.endsWith(".fountain")) {
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const content = event.target?.result as string;
+        setRawText(content);
+      };
+      reader.onerror = () => {
+        setErrorMsg("ස්ක්‍රිප්ට් ගොනුව කියවීමේදී දෝෂයක් සිදුවිය.");
+      };
+      reader.readAsText(file);
+    } else {
+      // PDF ගොනුවක් නම් backend multipart parsing සඳහා සූදානම් කෙරේ
+      setRawText(`[PDF ගොනුව තෝරාගෙන ඇත: ${file.name}]`);
+    }
   };
 
-  // සිංහල සහ ඉංග්‍රීසි භාෂා දෙකටම ගැළපෙන Dynamic Parsing Logic
+  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයටම ගැළපෙන Tokenizer & Parser
   const parseScreenplayDynamic = (text: string): ExtractedScene[] => {
     const lines = text.split(/\r?\n/);
     const parsed: ExtractedScene[] = [];
     let currentScene: ExtractedScene | null = null;
 
-    // Sluglines සඳහා RegEx (English: INT/EXT, Sinhala: අභ්‍යන්තර/බාහිර හෝ SCENE)
     const sluglinePattern = /^(SCENE\s*\d+|INT\.?|EXT\.?|INT\/EXT\.?|අභ්‍යන්තර|බාහිර|දර්ශනය\s*\d+)/i;
     const propWords = [
       "GUN", "PHONE", "MAP", "REVOLVER", "CAR", "KNIFE", "BAG", "BOTTLE", "MONEY", "CAMERA", "LAPTOP",
@@ -76,12 +83,10 @@ export default function ScriptBreakdownPage() {
           parsed.push(currentScene);
         }
 
-        // Setting හඳුනා ගැනීම
         let setting = "SCENE";
         if (/INT|අභ්‍යන්තර/i.test(line)) setting = "INT (අභ්‍යන්තර)";
         else if (/EXT|බාහිර/i.test(line)) setting = "EXT (බාහිර)";
 
-        // Time of Day හඳුනා ගැනීම
         let timeOfDay = "DAY";
         if (/NIGHT|රාත්‍රී/i.test(line)) timeOfDay = "NIGHT / රාත්‍රී";
         else if (/DAY|දවල්|උදෑසන/i.test(line)) timeOfDay = "DAY / දහවල්";
@@ -101,7 +106,6 @@ export default function ScriptBreakdownPage() {
       }
 
       if (currentScene) {
-        // දෙබස් හඳුනා ගැනීම (Character: Dialogue හෝ කථකයාගේ නම පමණක් ඇති පේළි)
         if (line.includes(":") || line.includes("-")) {
           const parts = line.split(/[:\-]/);
           const speaker = parts[0].trim();
@@ -116,14 +120,12 @@ export default function ScriptBreakdownPage() {
           }
         }
 
-        // Props හඳුනා ගැනීම
         propWords.forEach((pw) => {
           if (line.toUpperCase().includes(pw.toUpperCase()) && !currentScene!.props.includes(pw)) {
             currentScene!.props.push(pw);
           }
         });
 
-        // විස්තරාත්මක ඡේද (Action / Synopsis)
         if (!currentScene.synopsis && line.length > 20) {
           currentScene.synopsis = line;
         }
@@ -137,10 +139,10 @@ export default function ScriptBreakdownPage() {
     return parsed;
   };
 
-  // Execute Parse
+  // Execution Handler
   const handleExecuteParse = async (engine: "RULE_BASED" | "LLM") => {
-    if (!rawText.trim()) {
-      setErrorMsg("කරුණාකර ස්ක්‍රිප්ට් එකක් Upload කරන්න හෝ Text එක Paste කරන්න.");
+    if (!selectedFile && !rawText.trim()) {
+      setErrorMsg("කරුණාකර PDF හෝ Text ස්ක්‍රිප්ට් එකක් ඇතුළත් කරන්න.");
       return;
     }
 
@@ -148,29 +150,48 @@ export default function ScriptBreakdownPage() {
     setErrorMsg(null);
 
     try {
-      // පළමුව Dynamic Client Parser මඟින් Parse කිරීම
-      const dynamicResults = parseScreenplayDynamic(rawText);
+      // PDF ගොනුවක් නම් Multipart FormData හරහා API එකට යැවීම
+      if (selectedFile && selectedFile.type === "application/pdf") {
+        const formData = new FormData();
+        formData.append("file", selectedFile);
+        formData.append("engine", engine);
 
-      if (dynamicResults.length === 0) {
-        // Line-by-line fallback
-        const fallbackScene: ExtractedScene = {
-          sceneNumber: 1,
-          slugline: "SCENE 01: UNTITLED SEQUENCE",
-          setting: "GENERAL",
-          timeOfDay: "UNKNOWN",
-          synopsis: rawText.slice(0, 180) + "...",
-          characters: ["CHARACTER 1"],
-          props: ["GENERAL PROP"],
-          dialogues: []
-        };
-        setScenes([fallbackScene]);
-        setSelectedScenes([1]);
+        const res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          body: formData,
+        });
+
+        const data = await res.json();
+        if (data.scenes && Array.isArray(data.scenes)) {
+          setScenes(data.scenes);
+          setSelectedScenes(data.scenes.map((s: ExtractedScene) => s.sceneNumber));
+        } else {
+          throw new Error(data.error || "PDF parsing failed.");
+        }
       } else {
-        setScenes(dynamicResults);
-        setSelectedScenes(dynamicResults.map((s) => s.sceneNumber));
+        // Text හෝ Paste කළ ස්ක්‍රිප්ට් සෘජුවම parse කිරීම
+        const dynamicResults = parseScreenplayDynamic(rawText);
+
+        if (dynamicResults.length === 0) {
+          const fallbackScene: ExtractedScene = {
+            sceneNumber: 1,
+            slugline: "SCENE 01: EXTRACTED NARRATIVE SEQUENCE",
+            setting: "GENERAL",
+            timeOfDay: "DAY",
+            synopsis: rawText.slice(0, 160) + "...",
+            characters: ["LEAD ROLE"],
+            props: ["GENERAL ASSET"],
+            dialogues: []
+          };
+          setScenes([fallbackScene]);
+          setSelectedScenes([1]);
+        } else {
+          setScenes(dynamicResults);
+          setSelectedScenes(dynamicResults.map((s) => s.sceneNumber));
+        }
       }
     } catch (err: any) {
-      setErrorMsg("ස්ක්‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
+      setErrorMsg(err.message || "ස්ක්‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
     } finally {
       setIsLoading(false);
     }
@@ -181,6 +202,7 @@ export default function ScriptBreakdownPage() {
     setSelectedScenes([]);
     setRawText("");
     setFileName(null);
+    setSelectedFile(null);
     setErrorMsg(null);
   };
 
@@ -200,7 +222,7 @@ export default function ScriptBreakdownPage() {
 
   return (
     <div className="min-h-screen bg-[#070d0a] text-zinc-200 p-8">
-      {/* Header */}
+      {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-medium bg-emerald-950/80 text-emerald-400 border border-emerald-800/50 mb-2">
@@ -217,7 +239,7 @@ export default function ScriptBreakdownPage() {
 
         {scenes.length > 0 && (
           <button
-            onClick={() => alert("Generating storyboards for selected scenes...")}
+            onClick={() => alert("Selected scenes forwarded to 16:9 Storyboard canvas.")}
             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg shadow-lg shadow-emerald-950/30 transition-all text-sm"
           >
             <Film className="w-4 h-4" />
@@ -227,7 +249,7 @@ export default function ScriptBreakdownPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Side: Upload / Paste */}
+        {/* Left Side: Upload / Paste Actions */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           <div className="bg-[#0b1410] border border-emerald-900/30 rounded-2xl p-6 shadow-xl">
             <div className="flex rounded-lg bg-[#070d0a] p-1 border border-emerald-950 mb-6">
@@ -255,13 +277,13 @@ export default function ScriptBreakdownPage() {
               <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#070d0a]/50">
                 <input
                   type="file"
-                  id="script-file-upload"
-                  accept=".txt,.fdx,.fountain"
+                  id="script-file-input"
+                  accept=".pdf,.txt,.fdx,.fountain"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
                 <label
-                  htmlFor="script-file-upload"
+                  htmlFor="script-file-input"
                   className="flex flex-col items-center cursor-pointer text-center"
                 >
                   <div className="w-12 h-12 rounded-full bg-emerald-950/80 flex items-center justify-center text-emerald-400 mb-4 border border-emerald-800/40">
@@ -271,7 +293,7 @@ export default function ScriptBreakdownPage() {
                     {fileName ? fileName : "Select Screenplay File"}
                   </span>
                   <span className="text-xs text-zinc-500 mt-1">
-                    Supports Sinhala & English Screenplays (.TXT, .FDX)
+                    Supports Sinhala & English PDFs, .TXT, and .FDX
                   </span>
                 </label>
               </div>
@@ -316,7 +338,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Side: Dynamic Scene Breakdown Output */}
+        {/* Right Side: Parsed Entities Output */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           {scenes.length > 0 ? (
             <>
@@ -432,7 +454,7 @@ export default function ScriptBreakdownPage() {
               </div>
             </>
           ) : (
-            /* අලුතින් සයිට් එක ඕපන් කරන විට පෙන්වන Empty Slate */
+            /* හිස් Slate තත්ත්වය */
             <div className="h-[480px] flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-2xl p-8 text-center bg-[#0b1410]/20">
               <div className="w-14 h-14 rounded-full bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-4">
                 <FileText className="w-7 h-7" />
@@ -441,7 +463,7 @@ export default function ScriptBreakdownPage() {
                 ස්ක්‍රිප්ට් එකක් ඇතුළත් කර නොමැත
               </h3>
               <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-                වම්පසින් සිංහල හෝ ඉංග්‍රීසි තීර පිටපතක් තෝරා හෝ Text එක Paste කර **Rule-Based Parse** ඔබන්න.
+                වම්පසින් PDF/TXT ගොනුවක් තෝරා හෝ පෙළ Paste කර **Rule-Based Parse** ක්ලික් කරන්න.
               </p>
             </div>
           )}
