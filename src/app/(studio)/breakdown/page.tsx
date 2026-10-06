@@ -25,44 +25,41 @@ interface ExtractedScene {
 }
 
 export default function ScriptBreakdownPage() {
-  const [activeTab, setActiveTab] = useState<"upload" | "paste">("upload");
+  const [activeTab, setActiveTab] = useState<"upload" | "paste">("paste");
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
-  const [selectedFile, setSelectedFile] = useState<File | null>(null);
 
-  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script දත්ත පෙන්වීම සම්පූර්ණයෙන්ම වැළකේ
+  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script පෙන්වීම සම්පූර්ණයෙන්ම වැළකේ
   const [scenes, setScenes] = useState<ExtractedScene[]>([]);
   const [selectedScenes, setSelectedScenes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // File Upload Handlers (Supports PDF, TXT, FDX)
+  // File Upload Handlers (TXT, FDX, FOUNTAIN)
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    setSelectedFile(file);
+    if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+      setErrorMsg("PDF ගොනු සෘජුවම කියවිය නොහැක. කරුණාකර PDF එකේ පෙළ Copy කර 'Paste Script' ටැබ් එකට Paste කරන්න, නැතහොත් .TXT ගොනුවක් ලබා දෙන්න.");
+      return;
+    }
+
     setFileName(file.name);
     setErrorMsg(null);
 
-    // TXT හෝ Fountain නම් client-side කියවීම
-    if (file.name.endsWith(".txt") || file.name.endsWith(".fountain")) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        const content = event.target?.result as string;
-        setRawText(content);
-      };
-      reader.onerror = () => {
-        setErrorMsg("ස්ක්‍රිප්ට් ගොනුව කියවීමේදී දෝෂයක් සිදුවිය.");
-      };
-      reader.readAsText(file);
-    } else {
-      // PDF ගොනුවක් නම් backend multipart parsing සඳහා සූදානම් කෙරේ
-      setRawText(`[PDF ගොනුව තෝරාගෙන ඇත: ${file.name}]`);
-    }
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      setRawText(content);
+    };
+    reader.onerror = () => {
+      setErrorMsg("ස්ක්‍රිප්ට් ගොනුව කියවීමේදී දෝෂයක් සිදුවිය.");
+    };
+    reader.readAsText(file);
   };
 
-  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයටම ගැළපෙන Tokenizer & Parser
+  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයටම ගැළපෙන Client-Side Parsing Engine
   const parseScreenplayDynamic = (text: string): ExtractedScene[] => {
     const lines = text.split(/\r?\n/);
     const parsed: ExtractedScene[] = [];
@@ -140,9 +137,9 @@ export default function ScriptBreakdownPage() {
   };
 
   // Execution Handler
-  const handleExecuteParse = async (engine: "RULE_BASED" | "LLM") => {
-    if (!selectedFile && !rawText.trim()) {
-      setErrorMsg("කරුණාකර PDF හෝ Text ස්ක්‍රිප්ට් එකක් ඇතුළත් කරන්න.");
+  const handleExecuteParse = () => {
+    if (!rawText.trim()) {
+      setErrorMsg("කරුණාකර Script එක Paste කරන්න හෝ .TXT ගොනුවක් Upload කරන්න.");
       return;
     }
 
@@ -150,48 +147,27 @@ export default function ScriptBreakdownPage() {
     setErrorMsg(null);
 
     try {
-      // PDF ගොනුවක් නම් Multipart FormData හරහා API එකට යැවීම
-      if (selectedFile && selectedFile.type === "application/pdf") {
-        const formData = new FormData();
-        formData.append("file", selectedFile);
-        formData.append("engine", engine);
+      const dynamicResults = parseScreenplayDynamic(rawText);
 
-        const res = await fetch("/api/screenplay/parse", {
-          method: "POST",
-          body: formData,
-        });
-
-        const data = await res.json();
-        if (data.scenes && Array.isArray(data.scenes)) {
-          setScenes(data.scenes);
-          setSelectedScenes(data.scenes.map((s: ExtractedScene) => s.sceneNumber));
-        } else {
-          throw new Error(data.error || "PDF parsing failed.");
-        }
+      if (dynamicResults.length === 0) {
+        const fallbackScene: ExtractedScene = {
+          sceneNumber: 1,
+          slugline: "SCENE 01: NARRATIVE SEQUENCE",
+          setting: "GENERAL",
+          timeOfDay: "DAY",
+          synopsis: rawText.slice(0, 160) + "...",
+          characters: ["LEAD ROLE"],
+          props: ["GENERAL ASSET"],
+          dialogues: []
+        };
+        setScenes([fallbackScene]);
+        setSelectedScenes([1]);
       } else {
-        // Text හෝ Paste කළ ස්ක්‍රිප්ට් සෘජුවම parse කිරීම
-        const dynamicResults = parseScreenplayDynamic(rawText);
-
-        if (dynamicResults.length === 0) {
-          const fallbackScene: ExtractedScene = {
-            sceneNumber: 1,
-            slugline: "SCENE 01: EXTRACTED NARRATIVE SEQUENCE",
-            setting: "GENERAL",
-            timeOfDay: "DAY",
-            synopsis: rawText.slice(0, 160) + "...",
-            characters: ["LEAD ROLE"],
-            props: ["GENERAL ASSET"],
-            dialogues: []
-          };
-          setScenes([fallbackScene]);
-          setSelectedScenes([1]);
-        } else {
-          setScenes(dynamicResults);
-          setSelectedScenes(dynamicResults.map((s) => s.sceneNumber));
-        }
+        setScenes(dynamicResults);
+        setSelectedScenes(dynamicResults.map((s) => s.sceneNumber));
       }
     } catch (err: any) {
-      setErrorMsg(err.message || "ස්ක්‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
+      setErrorMsg("ස්ක්‍‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
     } finally {
       setIsLoading(false);
     }
@@ -202,7 +178,6 @@ export default function ScriptBreakdownPage() {
     setSelectedScenes([]);
     setRawText("");
     setFileName(null);
-    setSelectedFile(null);
     setErrorMsg(null);
   };
 
@@ -239,7 +214,7 @@ export default function ScriptBreakdownPage() {
 
         {scenes.length > 0 && (
           <button
-            onClick={() => alert("Selected scenes forwarded to 16:9 Storyboard canvas.")}
+            onClick={() => alert("Scenes forwarded to 16:9 Storyboard canvas.")}
             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg shadow-lg shadow-emerald-950/30 transition-all text-sm"
           >
             <Film className="w-4 h-4" />
@@ -254,31 +229,41 @@ export default function ScriptBreakdownPage() {
           <div className="bg-[#0b1410] border border-emerald-900/30 rounded-2xl p-6 shadow-xl">
             <div className="flex rounded-lg bg-[#070d0a] p-1 border border-emerald-950 mb-6">
               <button
-                onClick={() => setActiveTab("upload")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "upload"
-                    ? "bg-emerald-500 text-black"
-                    : "text-zinc-400 hover:text-white"
-                  }`}
-              >
-                Upload Screenplay (PDF/TXT)
-              </button>
-              <button
                 onClick={() => setActiveTab("paste")}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "paste"
                     ? "bg-emerald-500 text-black"
                     : "text-zinc-400 hover:text-white"
                   }`}
               >
-                Paste Script
+                Paste Script (සිංහල / English)
+              </button>
+              <button
+                onClick={() => setActiveTab("upload")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "upload"
+                    ? "bg-emerald-500 text-black"
+                    : "text-zinc-400 hover:text-white"
+                  }`}
+              >
+                Upload File (.TXT)
               </button>
             </div>
 
-            {activeTab === "upload" ? (
+            {activeTab === "paste" ? (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  rows={10}
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder="ස්ක්‍රිප්ට් එක මෙතනට Paste කරන්න (e.g., INT. ROOM - NIGHT හෝ SCENE 01: අභ්‍යන්තර කාමරය...)..."
+                  className="w-full bg-[#070d0a] border border-emerald-900/40 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono resize-none leading-relaxed"
+                />
+              </div>
+            ) : (
               <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#070d0a]/50">
                 <input
                   type="file"
                   id="script-file-input"
-                  accept=".pdf,.txt,.fdx,.fountain"
+                  accept=".txt,.fdx,.fountain"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
@@ -290,22 +275,12 @@ export default function ScriptBreakdownPage() {
                     <UploadCloud className="w-6 h-6" />
                   </div>
                   <span className="font-medium text-white text-sm">
-                    {fileName ? fileName : "Select Screenplay File"}
+                    {fileName ? fileName : "Select Text Script File"}
                   </span>
                   <span className="text-xs text-zinc-500 mt-1">
-                    Supports Sinhala & English PDFs, .TXT, and .FDX
+                    Supports .TXT, .FDX, .FOUNTAIN
                   </span>
                 </label>
-              </div>
-            ) : (
-              <div className="flex flex-col gap-2">
-                <textarea
-                  rows={8}
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
-                  placeholder="Paste scene headings and text here (e.g., INT. ROOM - NIGHT හෝ SCENE 01: අභ්‍යන්තර...)..."
-                  className="w-full bg-[#070d0a] border border-emerald-900/40 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono resize-none"
-                />
               </div>
             )}
 
@@ -316,23 +291,14 @@ export default function ScriptBreakdownPage() {
               </div>
             )}
 
-            <div className="grid grid-cols-2 gap-3 mt-6">
+            <div className="mt-6">
               <button
                 disabled={isLoading}
-                onClick={() => handleExecuteParse("RULE_BASED")}
-                className="py-2.5 px-4 bg-emerald-950/60 hover:bg-emerald-900/60 border border-emerald-700/50 text-emerald-300 font-medium rounded-lg text-xs flex items-center justify-center gap-2 transition-all disabled:opacity-50"
+                onClick={handleExecuteParse}
+                className="w-full py-3 px-4 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg text-sm flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20 transition-all disabled:opacity-50"
               >
-                {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : null}
-                Rule-Based Parse
-              </button>
-
-              <button
-                disabled={isLoading}
-                onClick={() => handleExecuteParse("LLM")}
-                className="py-2.5 px-4 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg text-xs flex items-center justify-center gap-2 shadow-lg shadow-emerald-950/20 transition-all disabled:opacity-50"
-              >
-                {isLoading ? <RefreshCw className="w-3.5 h-3.5 animate-spin" /> : <Sparkles className="w-3.5 h-3.5" />}
-                LLM Parse Pipeline
+                {isLoading ? <RefreshCw className="w-4 h-4 animate-spin" /> : <Sparkles className="w-4 h-4" />}
+                Execute Breakdown Parse
               </button>
             </div>
           </div>
@@ -463,7 +429,7 @@ export default function ScriptBreakdownPage() {
                 ස්ක්‍රිප්ට් එකක් ඇතුළත් කර නොමැත
               </h3>
               <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-                වම්පසින් PDF/TXT ගොනුවක් තෝරා හෝ පෙළ Paste කර **Rule-Based Parse** ක්ලික් කරන්න.
+                වම්පසින් සිංහල හෝ ඉංග්‍රීසි පෙළ Paste කර හෝ .TXT ගොනුවක් ලබා දී **Execute Breakdown Parse** ක්ලික් කරන්න.
               </p>
             </div>
           )}
