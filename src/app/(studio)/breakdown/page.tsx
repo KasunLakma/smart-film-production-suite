@@ -25,41 +25,76 @@ interface ExtractedScene {
 }
 
 export default function ScriptBreakdownPage() {
-  const [activeTab, setActiveTab] = useState<"upload" | "paste">("paste");
+  const [activeTab, setActiveTab] = useState<"upload" | "paste">("upload");
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
 
-  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script පෙන්වීම සම්පූර්ණයෙන්ම වැළකේ
+  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script දත්ත පෙන්වීම වැළකේ
   const [scenes, setScenes] = useState<ExtractedScene[]>([]);
   const [selectedScenes, setSelectedScenes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
+  const [statusNote, setStatusNote] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // File Upload Handlers (TXT, FDX, FOUNTAIN)
-  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
+  // Client-Side PDF Text Extractor (Zero-dependency, Zero Backend Crash)
+  const extractTextFromPDF = async (file: File): Promise<string> => {
+    return new Promise((resolve, reject) => {
+      const loadScript = () => {
+        const script = document.createElement("script");
+        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+        script.onload = async () => {
+          try {
+            const pdfjsLib = (window as any).pdfjsLib;
+            pdfjsLib.GlobalWorkerOptions.workerSrc =
+              "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
 
-    if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-      setErrorMsg("PDF ගොනු සෘජුවම කියවිය නොහැක. කරුණාකර PDF එකේ පෙළ Copy කර 'Paste Script' ටැබ් එකට Paste කරන්න, නැතහොත් .TXT ගොනුවක් ලබා දෙන්න.");
-      return;
-    }
+            const arrayBuffer = await file.arrayBuffer();
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = "";
 
-    setFileName(file.name);
-    setErrorMsg(null);
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items
+                .map((item: any) => item.str)
+                .join(" ");
+              fullText += pageText + "\n\n";
+            }
+            resolve(fullText);
+          } catch (err) {
+            reject(err);
+          }
+        };
+        script.onerror = () => reject(new Error("PDF Engine එක load වීමට නොහැකි විය."));
+        document.body.appendChild(script);
+      };
 
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const content = event.target?.result as string;
-      setRawText(content);
-    };
-    reader.onerror = () => {
-      setErrorMsg("ස්ක්‍රිප්ට් ගොනුව කියවීමේදී දෝෂයක් සිදුවිය.");
-    };
-    reader.readAsText(file);
+      if ((window as any).pdfjsLib) {
+        const pdfjsLib = (window as any).pdfjsLib;
+        file.arrayBuffer().then(async (arrayBuffer) => {
+          try {
+            const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+            let fullText = "";
+            for (let i = 1; i <= pdf.numPages; i++) {
+              const page = await pdf.getPage(i);
+              const textContent = await page.getTextContent();
+              const pageText = textContent.items
+                .map((item: any) => item.str)
+                .join(" ");
+              fullText += pageText + "\n\n";
+            }
+            resolve(fullText);
+          } catch (e) {
+            reject(e);
+          }
+        });
+      } else {
+        loadScript();
+      }
+    });
   };
 
-  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයටම ගැළපෙන Client-Side Parsing Engine
+  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයටම ගැළපෙන Dynamic Script Parser
   const parseScreenplayDynamic = (text: string): ExtractedScene[] => {
     const lines = text.split(/\r?\n/);
     const parsed: ExtractedScene[] = [];
@@ -136,10 +171,65 @@ export default function ScriptBreakdownPage() {
     return parsed;
   };
 
-  // Execution Handler
+  // PDF සහ Text Upload Handler
+  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setFileName(file.name);
+    setErrorMsg(null);
+    setIsLoading(true);
+
+    try {
+      if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
+        setStatusNote("PDF පිටපත කියවමින් පවතී (Reading PDF)...");
+        const extracted = await extractTextFromPDF(file);
+        setRawText(extracted);
+        setStatusNote("PDF පිටපත සාර්ථකව කියවන ලදී. Breakdown එක සකසමින්...");
+
+        const results = parseScreenplayDynamic(extracted);
+        if (results.length > 0) {
+          setScenes(results);
+          setSelectedScenes(results.map((s) => s.sceneNumber));
+        } else {
+          setScenes([
+            {
+              sceneNumber: 1,
+              slugline: `SCENE 01: ${file.name.replace(".pdf", "").toUpperCase()}`,
+              setting: "GENERAL",
+              timeOfDay: "DAY",
+              synopsis: extracted.slice(0, 200) + "...",
+              characters: ["LEAD ROLE"],
+              props: ["GENERAL ASSET"],
+              dialogues: []
+            }
+          ]);
+          setSelectedScenes([1]);
+        }
+        setStatusNote(null);
+      } else {
+        // TXT හෝ FDX සඳහා
+        const reader = new FileReader();
+        reader.onload = (event) => {
+          const content = event.target?.result as string;
+          setRawText(content);
+          const results = parseScreenplayDynamic(content);
+          setScenes(results);
+          setSelectedScenes(results.map((s) => s.sceneNumber));
+        };
+        reader.readAsText(file);
+      }
+    } catch (err: any) {
+      setErrorMsg("PDF ගොනුව කියවීමේදී දෝෂයක් සිදුවිය: " + (err.message || ""));
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Execute Parse Button Handler (Manual Parse)
   const handleExecuteParse = () => {
     if (!rawText.trim()) {
-      setErrorMsg("කරුණාකර Script එක Paste කරන්න හෝ .TXT ගොනුවක් Upload කරන්න.");
+      setErrorMsg("කරුණාකර PDF/TXT ගොනුවක් තෝරන්න හෝ පෙළ Paste කරන්න.");
       return;
     }
 
@@ -147,27 +237,27 @@ export default function ScriptBreakdownPage() {
     setErrorMsg(null);
 
     try {
-      const dynamicResults = parseScreenplayDynamic(rawText);
-
-      if (dynamicResults.length === 0) {
-        const fallbackScene: ExtractedScene = {
-          sceneNumber: 1,
-          slugline: "SCENE 01: NARRATIVE SEQUENCE",
-          setting: "GENERAL",
-          timeOfDay: "DAY",
-          synopsis: rawText.slice(0, 160) + "...",
-          characters: ["LEAD ROLE"],
-          props: ["GENERAL ASSET"],
-          dialogues: []
-        };
-        setScenes([fallbackScene]);
+      const results = parseScreenplayDynamic(rawText);
+      if (results.length === 0) {
+        setScenes([
+          {
+            sceneNumber: 1,
+            slugline: "SCENE 01: SCRIPT SEQUENCE",
+            setting: "GENERAL",
+            timeOfDay: "DAY",
+            synopsis: rawText.slice(0, 180) + "...",
+            characters: ["CHARACTER 1"],
+            props: ["PROP 1"],
+            dialogues: []
+          }
+        ]);
         setSelectedScenes([1]);
       } else {
-        setScenes(dynamicResults);
-        setSelectedScenes(dynamicResults.map((s) => s.sceneNumber));
+        setScenes(results);
+        setSelectedScenes(results.map((s) => s.sceneNumber));
       }
-    } catch (err: any) {
-      setErrorMsg("ස්ක්‍‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
+    } catch (err) {
+      setErrorMsg("ස්ක්‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
     } finally {
       setIsLoading(false);
     }
@@ -179,6 +269,7 @@ export default function ScriptBreakdownPage() {
     setRawText("");
     setFileName(null);
     setErrorMsg(null);
+    setStatusNote(null);
   };
 
   const toggleSelectScene = (num: number) => {
@@ -224,19 +315,10 @@ export default function ScriptBreakdownPage() {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Side: Upload / Paste Actions */}
+        {/* Left Side: Upload / Paste */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           <div className="bg-[#0b1410] border border-emerald-900/30 rounded-2xl p-6 shadow-xl">
             <div className="flex rounded-lg bg-[#070d0a] p-1 border border-emerald-950 mb-6">
-              <button
-                onClick={() => setActiveTab("paste")}
-                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "paste"
-                    ? "bg-emerald-500 text-black"
-                    : "text-zinc-400 hover:text-white"
-                  }`}
-              >
-                Paste Script (සිංහල / English)
-              </button>
               <button
                 onClick={() => setActiveTab("upload")}
                 className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "upload"
@@ -244,46 +326,64 @@ export default function ScriptBreakdownPage() {
                     : "text-zinc-400 hover:text-white"
                   }`}
               >
-                Upload File (.TXT)
+                Upload Screenplay (PDF / TXT)
+              </button>
+              <button
+                onClick={() => setActiveTab("paste")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-md transition-all ${activeTab === "paste"
+                    ? "bg-emerald-500 text-black"
+                    : "text-zinc-400 hover:text-white"
+                  }`}
+              >
+                Paste Script
               </button>
             </div>
 
-            {activeTab === "paste" ? (
-              <div className="flex flex-col gap-2">
-                <textarea
-                  rows={10}
-                  value={rawText}
-                  onChange={(e) => setRawText(e.target.value)}
-                  placeholder="ස්ක්‍රිප්ට් එක මෙතනට Paste කරන්න (e.g., INT. ROOM - NIGHT හෝ SCENE 01: අභ්‍යන්තර කාමරය...)..."
-                  className="w-full bg-[#070d0a] border border-emerald-900/40 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono resize-none leading-relaxed"
-                />
-              </div>
-            ) : (
+            {activeTab === "upload" ? (
               <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#070d0a]/50">
                 <input
                   type="file"
-                  id="script-file-input"
-                  accept=".txt,.fdx,.fountain"
+                  id="script-pdf-file-input"
+                  accept=".pdf,.txt,.fdx,.fountain"
                   className="hidden"
                   onChange={handleFileUpload}
                 />
                 <label
-                  htmlFor="script-file-input"
+                  htmlFor="script-pdf-file-input"
                   className="flex flex-col items-center cursor-pointer text-center"
                 >
                   <div className="w-12 h-12 rounded-full bg-emerald-950/80 flex items-center justify-center text-emerald-400 mb-4 border border-emerald-800/40">
                     <UploadCloud className="w-6 h-6" />
                   </div>
                   <span className="font-medium text-white text-sm">
-                    {fileName ? fileName : "Select Text Script File"}
+                    {fileName ? fileName : "Select Screenplay File"}
                   </span>
                   <span className="text-xs text-zinc-500 mt-1">
-                    Supports .TXT, .FDX, .FOUNTAIN
+                    Supports Sinhala & English Screenplays (.PDF, .TXT, .FDX)
                   </span>
                 </label>
               </div>
+            ) : (
+              <div className="flex flex-col gap-2">
+                <textarea
+                  rows={9}
+                  value={rawText}
+                  onChange={(e) => setRawText(e.target.value)}
+                  placeholder="Paste script text here (e.g., INT. ROOM - NIGHT හෝ SCENE 01: අභ්‍යන්තර කාමරය...)..."
+                  className="w-full bg-[#070d0a] border border-emerald-900/40 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono resize-none leading-relaxed"
+                />
+              </div>
             )}
 
+            {/* Status Feedback */}
+            {statusNote && (
+              <div className="flex items-center gap-2 mt-4 p-3 bg-emerald-950/60 border border-emerald-800/60 rounded-lg text-xs text-emerald-400">
+                <RefreshCw className="w-4 h-4 animate-spin" />
+                <span>{statusNote}</span>
+              </div>
+            )}
+
+            {/* Error Message */}
             {errorMsg && (
               <div className="flex items-center gap-2 mt-4 p-3 bg-red-950/40 border border-red-800/50 rounded-lg text-xs text-red-400">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -304,7 +404,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Side: Parsed Entities Output */}
+        {/* Right Side: Parsed Scenes Output */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           {scenes.length > 0 ? (
             <>
@@ -429,7 +529,7 @@ export default function ScriptBreakdownPage() {
                 ස්ක්‍රිප්ට් එකක් ඇතුළත් කර නොමැත
               </h3>
               <p className="text-xs text-zinc-500 max-w-sm mt-1 leading-relaxed">
-                වම්පසින් සිංහල හෝ ඉංග්‍රීසි පෙළ Paste කර හෝ .TXT ගොනුවක් ලබා දී **Execute Breakdown Parse** ක්ලික් කරන්න.
+                වම්පසින් PDF හෝ TXT ගොනුවක් තෝරා හෝ පෙළ Paste කර **Execute Breakdown Parse** ක්ලික් කරන්න.
               </p>
             </div>
           )}
