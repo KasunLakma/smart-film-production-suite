@@ -10,7 +10,10 @@ import {
   AlertCircle,
   RefreshCw,
   Film,
-  Trash2
+  Trash2,
+  X,
+  ArrowRight,
+  Clapperboard
 } from "lucide-react";
 
 interface ExtractedScene {
@@ -29,14 +32,14 @@ export default function ScriptBreakdownPage() {
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
 
-  // ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script දත්ත පෙන්වීම වැළකේ
+  // Scene State (ආරම්භයේදී හිස් array එකක් තැබීමෙන් පරණ script මැකී පවතී)
   const [scenes, setScenes] = useState<ExtractedScene[]>([]);
   const [selectedScenes, setSelectedScenes] = useState<number[]>([]);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // Client-Side PDF Text Extractor (Zero-dependency, Zero Backend Crash)
+  // Client-Side PDF Text Extractor
   const extractTextFromPDF = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const loadScript = () => {
@@ -65,7 +68,7 @@ export default function ScriptBreakdownPage() {
             reject(err);
           }
         };
-        script.onerror = () => reject(new Error("PDF Engine එක load වීමට නොහැකි විය."));
+        script.onerror = () => reject(new Error("PDF Engine එක load කරගත නොහැකි විය."));
         document.body.appendChild(script);
       };
 
@@ -94,23 +97,30 @@ export default function ScriptBreakdownPage() {
     });
   };
 
-  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයටම ගැළපෙන Dynamic Script Parser
+  // සිංහල & ඉංග්‍රීසි Script Parser Engine
   const parseScreenplayDynamic = (text: string): ExtractedScene[] => {
-    const lines = text.split(/\r?\n/);
+    const rawLines = text.split(/\r?\n/);
     const parsed: ExtractedScene[] = [];
     let currentScene: ExtractedScene | null = null;
 
-    const sluglinePattern = /^(SCENE\s*\d+|INT\.?|EXT\.?|INT\/EXT\.?|අභ්‍යන්තර|බාහිර|දර්ශනය\s*\d+)/i;
-    const propWords = [
-      "GUN", "PHONE", "MAP", "REVOLVER", "CAR", "KNIFE", "BAG", "BOTTLE", "MONEY", "CAMERA", "LAPTOP",
-      "තුවක්කුව", "දුරකථනය", "සිතියම", "පිස්තෝලය", "කාර්", "පිහිය", "බෑගය", "බෝතලය", "මුදල්", "කැමරාව"
+    // විවිධාකාර Scene Headings හඳුනා ගැනීමේ RegEx
+    const sceneRegex = /(?:SCENE|දර්ශනය|දර්ශන|INT\.|EXT\.|INT\/EXT|අභ්‍යන්තර|බාහිර)[\s.:\-_0-9]/i;
+
+    const propDictionary = [
+      "GUN", "REVOLVER", "PISTOL", "PHONE", "MOBILE", "MAP", "CAR", "VEHICLE", "KNIFE", "DAGGER",
+      "BAG", "BACKPACK", "BRIEFCASE", "BOTTLE", "GLASS", "MONEY", "CASH", "CAMERA", "LAPTOP",
+      "COMPUTER", "TORCH", "FLASHLIGHT", "KEY", "KEYS", "LETTER", "DOCUMENT", "ENVELOPE", "SCANNER",
+      "තුවක්කුව", "පිස්තෝලය", "දුරකථනය", "සෙලියුලර්", "සිතියම", "කාර්", "රථය", "වාහනය", "පිහිය",
+      "බෑගය", "බෑග්", "බෝතලය", "වීදුරුව", "මුදල්", "සල්ලි", "කැමරාව", "ලැප්ටොප්", "පරිගණකය",
+      "විදුලි පන්දම", "පන්දම", "යතුර", "යතුරු", "ලිපිය", "සටහන", "ලියුම", "ස්කෑනරය", "ෆයිල්", "ෆෝල්ඩරය"
     ];
 
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
+    for (let i = 0; i < rawLines.length; i++) {
+      const line = rawLines[i].trim();
       if (!line) continue;
 
-      if (sluglinePattern.test(line)) {
+      // 1. Scene Heading එකක් හමුවූ විට
+      if (sceneRegex.test(line) || line.toUpperCase().startsWith("SCENE") || line.startsWith("දර්ශනය")) {
         if (currentScene) {
           parsed.push(currentScene);
         }
@@ -121,12 +131,12 @@ export default function ScriptBreakdownPage() {
 
         let timeOfDay = "DAY";
         if (/NIGHT|රාත්‍රී/i.test(line)) timeOfDay = "NIGHT / රාත්‍රී";
-        else if (/DAY|දවල්|උදෑසන/i.test(line)) timeOfDay = "DAY / දහවල්";
+        else if (/DAY|දවල්|දහවල්|උදෑසන/i.test(line)) timeOfDay = "DAY / දහවල්";
         else if (/CONTINUOUS|අඛණ්ඩ/i.test(line)) timeOfDay = "CONTINUOUS";
 
         currentScene = {
           sceneNumber: parsed.length + 1,
-          slugline: line,
+          slugline: line.replace(/^#+\s*/, ""),
           setting,
           timeOfDay,
           synopsis: "",
@@ -137,28 +147,36 @@ export default function ScriptBreakdownPage() {
         continue;
       }
 
+      // 2. Scene එකක් ඇතුළත දත්ත කියවීම
       if (currentScene) {
-        if (line.includes(":") || line.includes("-")) {
-          const parts = line.split(/[:\-]/);
-          const speaker = parts[0].trim();
-          const speech = parts.slice(1).join(":").trim();
+        // දෙබස් හඳුනා ගැනීම (Speaker: Dialogue හෝ Speaker - Dialogue)
+        if (line.includes(":") || (line.includes("-") && !line.startsWith("-"))) {
+          const delimiter = line.includes(":") ? ":" : "-";
+          const parts = line.split(delimiter);
+          const speakerCandidate = parts[0].trim();
+          const speechCandidate = parts.slice(1).join(delimiter).trim();
 
-          if (speaker.length < 30 && speech.length > 0) {
-            if (!currentScene.characters.includes(speaker)) {
-              currentScene.characters.push(speaker);
+          if (speakerCandidate.length > 1 && speakerCandidate.length < 35 && speechCandidate.length > 0) {
+            if (!currentScene.characters.includes(speakerCandidate)) {
+              currentScene.characters.push(speakerCandidate);
             }
-            currentScene.dialogues.push({ speaker, text: speech });
+            currentScene.dialogues.push({
+              speaker: speakerCandidate,
+              text: speechCandidate,
+            });
             continue;
           }
         }
 
-        propWords.forEach((pw) => {
-          if (line.toUpperCase().includes(pw.toUpperCase()) && !currentScene!.props.includes(pw)) {
-            currentScene!.props.push(pw);
+        // Props හඳුනා ගැනීම
+        for (const prop of propDictionary) {
+          if (line.toUpperCase().includes(prop.toUpperCase()) && !currentScene.props.includes(prop)) {
+            currentScene.props.push(prop);
           }
-        });
+        }
 
-        if (!currentScene.synopsis && line.length > 20) {
+        // Synopsis (දර්ශන පසුබිම් විස්තරය)
+        if (!currentScene.synopsis && line.length > 25 && !line.includes(":")) {
           currentScene.synopsis = line;
         }
       }
@@ -168,10 +186,47 @@ export default function ScriptBreakdownPage() {
       parsed.push(currentScene);
     }
 
+    // ස්ක්‍රිප්ට් එකේ විශේෂ headings නොමැති නම්, ඡේද අනුව Scenes සාදයි
+    if (parsed.length === 0 && text.trim().length > 0) {
+      const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim().length > 10);
+      paragraphs.slice(0, 5).forEach((p, idx) => {
+        const foundChars: string[] = [];
+        const foundProps: string[] = [];
+        const lines = p.split("\n");
+        const dialogues: { speaker: string; text: string }[] = [];
+
+        lines.forEach((l) => {
+          if (l.includes(":")) {
+            const [spk, txt] = l.split(":");
+            if (spk && txt && spk.length < 25) {
+              if (!foundChars.includes(spk.trim())) foundChars.push(spk.trim());
+              dialogues.push({ speaker: spk.trim(), text: txt.trim() });
+            }
+          }
+          propDictionary.forEach((prop) => {
+            if (l.toUpperCase().includes(prop.toUpperCase()) && !foundProps.includes(prop)) {
+              foundProps.push(prop);
+            }
+          });
+        });
+
+        parsed.push({
+          sceneNumber: idx + 1,
+          slugline: `SCENE 0${idx + 1}: දර්ශනය ${idx + 1} - SEQUENCE`,
+          setting: idx % 2 === 0 ? "INT (අභ්‍යන්තර)" : "EXT (බාහිර)",
+          timeOfDay: idx % 2 === 0 ? "NIGHT / රාත්‍රී" : "DAY / දහවල්",
+          synopsis: p.slice(0, 150) + "...",
+          characters: foundChars.length > 0 ? foundChars : [`චරිතය ${idx + 1}`],
+          props: foundProps.length > 0 ? foundProps : ["ප්‍රධාන උපකරණය"],
+          dialogues,
+        });
+      });
+    }
+
     return parsed;
   };
 
-  // PDF සහ Text Upload Handler
+  // File Upload Handling
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -182,33 +237,16 @@ export default function ScriptBreakdownPage() {
 
     try {
       if (file.type === "application/pdf" || file.name.endsWith(".pdf")) {
-        setStatusNote("PDF පිටපත කියවමින් පවතී (Reading PDF)...");
+        setStatusNote("PDF පිටපත කියවමින් පවතී...");
         const extracted = await extractTextFromPDF(file);
         setRawText(extracted);
-        setStatusNote("PDF පිටපත සාර්ථකව කියවන ලදී. Breakdown එක සකසමින්...");
+        setStatusNote("Screenplay එක විශ්ලේෂණය කරමින්...");
 
         const results = parseScreenplayDynamic(extracted);
-        if (results.length > 0) {
-          setScenes(results);
-          setSelectedScenes(results.map((s) => s.sceneNumber));
-        } else {
-          setScenes([
-            {
-              sceneNumber: 1,
-              slugline: `SCENE 01: ${file.name.replace(".pdf", "").toUpperCase()}`,
-              setting: "GENERAL",
-              timeOfDay: "DAY",
-              synopsis: extracted.slice(0, 200) + "...",
-              characters: ["LEAD ROLE"],
-              props: ["GENERAL ASSET"],
-              dialogues: []
-            }
-          ]);
-          setSelectedScenes([1]);
-        }
+        setScenes(results);
+        setSelectedScenes(results.map((s) => s.sceneNumber));
         setStatusNote(null);
       } else {
-        // TXT හෝ FDX සඳහා
         const reader = new FileReader();
         reader.onload = (event) => {
           const content = event.target?.result as string;
@@ -220,13 +258,13 @@ export default function ScriptBreakdownPage() {
         reader.readAsText(file);
       }
     } catch (err: any) {
-      setErrorMsg("PDF ගොනුව කියවීමේදී දෝෂයක් සිදුවිය: " + (err.message || ""));
+      setErrorMsg("ගොනුව කියවීමේදී දෝෂයක් සිදුවිය: " + (err.message || ""));
     } finally {
       setIsLoading(false);
     }
   };
 
-  // Execute Parse Button Handler (Manual Parse)
+  // Execute Parse Button
   const handleExecuteParse = () => {
     if (!rawText.trim()) {
       setErrorMsg("කරුණාකර PDF/TXT ගොනුවක් තෝරන්න හෝ පෙළ Paste කරන්න.");
@@ -238,38 +276,41 @@ export default function ScriptBreakdownPage() {
 
     try {
       const results = parseScreenplayDynamic(rawText);
-      if (results.length === 0) {
-        setScenes([
-          {
-            sceneNumber: 1,
-            slugline: "SCENE 01: SCRIPT SEQUENCE",
-            setting: "GENERAL",
-            timeOfDay: "DAY",
-            synopsis: rawText.slice(0, 180) + "...",
-            characters: ["CHARACTER 1"],
-            props: ["PROP 1"],
-            dialogues: []
-          }
-        ]);
-        setSelectedScenes([1]);
-      } else {
-        setScenes(results);
-        setSelectedScenes(results.map((s) => s.sceneNumber));
-      }
+      setScenes(results);
+      setSelectedScenes(results.map((s) => s.sceneNumber));
     } catch (err) {
-      setErrorMsg("ස්ක්‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
+      setErrorMsg("ස්ක්‍‍රිප්ට් එක Parse කිරීමේදී දෝෂයක් සිදුවිය.");
     } finally {
       setIsLoading(false);
     }
   };
 
-  const handleClear = () => {
+  // තෝරාගත් PDF/File එක ඉවත් කිරීම
+  const handleRemoveFile = () => {
+    setFileName(null);
+    setRawText("");
+    setErrorMsg(null);
+    setStatusNote(null);
+    const fileInput = document.getElementById("script-pdf-file-input") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+  };
+
+  // සීන් එකින් එක Delete කිරීම
+  const handleDeleteSingleScene = (sceneNum: number) => {
+    setScenes((prev) => prev.filter((s) => s.sceneNumber !== sceneNum));
+    setSelectedScenes((prev) => prev.filter((n) => n !== sceneNum));
+  };
+
+  // සියලුම Scenes මකා දැමීම
+  const handleClearAllScenes = () => {
     setScenes([]);
     setSelectedScenes([]);
     setRawText("");
     setFileName(null);
     setErrorMsg(null);
     setStatusNote(null);
+    const fileInput = document.getElementById("script-pdf-file-input") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
   };
 
   const toggleSelectScene = (num: number) => {
@@ -305,11 +346,11 @@ export default function ScriptBreakdownPage() {
 
         {scenes.length > 0 && (
           <button
-            onClick={() => alert("Scenes forwarded to 16:9 Storyboard canvas.")}
+            onClick={() => alert(`Scenes (${selectedScenes.join(", ")}) forwarded to 16:9 Storyboard Canvas!`)}
             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-semibold rounded-lg shadow-lg shadow-emerald-950/30 transition-all text-sm"
           >
             <Film className="w-4 h-4" />
-            Generate All Storyboards
+            Generate All Storyboards ({selectedScenes.length})
           </button>
         )}
       </div>
@@ -340,28 +381,49 @@ export default function ScriptBreakdownPage() {
             </div>
 
             {activeTab === "upload" ? (
-              <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#070d0a]/50">
-                <input
-                  type="file"
-                  id="script-pdf-file-input"
-                  accept=".pdf,.txt,.fdx,.fountain"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                />
-                <label
-                  htmlFor="script-pdf-file-input"
-                  className="flex flex-col items-center cursor-pointer text-center"
-                >
-                  <div className="w-12 h-12 rounded-full bg-emerald-950/80 flex items-center justify-center text-emerald-400 mb-4 border border-emerald-800/40">
-                    <UploadCloud className="w-6 h-6" />
+              <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#070d0a]/50 relative">
+                {fileName ? (
+                  /* තෝරාගත් File එක පෙන්වන සහ Remove කරන කොටස */
+                  <div className="flex flex-col items-center gap-3">
+                    <div className="w-12 h-12 rounded-full bg-emerald-950/80 flex items-center justify-center text-emerald-400 border border-emerald-800/40">
+                      <Clapperboard className="w-6 h-6" />
+                    </div>
+                    <span className="font-semibold text-emerald-300 text-sm text-center px-4">
+                      {fileName}
+                    </span>
+                    <button
+                      onClick={handleRemoveFile}
+                      className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-950/60 hover:bg-red-900/80 text-red-300 border border-red-800/50 rounded-md text-xs transition-all"
+                    >
+                      <X className="w-3.5 h-3.5" />
+                      Remove PDF File
+                    </button>
                   </div>
-                  <span className="font-medium text-white text-sm">
-                    {fileName ? fileName : "Select Screenplay File"}
-                  </span>
-                  <span className="text-xs text-zinc-500 mt-1">
-                    Supports Sinhala & English Screenplays (.PDF, .TXT, .FDX)
-                  </span>
-                </label>
+                ) : (
+                  <>
+                    <input
+                      type="file"
+                      id="script-pdf-file-input"
+                      accept=".pdf,.txt,.fdx,.fountain"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                    />
+                    <label
+                      htmlFor="script-pdf-file-input"
+                      className="flex flex-col items-center cursor-pointer text-center"
+                    >
+                      <div className="w-12 h-12 rounded-full bg-emerald-950/80 flex items-center justify-center text-emerald-400 mb-4 border border-emerald-800/40">
+                        <UploadCloud className="w-6 h-6" />
+                      </div>
+                      <span className="font-medium text-white text-sm">
+                        Select Screenplay File
+                      </span>
+                      <span className="text-xs text-zinc-500 mt-1">
+                        Supports Sinhala & English PDFs, .TXT, and .FDX
+                      </span>
+                    </label>
+                  </>
+                )}
               </div>
             ) : (
               <div className="flex flex-col gap-2">
@@ -369,7 +431,7 @@ export default function ScriptBreakdownPage() {
                   rows={9}
                   value={rawText}
                   onChange={(e) => setRawText(e.target.value)}
-                  placeholder="Paste script text here (e.g., INT. ROOM - NIGHT හෝ SCENE 01: අභ්‍යන්තර කාමරය...)..."
+                  placeholder="Paste script text here (e.g., SCENE 01: INT. ROOM - NIGHT හෝ දර්ශනය 01: අභ්‍යන්තර කාමරය...)..."
                   className="w-full bg-[#070d0a] border border-emerald-900/40 rounded-xl p-3 text-xs text-zinc-200 focus:outline-none focus:border-emerald-500 font-mono resize-none leading-relaxed"
                 />
               </div>
@@ -404,10 +466,11 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Side: Parsed Scenes Output */}
+        {/* Right Side: Parsed Scenes Output Drawer */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           {scenes.length > 0 ? (
             <>
+              {/* Controls Bar */}
               <div className="flex items-center justify-between pb-2 border-b border-zinc-800 px-1">
                 <button
                   onClick={handleSelectAll}
@@ -420,15 +483,18 @@ export default function ScriptBreakdownPage() {
                   )}
                   Select All ({scenes.length})
                 </button>
+
+                {/* සම්පූර්ණ Scenes Clear කිරීමේ බොත්තම */}
                 <button
-                  onClick={handleClear}
-                  className="flex items-center gap-1.5 text-xs text-zinc-500 hover:text-red-400 transition-colors"
+                  onClick={handleClearAllScenes}
+                  className="flex items-center gap-1.5 px-3 py-1 bg-zinc-900 hover:bg-red-950/60 text-zinc-400 hover:text-red-400 border border-zinc-800 hover:border-red-800/50 rounded-md text-xs transition-all"
                 >
                   <Trash2 className="w-3.5 h-3.5" />
-                  Clear Breakdown
+                  Clear All Scenes
                 </button>
               </div>
 
+              {/* Scene Cards List */}
               <div className="flex flex-col gap-4 max-h-[750px] overflow-y-auto pr-2 custom-scrollbar">
                 {scenes.map((scene) => {
                   const isSelected = selectedScenes.includes(scene.sceneNumber);
@@ -440,6 +506,7 @@ export default function ScriptBreakdownPage() {
                           : "bg-[#070d0a] border-zinc-850 opacity-70"
                         }`}
                     >
+                      {/* Scene Heading & Delete Single Scene */}
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3">
                           <button onClick={() => toggleSelectScene(scene.sceneNumber)}>
@@ -457,6 +524,7 @@ export default function ScriptBreakdownPage() {
                           </h3>
                         </div>
 
+                        {/* Setting, Time & Delete Scene Button */}
                         <div className="flex items-center gap-2">
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800/40">
                             {scene.setting}
@@ -464,19 +532,31 @@ export default function ScriptBreakdownPage() {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
                             {scene.timeOfDay}
                           </span>
+
+                          {/* තනි Scene එක Delete කිරීමේ බොත්තම */}
+                          <button
+                            title="Delete this scene"
+                            onClick={() => handleDeleteSingleScene(scene.sceneNumber)}
+                            className="p-1 rounded bg-zinc-900 hover:bg-red-950/80 text-zinc-500 hover:text-red-400 border border-zinc-800 hover:border-red-800/50 transition-colors"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
                         </div>
                       </div>
 
+                      {/* Scene Synopsis */}
                       {scene.synopsis && (
                         <p className="text-xs text-zinc-400 mb-4 leading-relaxed bg-[#070d0a]/60 p-3 rounded-lg border border-zinc-800/50">
                           {scene.synopsis}
                         </p>
                       )}
 
-                      <div className="flex flex-col gap-2.5 text-xs">
+                      {/* Characters & Props Chips */}
+                      <div className="flex flex-col gap-2.5 text-xs mb-4">
+                        {/* Characters */}
                         {scene.characters.length > 0 && (
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-zinc-500 font-medium">චරිත / Characters:</span>
+                            <span className="text-zinc-500 font-medium">චරිත / Characters ({scene.characters.length}):</span>
                             {scene.characters.map((char, idx) => (
                               <span
                                 key={idx}
@@ -488,9 +568,10 @@ export default function ScriptBreakdownPage() {
                           </div>
                         )}
 
+                        {/* Props */}
                         {scene.props.length > 0 && (
                           <div className="flex items-center gap-2 flex-wrap">
-                            <span className="text-zinc-500 font-medium">උපකරණ / Props:</span>
+                            <span className="text-zinc-500 font-medium">උපකරණ / Props ({scene.props.length}):</span>
                             {scene.props.map((prop, idx) => (
                               <span
                                 key={idx}
@@ -502,9 +583,10 @@ export default function ScriptBreakdownPage() {
                           </div>
                         )}
 
+                        {/* Dialogues */}
                         {scene.dialogues.length > 0 && (
                           <div className="mt-2 pt-2 border-t border-zinc-800/50 flex flex-col gap-1.5">
-                            <span className="text-zinc-500 font-medium">දෙබස් / Key Dialogues:</span>
+                            <span className="text-zinc-500 font-medium">දෙබස් / Key Dialogues ({scene.dialogues.length}):</span>
                             {scene.dialogues.map((dlg, idx) => (
                               <p key={idx} className="text-[11px] text-zinc-300 italic">
                                 <span className="font-semibold text-emerald-400 not-italic">{dlg.speaker}: </span>
@@ -514,13 +596,27 @@ export default function ScriptBreakdownPage() {
                           </div>
                         )}
                       </div>
+
+                      {/* පතුලේ ඇති "Generate Storyboard →" Button එක */}
+                      <div className="flex items-center justify-between pt-3 border-t border-zinc-850/80">
+                        <span className="text-[11px] text-zinc-500">
+                          {scene.dialogues.length > 0 ? `${scene.dialogues.length} Dialogue beats` : "Visual Scene Block"}
+                        </span>
+                        <button
+                          onClick={() => alert(`Generating 16:9 Storyboard for Scene ${scene.sceneNumber} (${scene.slugline})...`)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-200 border border-emerald-800/50 text-xs font-medium transition-all"
+                        >
+                          Generate Storyboard
+                          <ArrowRight className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
             </>
           ) : (
-            /* හිස් Slate තත්ත්වය */
+            /* හිස් State */
             <div className="h-[480px] flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-2xl p-8 text-center bg-[#0b1410]/20">
               <div className="w-14 h-14 rounded-full bg-zinc-900/80 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-4">
                 <FileText className="w-7 h-7" />
