@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
+import { useRouter } from "next/navigation";
 import {
   FileText,
   UploadCloud,
@@ -28,10 +29,12 @@ interface ExtractedScene {
   props: string[];
   dialogues: { speaker: string; text: string }[];
   plannedShots: number;
-  visualPrompt: string; // Storyboard photo එකක් generate කිරීමට අවශ්‍ය visual prompt එක
+  visualPrompt: string;
 }
 
 export default function ScriptBreakdownPage() {
+  const router = useRouter();
+
   const [activeTab, setActiveTab] = useState<"upload" | "paste">("upload");
   const [rawText, setRawText] = useState<string>("");
   const [fileName, setFileName] = useState<string | null>(null);
@@ -43,7 +46,41 @@ export default function ScriptBreakdownPage() {
   const [statusNote, setStatusNote] = useState<string | null>(null);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
-  // PDF Engine (Zero dependencies)
+  // Page එක load වන විට sessionStorage එකෙන් දත්ත ලබා ගැනීම (වෙනත් page වලට ගොස් නැවත එනවිට data ඉතිරි වේ)
+  useEffect(() => {
+    try {
+      const savedScenes = sessionStorage.getItem("eclat_active_scenes");
+      const savedFileName = sessionStorage.getItem("eclat_active_filename");
+      if (savedScenes) {
+        const parsed = JSON.parse(savedScenes);
+        setScenes(parsed);
+        setSelectedScenes(parsed.map((s: ExtractedScene) => s.sceneNumber));
+      }
+      if (savedFileName) {
+        setFileName(savedFileName);
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
+  // Scenes වෙනස් වන විට sessionStorage එක update කිරීම
+  const updateScenesState = (newScenes: ExtractedScene[], name?: string | null) => {
+    setScenes(newScenes);
+    setSelectedScenes(newScenes.map((s) => s.sceneNumber));
+    if (newScenes.length > 0) {
+      sessionStorage.setItem("eclat_active_scenes", JSON.stringify(newScenes));
+      if (name !== undefined) {
+        if (name) sessionStorage.setItem("eclat_active_filename", name);
+        else sessionStorage.removeItem("eclat_active_filename");
+      }
+    } else {
+      sessionStorage.removeItem("eclat_active_scenes");
+      sessionStorage.removeItem("eclat_active_filename");
+    }
+  };
+
+  // PDF Extraction
   const extractTextFromPDF = async (file: File): Promise<string> => {
     return new Promise((resolve, reject) => {
       const runExtraction = async (pdfjsLib: any) => {
@@ -83,7 +120,6 @@ export default function ScriptBreakdownPage() {
     });
   };
 
-  // File තේරූ විට rawText එකට පමණක් ලබා ගනී (ස්වයංක්‍රීයව parse නොවේ - බටන් එක එබිය යුතුය)
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -115,18 +151,13 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // Storyboard-Ready Dynamic Scene Splitter (සිංහල සහ English)
+  // Dynamic Scene Parsing
   const parseScreenplayForStoryboards = (fullText: string): ExtractedScene[] => {
-    // 1. Text එකේ ඇති SCENE / දර්ශනය වැනි delimiters මත පදනම්ව පෙළ කඩා ගැනීම
-    // ඡේද මැද SCENE 02, SCENE 03 ආවත් ඒවා තනි තනි කොටස් වලට වෙන් කරයි
     const normalizedText = fullText.replace(/(\r\n|\n|\r)/gm, " ");
-
-    // Scene splitting regex (English SCENE or Sinhala දර්ශනය)
     const sceneSplitRegex = /(?=SCENE\s*\d+|දර්ශනය\s*\d+|INT\.\s+|EXT\.\s+|අභ්‍යන්තර|බාහිර)/gi;
     let chunks = normalizedText.split(sceneSplitRegex).map((c) => c.trim()).filter((c) => c.length > 25);
 
     if (chunks.length <= 1) {
-      // ඡේද අනුව වෙන් කිරීමේ fallback එක
       chunks = fullText.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 25);
     }
 
@@ -148,17 +179,14 @@ export default function ScriptBreakdownPage() {
     chunks.forEach((chunk, index) => {
       const sceneNum = index + 1;
 
-      // Setting හඳුනා ගැනීම
       let setting = "INT (අභ්‍යන්තර)";
       if (/EXT|බාහිර/i.test(chunk)) setting = "EXT (බාහිර)";
 
-      // TimeOfDay හඳුනා ගැනීම
       let timeOfDay = "NIGHT / DAWN";
       if (/CONTINUOUS|අඛණ්ඩ/i.test(chunk)) timeOfDay = "CONTINUOUS";
       else if (/DAY|දහවල්|උදෑසන/i.test(chunk)) timeOfDay = "DAY / දහවල්";
       else if (/NIGHT|රාත්‍රී/i.test(chunk)) timeOfDay = "NIGHT / රාත්‍රී";
 
-      // Slugline සාදා ගැනීම
       let slugline = `SCENE 0${sceneNum}: ${setting.includes("INT") ? "INT" : "EXT"}. `;
       const headingMatch = chunk.match(/(?:SCENE\s*\d+[:.\-\s]*)(.*?)(?=[.?!]|\n|$)/i);
       if (headingMatch && headingMatch[1].length > 5) {
@@ -167,7 +195,6 @@ export default function ScriptBreakdownPage() {
         slugline += `${setting.includes("INT") ? "පැරණි තාක්ෂණ විද්‍යාගාරය" : "වරාය පිවිසුම් මාර්ගය"} - ${timeOfDay}`;
       }
 
-      // Characters හඳුනා ගැනීම
       const foundChars: string[] = [];
       characterNames.forEach((ch) => {
         if (chunk.toUpperCase().includes(ch.toUpperCase()) && !foundChars.includes(ch)) {
@@ -178,7 +205,6 @@ export default function ScriptBreakdownPage() {
         foundChars.push(sceneNum % 2 === 0 ? "රහස් නිලධාරියා" : "නිමල්", sceneNum % 2 === 0 ? "කසුන්" : "සහායක");
       }
 
-      // Props හඳුනා ගැනීම
       const foundProps: string[] = [];
       propDictionary.forEach((pr) => {
         if (chunk.toUpperCase().includes(pr.toUpperCase()) && !foundProps.includes(pr)) {
@@ -189,7 +215,6 @@ export default function ScriptBreakdownPage() {
         foundProps.push("විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය");
       }
 
-      // Dialogues හඳුනා ගැනීම
       const dialogues: { speaker: string; text: string }[] = [];
       const quoteMatches = chunk.match(/"([^"]+)"|“([^”]+)”/g);
       if (quoteMatches) {
@@ -206,10 +231,8 @@ export default function ScriptBreakdownPage() {
         );
       }
 
-      // Storyboard Photo එකක් render කළ හැකි Visual Prompt එක නිර්මාණය
       const visualPrompt = `Cinematic 16:9 shot of ${slugline}, wide angle composition, ${setting.includes("INT") ? "moody dark interior lab" : "rainy street harbor"}, cinematic rim lighting, featuring ${foundChars.join(" and ")}, holding ${foundProps[0] || "gadget"}, 8k high resolution photorealistic pre-vis frame.`;
 
-      // Synopsis සකසා ගැනීම
       const cleanSynopsis = chunk
         .replace(/SCENE\s*\d+[:.\-\s]*/gi, "")
         .replace(/INT\.|EXT\./gi, "")
@@ -230,10 +253,9 @@ export default function ScriptBreakdownPage() {
       });
     });
 
-    return extracted.slice(0, 10); // උපරිම scenes 10ක් දක්වා පිළිවෙළට ගනී
+    return extracted.slice(0, 10);
   };
 
-  // "Execute Breakdown Parse" බටන් එක එබූ විට පමණක් Parse වේ
   const handleExecuteParse = () => {
     if (!rawText.trim()) {
       setErrorMsg("කරුණාකර PDF එකක් තෝරන්න හෝ ස්ක්‍රිප්ට් එකක් Paste කරන්න.");
@@ -246,8 +268,7 @@ export default function ScriptBreakdownPage() {
 
     try {
       const results = parseScreenplayForStoryboards(rawText);
-      setScenes(results);
-      setSelectedScenes(results.map((s) => s.sceneNumber));
+      updateScenesState(results, fileName);
     } catch (err: any) {
       setErrorMsg("Parse කිරීමේදී දෝෂයක් සිදුවිය: " + err.message);
     } finally {
@@ -255,32 +276,69 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // PDF ඉවත් කිරීමේ බොත්තම (Remove PDF)
   const handleRemoveFile = () => {
     setFileName(null);
     setRawText("");
     setStatusNote(null);
     setErrorMsg(null);
+    sessionStorage.removeItem("eclat_active_filename");
     const input = document.getElementById("file-input") as HTMLInputElement;
     if (input) input.value = "";
   };
 
-  // Scene එකින් එක Delete කිරීම
   const handleDeleteScene = (sceneNum: number) => {
-    setScenes((prev) => prev.filter((s) => s.sceneNumber !== sceneNum));
-    setSelectedScenes((prev) => prev.filter((n) => n !== sceneNum));
+    const updated = scenes.filter((s) => s.sceneNumber !== sceneNum);
+    updateScenesState(updated);
   };
 
-  // සියලුම Scenes එකවර Clear කිරීම
   const handleClearAllScenes = () => {
-    setScenes([]);
-    setSelectedScenes([]);
+    updateScenesState([], null);
     setRawText("");
     setFileName(null);
     setStatusNote(null);
     setErrorMsg(null);
     const input = document.getElementById("file-input") as HTMLInputElement;
     if (input) input.value = "";
+  };
+
+  // Storyboard Page එකට Navigate කිරීම සහ Data එක යැවීම
+  const handleGenerateStoryboards = (targetScenes: ExtractedScene[]) => {
+    if (targetScenes.length === 0) return;
+
+    // Storyboard පිටුවට අවශ්‍ය frames සකස් කර sessionStorage එකේ තැන්පත් කිරීම
+    const storyboardCards = targetScenes.flatMap((sc) => [
+      {
+        id: `sb-${sc.sceneNumber}-a`,
+        sceneNumber: sc.sceneNumber,
+        shotNumber: `SHOT ${String(sc.sceneNumber).padStart(2, "0")}A`,
+        shotTitle: `Wide Master Framing (WMS)`,
+        slugline: sc.slugline,
+        lensAngle: "28mm Anamorphic T2.0",
+        movement: "Slow Push-In Tracking",
+        visualPrompt: sc.visualPrompt,
+        characters: sc.characters,
+        props: sc.props,
+        imageType: "wide"
+      },
+      {
+        id: `sb-${sc.sceneNumber}-b`,
+        sceneNumber: sc.sceneNumber,
+        shotNumber: `SHOT ${String(sc.sceneNumber).padStart(2, "0")}B`,
+        shotTitle: `Medium Close Action (MCU)`,
+        slugline: sc.slugline,
+        lensAngle: "50mm Prime T1.5",
+        movement: "Dynamic Eye-Level",
+        visualPrompt: sc.visualPrompt,
+        characters: sc.characters,
+        props: sc.props,
+        imageType: "close"
+      }
+    ]);
+
+    sessionStorage.setItem("eclat_storyboard_frames", JSON.stringify(storyboardCards));
+
+    // Storyboard පිටුව වෙත සෘජුවම Navigate වීම
+    router.push("/storyboard");
   };
 
   const toggleSelectScene = (sceneNum: number) => {
@@ -299,7 +357,7 @@ export default function ScriptBreakdownPage() {
 
   return (
     <div className="min-h-screen bg-[#060b08] text-zinc-200 p-8 font-sans">
-      {/* Top Header Bar */}
+      {/* Header Bar */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-8">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-950/90 text-emerald-400 border border-emerald-800/60 mb-2">
@@ -316,7 +374,10 @@ export default function ScriptBreakdownPage() {
 
         {scenes.length > 0 && (
           <button
-            onClick={() => alert(`Scenes (${selectedScenes.join(", ")}) Storyboard Studio එක වෙත යොමු කරන ලදී!`)}
+            onClick={() => {
+              const selected = scenes.filter((s) => selectedScenes.includes(s.sceneNumber));
+              handleGenerateStoryboards(selected.length > 0 ? selected : scenes);
+            }}
             className="flex items-center gap-2 px-5 py-2.5 bg-emerald-500 hover:bg-emerald-400 text-black font-bold rounded-lg shadow-lg shadow-emerald-950/40 transition-all text-sm"
           >
             <Film className="w-4 h-4" />
@@ -327,10 +388,9 @@ export default function ScriptBreakdownPage() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
-        {/* Left Side: Upload & Action Panel */}
+        {/* Left Side: Upload Panel */}
         <div className="lg:col-span-5 flex flex-col gap-6">
           <div className="bg-[#0b1410] border border-emerald-900/40 rounded-2xl p-6 shadow-2xl">
-            {/* Tabs */}
             <div className="flex rounded-lg bg-[#060b08] p-1 border border-emerald-950 mb-6">
               <button
                 onClick={() => setActiveTab("upload")}
@@ -352,7 +412,6 @@ export default function ScriptBreakdownPage() {
               </button>
             </div>
 
-            {/* Upload Area */}
             {activeTab === "upload" ? (
               <div className="flex flex-col items-center justify-center border-2 border-dashed border-emerald-900/40 rounded-xl p-8 hover:border-emerald-600/50 transition-colors bg-[#060b08]/50 relative">
                 {fileName ? (
@@ -409,7 +468,6 @@ export default function ScriptBreakdownPage() {
               </div>
             )}
 
-            {/* Status Feedback */}
             {statusNote && (
               <div className="flex items-center gap-2 mt-4 p-3 bg-emerald-950/70 border border-emerald-800/70 rounded-lg text-xs text-emerald-400">
                 <RefreshCw className="w-4 h-4 animate-spin flex-shrink-0" />
@@ -417,7 +475,6 @@ export default function ScriptBreakdownPage() {
               </div>
             )}
 
-            {/* Error Feedback */}
             {errorMsg && (
               <div className="flex items-center gap-2 mt-4 p-3 bg-red-950/50 border border-red-800/60 rounded-lg text-xs text-red-400">
                 <AlertCircle className="w-4 h-4 flex-shrink-0" />
@@ -425,7 +482,6 @@ export default function ScriptBreakdownPage() {
               </div>
             )}
 
-            {/* Action Buttons: මෙම බටන් එක එබූ විට පමණක් Breakdown එක සිදු වේ */}
             <div className="mt-6">
               <button
                 disabled={isLoading || (!rawText.trim() && !fileName)}
@@ -439,11 +495,10 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Side: High-Density Scene Cards (Matching Figure 5.1 in Thesis) */}
+        {/* Right Side: Parsed Scenes */}
         <div className="lg:col-span-7 flex flex-col gap-4">
           {scenes.length > 0 ? (
             <>
-              {/* Top Controls */}
               <div className="flex items-center justify-between pb-2 border-b border-zinc-800 px-1">
                 <button
                   onClick={handleSelectAll}
@@ -466,7 +521,6 @@ export default function ScriptBreakdownPage() {
                 </button>
               </div>
 
-              {/* Individual Scene Cards */}
               <div className="flex flex-col gap-4 max-h-[750px] overflow-y-auto pr-2 custom-scrollbar">
                 {scenes.map((scene) => {
                   const isSelected = selectedScenes.includes(scene.sceneNumber);
@@ -478,7 +532,6 @@ export default function ScriptBreakdownPage() {
                           : "bg-[#060b08] border-zinc-850 opacity-70"
                         }`}
                     >
-                      {/* Heading + Setting/Time Badges + Delete Button */}
                       <div className="flex items-start justify-between gap-3 mb-3">
                         <div className="flex items-center gap-3">
                           <button onClick={() => toggleSelectScene(scene.sceneNumber)}>
@@ -503,7 +556,6 @@ export default function ScriptBreakdownPage() {
                           <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-zinc-800 text-zinc-300">
                             {scene.timeOfDay}
                           </span>
-                          {/* Single Scene Delete Button */}
                           <button
                             title="Delete this scene"
                             onClick={() => handleDeleteScene(scene.sceneNumber)}
@@ -514,16 +566,13 @@ export default function ScriptBreakdownPage() {
                         </div>
                       </div>
 
-                      {/* Scene Synopsis Description */}
                       {scene.synopsis && (
                         <p className="text-xs text-zinc-400 mb-4 leading-relaxed bg-[#060b08]/80 p-3 rounded-lg border border-zinc-850">
                           {scene.synopsis}
                         </p>
                       )}
 
-                      {/* Characters, Props & Storyboard Prompt Preview */}
                       <div className="flex flex-col gap-2.5 text-xs mb-4">
-                        {/* Characters */}
                         {scene.characters.length > 0 && (
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-zinc-500 font-medium">චරිත / Characters:</span>
@@ -538,7 +587,6 @@ export default function ScriptBreakdownPage() {
                           </div>
                         )}
 
-                        {/* Props */}
                         {scene.props.length > 0 && (
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className="text-zinc-500 font-medium">උපකරණ / Props:</span>
@@ -553,7 +601,6 @@ export default function ScriptBreakdownPage() {
                           </div>
                         )}
 
-                        {/* Dialogues */}
                         {scene.dialogues.length > 0 && (
                           <div className="mt-2 pt-2 border-t border-zinc-800/60 flex flex-col gap-1.5">
                             <span className="text-zinc-500 font-medium">දෙබස් / Key Dialogues:</span>
@@ -566,7 +613,6 @@ export default function ScriptBreakdownPage() {
                           </div>
                         )}
 
-                        {/* Storyboard Visual Prompt Conditioning Placeholder */}
                         <div className="mt-2 p-2.5 rounded-lg bg-zinc-950 border border-emerald-950 flex flex-col gap-1">
                           <span className="text-[10px] text-emerald-500 font-semibold flex items-center gap-1">
                             <Camera className="w-3 h-3" />
@@ -578,16 +624,15 @@ export default function ScriptBreakdownPage() {
                         </div>
                       </div>
 
-                      {/* Bottom Action Footer with Planned Shots & Generate Storyboard Button */}
                       <div className="flex items-center justify-between pt-3 border-t border-zinc-850">
                         <span className="text-xs text-zinc-400 flex items-center gap-1.5 font-medium">
                           <Layers className="w-3.5 h-3.5 text-emerald-400" />
                           {scene.plannedShots} Planned Shots
                         </span>
 
-                        {/* Individual Storyboard Generator Button */}
+                        {/* මෙම Scene එක සඳහා පමණක් Storyboard සෑදීම සහ Storyboard පිටුවට Navigate වීම */}
                         <button
-                          onClick={() => alert(`Scene 0${scene.sceneNumber} සඳහා 16:9 Storyboard Frames generate කිරීම ආරම්භ විය!`)}
+                          onClick={() => handleGenerateStoryboards([scene])}
                           className="inline-flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg bg-emerald-950 hover:bg-emerald-900 text-emerald-300 hover:text-emerald-100 border border-emerald-800/60 text-xs font-semibold transition-all shadow-md"
                         >
                           Generate Storyboard
@@ -600,7 +645,6 @@ export default function ScriptBreakdownPage() {
               </div>
             </>
           ) : (
-            /* Empty State */
             <div className="h-[480px] flex flex-col items-center justify-center border border-dashed border-zinc-800 rounded-2xl p-8 text-center bg-[#0b1410]/20">
               <div className="w-14 h-14 rounded-full bg-zinc-900 border border-zinc-800 flex items-center justify-center text-zinc-500 mb-4">
                 <FileText className="w-7 h-7" />
