@@ -25,7 +25,6 @@ export async function POST(req: Request) {
             const decoder = new TextDecoder("utf-8", { fatal: false });
             const fullStr = decoder.decode(buffer);
 
-            // Clean stream and binary tags, keeping Sinhala Unicode & English text
             extractedText = fullStr
                 .replace(/%PDF-[\s\S]*?(?=stream|BT|\n)/gi, " ")
                 .replace(/stream[\s\S]*?endstream/gi, " ")
@@ -43,44 +42,42 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "Script content is empty or unreadable" }, { status: 400 });
         }
 
-        // Pass sufficient narrative text (up to 40,000 characters) to avoid Vercel limits and timeouts
         const textSample = extractedText.slice(0, 40000);
 
         const systemPrompt = `
-You are an expert film pre-production breakdown supervisor. Analyze the following screenplay text and break it down into sequential scenes.
+You are a screenplay analysis assistant. Break down this screenplay into sequential scenes.
 
-STRICT OPERATIONAL RULES:
-1. DETECT LANGUAGE: Determine if the script is in Sinhala or English.
-2. SCRIPT DETAILS EXTRACTION:
-   - If Sinhala: Output sluglines, synopses, characters, and dialogues strictly in natural Sinhala.
-   - If English: Output them strictly in natural English.
-3. FOR STORYBOARD PRE-VISUALIZATION:
-   - For EVERY scene, create a high-detail English "visualPrompt" optimized for 16:9 cinematic image generation (e.g., "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic, photorealistic 8k"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
-4. PARSE SCENES SEQUENTIALLY: Extract genuine narrative scenes from the text.
+RULES:
+1. Detect language (Sinhala or English).
+2. If Sinhala: Output sluglines, synopsis, characters, and dialogues in Sinhala.
+3. If English: Output them in English.
+4. For EVERY scene, output an English "visualPrompt" for 16:9 cinematic storyboard generation.
+5. Parse all genuine scenes sequentially.
 
-Output ONLY a valid JSON array of objects conforming exactly to this structure (no markdown formatting, no backticks, only pure JSON):
+Output ONLY a JSON array conforming to this schema:
 [
   {
     "id": "SCENE-01",
     "sceneNumber": 1,
     "slugline": "SCENE 01: INT/EXT LOCATION - DAY/NIGHT",
     "locationType": "INT" or "EXT",
-    "timeOfDay": "DAY" or "NIGHT" or "DAWN" etc.,
-    "synopsis": "detailed narrative action staging",
-    "characters": ["character1", "character2"],
-    "props": ["prop1", "prop2"],
-    "dialogues": [{"speaker": "NAME", "line": "dialogue line"}],
+    "timeOfDay": "DAY" or "NIGHT",
+    "synopsis": "brief scene staging",
+    "characters": ["character1"],
+    "props": ["prop1"],
+    "dialogues": [{"speaker": "NAME", "line": "dialogue"}],
     "plannedShots": 3,
-    "visualPrompt": "Cinematic 16:9 widescreen movie still..."
+    "visualPrompt": "Cinematic 16:9 movie still of..."
   }
 ]
 
-Script Text:
+Script:
 ${textSample}
 `;
 
+        // gemini-2.0-flash ලෙස නිවැරදි කරන ලදී
         const response = await ai.models.generateContent({
-            model: "gemini-2.5-flash",
+            model: "gemini-2.0-flash",
             contents: systemPrompt,
             config: {
                 responseMimeType: "application/json",
