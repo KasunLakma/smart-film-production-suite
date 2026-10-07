@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 
-export const maxDuration = 60; // Vercel function timeout එක තත්පර 60 දක්වා වැඩි කිරීම
+export const maxDuration = 60;
 
 export async function POST(req: Request) {
     try {
@@ -12,9 +12,7 @@ export async function POST(req: Request) {
 
         const ai = new GoogleGenAI({ apiKey });
         const contentType = req.headers.get("content-type") || "";
-
-        let filePart: any = null;
-        let textContent = "";
+        let extractedText = "";
 
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
@@ -24,31 +22,41 @@ export async function POST(req: Request) {
             }
 
             const buffer = await file.arrayBuffer();
-            const base64Data = Buffer.from(buffer).toString("base64");
-            const mimeType = file.type || (file.name.endsWith(".pdf") ? "application/pdf" : "text/plain");
+            const decoder = new TextDecoder("utf-8", { fatal: false });
+            const fullStr = decoder.decode(buffer);
 
-            filePart = {
-                inlineData: {
-                    data: base64Data,
-                    mimeType: mimeType,
-                },
-            };
+            // Clean stream and binary tags, keeping Sinhala Unicode & English text
+            extractedText = fullStr
+                .replace(/%PDF-[\s\S]*?(?=stream|BT|\n)/gi, " ")
+                .replace(/stream[\s\S]*?endstream/gi, " ")
+                .replace(/<<[\s\S]*?>>/g, " ")
+                .replace(/\b\d+\s+\d+\s+obj\b[\s\S]*?\bendobj\b/gi, " ")
+                .replace(/[^\u0D80-\u0DFFa-zA-Z0-9\s.,!?'"()\-:\/]/g, " ")
+                .replace(/\s+/g, " ")
+                .trim();
         } else {
             const body = await req.json();
-            textContent = body.rawText || "";
+            extractedText = (body.rawText || "").trim();
         }
 
+        if (!extractedText || extractedText.length < 20) {
+            return NextResponse.json({ error: "Script content is empty or unreadable" }, { status: 400 });
+        }
+
+        // Pass sufficient narrative text (up to 40,000 characters) to avoid Vercel limits and timeouts
+        const textSample = extractedText.slice(0, 40000);
+
         const systemPrompt = `
-You are an expert film pre-production breakdown supervisor. Analyze this screenplay document (whether native text or scanned/image PDF).
+You are an expert film pre-production breakdown supervisor. Analyze the following screenplay text and break it down into sequential scenes.
 
 STRICT OPERATIONAL RULES:
 1. DETECT LANGUAGE: Determine if the script is in Sinhala or English.
 2. SCRIPT DETAILS EXTRACTION:
-   - If Sinhala: Extract sluglines, synopses, characters, and dialogues purely in authentic Sinhala.
-   - If English: Extract them purely in authentic English.
+   - If Sinhala: Output sluglines, synopses, characters, and dialogues strictly in natural Sinhala.
+   - If English: Output them strictly in natural English.
 3. FOR STORYBOARD PRE-VISUALIZATION:
    - For EVERY scene, create a high-detail English "visualPrompt" optimized for 16:9 cinematic image generation (e.g., "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic, photorealistic 8k"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
-4. PARSE ALL SCENES: Extract all genuine narrative scenes sequentially across the entire manuscript.
+4. PARSE SCENES SEQUENTIALLY: Extract genuine narrative scenes from the text.
 
 Output ONLY a valid JSON array of objects conforming exactly to this structure (no markdown formatting, no backticks, only pure JSON):
 [
@@ -66,13 +74,14 @@ Output ONLY a valid JSON array of objects conforming exactly to this structure (
     "visualPrompt": "Cinematic 16:9 widescreen movie still..."
   }
 ]
-`;
 
-        const contents = filePart ? [filePart, systemPrompt] : [textContent, systemPrompt];
+Script Text:
+${textSample}
+`;
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: contents,
+            contents: systemPrompt,
             config: {
                 responseMimeType: "application/json",
             },

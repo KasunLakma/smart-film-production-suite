@@ -55,7 +55,7 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // Load from sessionStorage on mount (data persists across internal pages)
+  // Load from sessionStorage on mount (data persists across page switches)
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("eclat_active_scenes");
@@ -65,7 +65,7 @@ export default function ScriptBreakdownPage() {
         setSelectedSceneIds(scenes.map((s: SceneEntity) => s.id));
       }
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load saved scenes:", e);
     }
   }, []);
 
@@ -75,7 +75,7 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // Pure dynamic execution via backend API
+  // Pure dynamic execution via backend Gemini API
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
@@ -97,20 +97,28 @@ export default function ScriptBreakdownPage() {
         });
       }
 
+      if (!res.ok) {
+        const errData = await res.json().catch(() => ({}));
+        throw new Error(errData.error || `Server error: ${res.status}`);
+      }
+
       const data = await res.json();
-      if (data.scenes && Array.isArray(data.scenes)) {
+      if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
         setParsedScenes(data.scenes);
         setSelectedSceneIds(data.scenes.map((s: SceneEntity) => s.id));
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
+      } else {
+        alert("පිටපතෙන් දර්ශන හඳුනා ගැනීමට නොහැකි විය. කරුණාකර පිටපත පරීක්ෂා කරන්න.");
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("Execution failed:", err);
+      alert(`Breakdown අසාර්ථක විය: ${err.message}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Clear everything
+  // Clear all data
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -167,11 +175,10 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
-  // Save storyboard cards & navigate
+  // Save storyboard cards & navigate to Storyboard Page
   const handleGenerateStoryboards = (targetScenes: SceneEntity[]) => {
     if (targetScenes.length === 0) return;
 
-    // Load existing frames if any
     let existingFrames: any[] = [];
     try {
       const stored = sessionStorage.getItem("eclat_storyboard_frames");
@@ -209,7 +216,6 @@ export default function ScriptBreakdownPage() {
       }
     ]);
 
-    // Merge without duplicates
     const frameMap = new Map();
     existingFrames.forEach((f) => frameMap.set(f.id, f));
     newFrames.forEach((f) => frameMap.set(f.id, f));
