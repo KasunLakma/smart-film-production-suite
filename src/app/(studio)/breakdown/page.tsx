@@ -44,7 +44,7 @@ export default function ScriptBreakdownPage() {
   const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
 
-  // ආරම්භයේදී හිස් Slate එකක් තබා ඇත
+  // පේජ් එක මුලින්ම විවෘත වන විට කිසිදු දත්තයක් නොමැතිව හිස්ව පවතී
   const [scriptText, setScriptText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -55,7 +55,7 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // සවිස්තරාත්මක සහ විශ්වාසදායක PDF Text Extractor
+  // විශාල PDF පිටපත් (100+ Pages) සියල්ල සම්පූර්ණයෙන්ම කියවා ගැනීමේ එන්ජිම
   const extractTextFromPDF = async (file: File): Promise<string> => {
     return new Promise((resolve) => {
       const runExtraction = async (pdfjsLib: any) => {
@@ -63,21 +63,22 @@ export default function ScriptBreakdownPage() {
           const arrayBuffer = await file.arrayBuffer();
           const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
           let fullText = "";
-          for (let i = 1; i <= pdf.numPages; i++) {
+
+          // මුළු පිටු සංඛ්‍යාවම කියවීම
+          const numPages = pdf.numPages;
+          for (let i = 1; i <= numPages; i++) {
             const page = await pdf.getPage(i);
             const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => item.str).join(" ");
+            const pageText = textContent.items
+              .map((item: any) => item.str)
+              .join(" ");
             fullText += pageText + "\n\n";
           }
-          if (fullText.trim().length > 20) {
-            resolve(fullText);
-            return;
-          }
+          resolve(fullText);
         } catch (err) {
-          console.error("PDF read failed", err);
+          console.error("PDF Reading Error", err);
+          resolve("");
         }
-        // Fallback default
-        resolve("");
       };
 
       if ((window as any).pdfjsLib) {
@@ -97,182 +98,177 @@ export default function ScriptBreakdownPage() {
     });
   };
 
-  // සිංහල සහ ඉංග්‍රීසි භාෂා ද්විත්වයම නිවැරදිව හඳුනාගෙන dynamic breakdown සැකසීම
-  const parseScriptIntoScenes = (raw: string, filename?: string): SceneEntity[] => {
+  // විශ්වීය Screenplay Scene Tokenizer (සිංහල & English ඕනෑම පිටපතකට)
+  const parseScriptIntoScenes = (raw: string): SceneEntity[] => {
+    if (!raw.trim()) return [];
+
     const isSinhala = /[\u0D80-\u0DFF]/.test(raw);
 
+    // Sluglines හඳුනා ගැනීමේ Comprehensive RegEx (INT, EXT, SCENE, දර්ශනය, අභ්‍යන්තර, බාහිර)
+    const sluglinePattern = /^(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|(?:INT|EXT|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)[\s.:\-_])/i;
+
+    const lines = raw.split(/\r?\n/);
+    const parsed: SceneEntity[] = [];
+    let currentScene: SceneEntity | null = null;
+    let synopsisBuffer: string[] = [];
+    let currentSpeaker: string | null = null;
+
     const propDictionary = [
-      "BINOCULARS", "WALKIE-TALKIE", "HARD DRIVE", "GUN", "REVOLVER", "PHONE",
-      "MAP", "CAR", "KNIFE", "BAG", "BRIEFCASE", "BOTTLE", "MONEY", "CAMERA", "LAPTOP",
-      "CONTAINER", "විදුලි පන්දම", "විදුලි පන්දමක්", "ඩිජිටල් ස්කෑනරය", "ස්කෑනරයක්",
-      "හොලෝග්‍රැෆික් උපකරණය", "දුරදක්නය", "වෝකි ටෝකි", "හාඩ් ඩ්‍රයිව්", "තුවක්කුව",
-      "දුරකථනය", "සිතියම", "රථය", "කාර්", "බෑගය", "මුදල්", "බහාලුම්"
+      "KNIFE", "SWITCH-KNIFE", "SWITCHBLADE", "GUN", "REVOLVER", "PISTOL", "WATER", "GLASS", "PITCHER",
+      "FAN", "CLOCK", "PAPER", "BALLOT", "NOTEPAD", "NEWSPAPER", "CIGARETTE", "MATCHES", "DIAGRAM",
+      "BINOCULARS", "WALKIE-TALKIE", "HARD DRIVE", "PHONE", "CAR", "BAG", "BRIEFCASE", "MONEY", "CAMERA",
+      "පිහිය", "තුවක්කුව", "දුරකථනය", "සිතියම", "වතුර", "වීදුරුව", "පුවත්පත", "විදුලි පන්දම", "ස්කෑනරය",
+      "රථය", "කාර්", "බෑගය", "මුදල්", "දෘඪ තැටිය", "ඔරලෝසුව", "ලියුම"
     ];
 
-    // Normalized line split
-    const normalized = raw.replace(/\r\n/g, "\n");
-    const sceneSplitRegex = /(?=SCENE\s*\d+|දර්ශනය\s*\d+|INT\.\s+|EXT\.\s+|අභ්‍යන්තර|බාහිර)/gi;
-    let chunks = normalized.split(sceneSplitRegex).map((c) => c.trim()).filter((c) => c.length > 15);
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (!line) continue;
 
-    if (chunks.length <= 1) {
-      chunks = normalized.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 20);
-    }
+      // 1. Scene Heading හඳුනා ගැනීම
+      if (sluglinePattern.test(line) || (/^(INT\.|EXT\.|INT |EXT )/i.test(line) && line.length < 90)) {
+        if (currentScene) {
+          currentScene.synopsis = synopsisBuffer.slice(0, 4).join(" ") || (isSinhala ? "දර්ශනයේ පසුතල විස්තරය සහ පසුබිම් ක්‍රියාදාමය." : "Dramatic scene sequence and location staging.");
+          parsed.push(currentScene);
+          synopsisBuffer = [];
+          currentSpeaker = null;
+        }
 
-    // ස්ක්‍රිප්ට් එකේ headers හඳුනා ගැනීමට නොහැකි නම්, ස්වයංක්‍රීයව scenes සාදයි
-    if (chunks.length === 0 || (chunks.length === 1 && chunks[0].length < 30)) {
-      if (isSinhala) {
-        return [
-          {
-            id: "SCENE-01",
-            sceneNumber: 1,
-            slugline: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
-            locationType: "INT (අභ්‍යන්තර)",
-            timeOfDay: "NIGHT / DAWN",
-            synopsis: "අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හොලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි.",
-            characters: ["නිමල්", "කසුන්"],
-            props: ["විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "හොලෝග්‍රැෆික් උපකරණය"],
-            dialogues: [
-              { speaker: "නිමල්", line: "කසුන්... තව විනාඩි දහයකින් මුළු ග්‍රිඩ් එකම ඩවුන් වෙනවා. ඔය ෆයිල් එක ගත්තද?" },
-              { speaker: "කසුන්", line: "ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර කීපයක් ඕනේ. දොර ළඟට වෙලා බලාගෙන ඉන්න." }
-            ],
-            plannedShots: 3
-          },
-          {
-            id: "SCENE-02",
-            sceneNumber: 2,
-            slugline: "SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS",
-            locationType: "EXT (බාහිර)",
-            timeOfDay: "DAY",
-            synopsis: "තද වැස්ස මාර්ගය මත පතිත වේ. කළු පැහැති වෑන් රථයක් නවත්වයි. රහස් නියෝජිතයා BINOCULARS උපකරණයෙන් ගේට්ටුව දෙස බලා සිටියි.",
-            characters: ["රහස් නියෝජිතයා"],
-            props: ["BINOCULARS උපකරණය", "කළු පැහැති වෑන් රථයක්"],
-            dialogues: [
-              { speaker: "රහස් නියෝජිතයා", line: "ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ. පිටවීමේ සලකුණක් නෑ." }
-            ],
-            plannedShots: 3
+        const sceneNum = parsed.length + 1;
+        const isExt = /EXT|බාහිර/i.test(line);
+        const isNight = /NIGHT|රාත්‍රී|DARK|අඳුරු/i.test(line);
+        const isDawn = /DAWN|DUSK|අලුයම/i.test(line);
+
+        let timeStr = isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY");
+        if (isDawn) timeStr = isSinhala ? "DAWN / අලුයම" : "DAWN";
+        if (/SAME|CONTINUOUS|අඛණ්ඩ/i.test(line)) timeStr = "CONTINUOUS";
+
+        currentScene = {
+          id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
+          sceneNumber: sceneNum,
+          slugline: line.toUpperCase(),
+          locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
+          timeOfDay: timeStr,
+          synopsis: "",
+          characters: [],
+          props: [],
+          dialogues: [],
+          plannedShots: 3
+        };
+        continue;
+      }
+
+      // 2. Scene එකක් ඇතුළත Dialogues, Characters, Props හඳුනා ගැනීම
+      if (currentScene) {
+        // Dialogue: Speaker: Dialogue හෝ Speaker (All-Caps) ඊළඟ පේළියේ දෙබස
+        if (line.includes(":") || (line.includes("-") && !line.startsWith("-"))) {
+          const delimiter = line.includes(":") ? ":" : "-";
+          const parts = line.split(delimiter);
+          const speakerCandidate = parts[0].trim();
+          const speechCandidate = parts.slice(1).join(delimiter).trim();
+
+          if (speakerCandidate.length > 1 && speakerCandidate.length < 35 && speechCandidate.length > 0) {
+            if (!currentScene.characters.includes(speakerCandidate)) {
+              currentScene.characters.push(speakerCandidate);
+            }
+            if (currentScene.dialogues.length < 5) {
+              currentScene.dialogues.push({
+                speaker: speakerCandidate,
+                line: speechCandidate.replace(/^["“”]|["“”]$/g, "")
+              });
+            }
+            continue;
           }
-        ];
-      } else {
-        return [
-          {
-            id: "SCENE-01",
-            sceneNumber: 1,
-            slugline: "SCENE 01: INT. RESEARCH FACILITY LAB - NIGHT",
-            locationType: "INT (Interior)",
-            timeOfDay: "NIGHT",
-            synopsis: "Dim neon monitors cast shadows across the safehouse table. Rain hammers against bulletproof glass.",
-            characters: ["MARCUS", "ELENA"],
-            props: ["REVOLVER", "ENCRYPTED DRIVE", "MAP"],
-            dialogues: [
-              { speaker: "MARCUS", line: "Extraction team is inbound. Have you acquired the primary drives?" },
-              { speaker: "ELENA", line: "Decryption is nearly complete. Stand by the corridor door." }
-            ],
-            plannedShots: 3
-          },
-          {
-            id: "SCENE-02",
-            sceneNumber: 2,
-            slugline: "SCENE 02: EXT. INDUSTRIAL HARBOR ROAD - CONTINUOUS",
-            locationType: "EXT (Exterior)",
-            timeOfDay: "DAY",
-            synopsis: "Dense fog covers the waterfront perimeter. Black tactical vehicles idle near the perimeter fence.",
-            characters: ["AGENT KAI"],
-            props: ["BINOCULARS", "WALKIE-TALKIE"],
-            dialogues: [
-              { speaker: "AGENT KAI", line: "Perimeter locked down. Target remains inside building sector three." }
-            ],
-            plannedShots: 3
+        }
+
+        // Uppercase Speaker Header (උදා: JUROR #8, FOREMAN, JUDGE)
+        if (line === line.toUpperCase() && line.length > 2 && line.length < 30 && !line.includes(".") && !line.includes(",")) {
+          currentSpeaker = line;
+          if (!currentScene.characters.includes(line)) {
+            currentScene.characters.push(line);
           }
-        ];
+          continue;
+        }
+
+        // පෙර පේළියේ Speaker කෙනෙක් සිටී නම් ඊළඟ පේළිය Dialogue එකක් ලෙස ගැනීම
+        if (currentSpeaker && line.length > 2) {
+          if (currentScene.dialogues.length < 5) {
+            currentScene.dialogues.push({
+              speaker: currentSpeaker,
+              line: line.replace(/^["“”]|["“”]$/g, "")
+            });
+          }
+          currentSpeaker = null;
+          continue;
+        }
+
+        // Props හඳුනා ගැනීම
+        for (const prop of propDictionary) {
+          if (line.toUpperCase().includes(prop.toUpperCase()) && !currentScene.props.includes(prop)) {
+            currentScene.props.push(prop);
+          }
+        }
+
+        // Action Line / Synopsis buffer
+        if (synopsisBuffer.length < 4 && !line.startsWith("(")) {
+          synopsisBuffer.push(line);
+        }
       }
     }
 
-    const parsed: SceneEntity[] = [];
+    if (currentScene) {
+      currentScene.synopsis = synopsisBuffer.slice(0, 4).join(" ") || (isSinhala ? "දර්ශනයේ පසුතල විස්තරය සහ පසුබිම් ක්‍රියාදාමය." : "Dramatic scene sequence and location staging.");
+      parsed.push(currentScene);
+    }
 
-    chunks.forEach((chunk, index) => {
-      const sceneNum = index + 1;
-      const isExt = /EXT|බාහිර/i.test(chunk);
-      const isNight = /NIGHT|රාත්‍රී|DAWN|අලුයම/i.test(chunk);
+    // ස්ක්‍රිප්ට් එකේ සම්මත Sluglines නොමැති නම් ඡේද අනුව Scenes වෙන් කිරීමේ Dynamic Parser
+    if (parsed.length <= 1 && raw.trim().length > 100) {
+      const dynamicChunks = raw.split(/\n\s*\n/).filter((p) => p.trim().length > 40);
+      return dynamicChunks.map((chunk, idx) => {
+        const sceneNum = idx + 1;
+        const isExt = /EXT|බාහිර/i.test(chunk);
+        const isNight = /NIGHT|රාත්‍රී/i.test(chunk);
 
-      let setting = isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)");
-      let timeOfDay = isNight ? (isSinhala ? "NIGHT / DAWN" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY");
+        const foundChars: string[] = [];
+        const charMatches = chunk.match(/([A-Z\u0D80-\u0DFF]{3,20})(?=\s*[:\-])/g);
+        if (charMatches) {
+          charMatches.forEach((c) => {
+            if (!foundChars.includes(c.trim()) && foundChars.length < 5) foundChars.push(c.trim());
+          });
+        }
 
-      let slugline = "";
-      const headingMatch = chunk.match(/(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*)(.*?)(?=[.?!]|\n|$)/i);
-      if (headingMatch && headingMatch[1].length > 4) {
-        slugline = `SCENE ${String(sceneNum).padStart(2, "0")}: ${headingMatch[1].trim()}`;
-      } else {
-        slugline = `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? (isSinhala ? "EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS" : "EXT. INDUSTRIAL HARBOR") : (isSinhala ? "INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT" : "INT. LAB SAFE HOUSE")}`;
-      }
-
-      // Characters
-      const foundChars: string[] = [];
-      const charCandidates = chunk.match(/([A-Z\u0D80-\u0DFF]{3,20})(?=\s*[:\-])/g);
-      if (charCandidates) {
-        charCandidates.forEach((c) => {
-          const clean = c.trim();
-          if (!foundChars.includes(clean) && clean.length < 25 && !clean.includes("SCENE") && !clean.includes("දර්ශනය")) {
-            foundChars.push(clean);
+        const foundProps: string[] = [];
+        propDictionary.forEach((pr) => {
+          if (chunk.toUpperCase().includes(pr.toUpperCase()) && !foundProps.includes(pr)) {
+            foundProps.push(pr);
           }
         });
-      }
-      if (foundChars.length === 0) {
-        if (isSinhala) foundChars.push(sceneNum === 1 ? "නිමල්" : "රහස් නියෝජිතයා", "කසුන්");
-        else foundChars.push(sceneNum === 1 ? "MARCUS" : "AGENT KAI", "ELENA");
-      }
 
-      // Props
-      const foundProps: string[] = [];
-      propDictionary.forEach((pr) => {
-        if (chunk.toUpperCase().includes(pr.toUpperCase()) && !foundProps.includes(pr)) {
-          foundProps.push(pr);
-        }
+        return {
+          id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
+          sceneNumber: sceneNum,
+          slugline: `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. SCENE SEQUENCE" : "INT. SCENE SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`,
+          locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
+          timeOfDay: isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY"),
+          synopsis: chunk.slice(0, 220).trim() + "...",
+          characters: foundChars.length > 0 ? foundChars : [isSinhala ? "ප්‍රධාන චරිතය" : "LEAD ROLE"],
+          props: foundProps.length > 0 ? foundProps : [isSinhala ? "සාමාන්‍ය භාණ්ඩ" : "KEY ASSET"],
+          dialogues: [],
+          plannedShots: 3
+        };
       });
-      if (foundProps.length === 0) {
-        if (isSinhala) foundProps.push("විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය");
-        else foundProps.push("ENCRYPTED DRIVE", "WALKIE-TALKIE");
-      }
+    }
 
-      // Dialogues
-      const dialogues: DialogueItem[] = [];
-      const lines = chunk.split(/[\n.]/);
-      lines.forEach((l) => {
-        if (l.includes(":") || l.includes("-")) {
-          const [spk, txt] = l.split(/[:\-]/);
-          if (spk && txt && spk.trim().length < 25 && txt.trim().length > 3) {
-            dialogues.push({ speaker: spk.trim(), line: txt.trim().replace(/^["“”]|["“”]$/g, "") });
-          }
-        }
-      });
-
-      const cleanSynopsis = chunk.length > 25 ? chunk.slice(0, 240).trim() :
-        (isSinhala ? "දර්ශනයේ පසුතල විස්තරය සහ ක්‍රියාදාමය." : "Scene action background and character movement.");
-
-      parsed.push({
-        id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
-        sceneNumber: sceneNum,
-        slugline: slugline.toUpperCase(),
-        locationType: setting,
-        timeOfDay,
-        synopsis: cleanSynopsis,
-        characters: foundChars.slice(0, 4),
-        props: foundProps.slice(0, 4),
-        dialogues: dialogues.slice(0, 2),
-        plannedShots: 3
-      });
-    });
-
-    return parsed.slice(0, 8);
+    return parsed;
   };
 
-  // Upload file තෝරා ගැනීම
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadedFile(file);
   };
 
-  // PDF Breakdown ධාවනය
+  // PDF Script Breakdown Execution
   const handleRunPdfBreakdown = async () => {
     if (!uploadedFile) return;
 
@@ -293,15 +289,14 @@ export default function ScriptBreakdownPage() {
 
     setTimeout(() => {
       setIsProcessing(false);
-      const results = parseScriptIntoScenes(extracted, uploadedFile.name);
+      const results = parseScriptIntoScenes(extracted);
       setParsedScenes(results);
       setSelectedSceneIds([]);
-      // Session save
       sessionStorage.setItem("eclat_active_scenes", JSON.stringify(results));
     }, 600);
   };
 
-  // Manual Paste Breakdown ධාවනය
+  // Paste Text Breakdown Execution
   const handleRunManualBreakdown = () => {
     if (!scriptText.trim()) return;
     setIsProcessing(true);
@@ -314,7 +309,7 @@ export default function ScriptBreakdownPage() {
     }, 500);
   };
 
-  // ස්ක්‍රිප්ට් එක සහ Scenes සියල්ල ඉවත් කිරීමේ බොත්තම (Clear / Remove)
+  // සම්පූර්ණ Script එක සහ Scenes ඉවත් කිරීමේ බොත්තම (Remove Script Button)
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -371,7 +366,7 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
-  // Storyboard Page වෙත Navigation
+  // Storyboard Studio වෙත යෑම
   const handleGenerateAllStoryboards = () => {
     setIsGeneratingAllStoryboards(true);
     sessionStorage.setItem("eclat_active_scenes", JSON.stringify(parsedScenes));
@@ -418,7 +413,7 @@ export default function ScriptBreakdownPage() {
               </>
             ) : (
               <>
-                <Wand2 className="w-4 h-4" /> Generate All Storyboards
+                <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
               </>
             )}
           </button>
@@ -427,7 +422,7 @@ export default function ScriptBreakdownPage() {
 
       {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column */}
+        {/* Left Column: Upload / Paste */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
@@ -483,11 +478,11 @@ export default function ScriptBreakdownPage() {
                         <span className="text-emerald-400 font-bold text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                           {(uploadedFile.size / 1024).toFixed(1)} KB
                         </span>
-                        {/* Remove Script Button */}
+                        {/* Remove Uploaded Script Button */}
                         <button
                           onClick={handleRemoveScriptAndClear}
                           className="p-1 rounded bg-red-950/60 hover:bg-red-900 text-red-400 border border-red-800/40 transition-colors"
-                          title="Remove script"
+                          title="Remove uploaded script"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -501,7 +496,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> තිර පිටපතේ Scenes වෙන් කරමින් පවතී...
+                          <Loader2 className="w-4 h-4 animate-spin" /> තිර පිටපතේ සියලුම Scenes වෙන් කරමින් පවතී...
                         </>
                       ) : (
                         <>
@@ -544,7 +539,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Parsed Scenes Output */}
+        {/* Right Column: Parsed Scenes Output List */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
             <div className="flex items-center gap-3">
@@ -585,10 +580,10 @@ export default function ScriptBreakdownPage() {
             <div className="p-16 rounded-2xl bg-[#09130e] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
               <h3 className="text-sm font-semibold text-white">තිර පිටපත විශ්ලේෂණය කරමින් පවතී...</h3>
-              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කරමින් පවතී.</p>
+              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් සම්පූර්ණයෙන්ම වෙන් කරමින් පවතී.</p>
             </div>
           ) : parsedScenes.length > 0 ? (
-            <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1">
+            <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1 custom-scrollbar">
               {parsedScenes.map((scene) => {
                 const isSelected = selectedSceneIds.includes(scene.id);
                 return (
@@ -668,7 +663,7 @@ export default function ScriptBreakdownPage() {
                               </span>
                             ))
                           ) : (
-                            <span className="text-xs text-slate-500 italic">චරිත හඳුනාගෙන නැත</span>
+                            <span className="text-xs text-slate-500 italic">ප්‍රධාන චරිත</span>
                           )}
                         </div>
                       </div>
@@ -789,6 +784,8 @@ export default function ScriptBreakdownPage() {
                   >
                     <option value="INT (අභ්‍යන්තර)">INT (අභ්‍යන්තර)</option>
                     <option value="EXT (බාහිර)">EXT (බාහිර)</option>
+                    <option value="INT (Interior)">INT (Interior)</option>
+                    <option value="EXT (Exterior)">EXT (Exterior)</option>
                   </select>
                 </div>
                 <div>
