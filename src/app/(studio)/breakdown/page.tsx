@@ -44,7 +44,7 @@ export default function ScriptBreakdownPage() {
   const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
 
-  // පේජ් එක මුලින්ම විවෘත වන විට කිසිදු script එකක් නැතිව හිස්ව තබා ඇත
+  // Clean Initial Slate (පේජ් එක මුලින්ම විවෘත වන විට කිසිදු දත්තයක් නැත)
   const [scriptText, setScriptText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -55,361 +55,50 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // PDF Text Extraction
-  const extractTextFromPDF = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const runExtraction = async (pdfjsLib: any) => {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          let fullText = "";
-
-          const numPages = Math.min(pdf.numPages, 40); // Read up to 40 pages smoothly
-          for (let i = 1; i <= numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items.map((item: any) => item.str).join(" ");
-            fullText += pageText + "\n\n";
-          }
-          resolve(fullText.trim());
-        } catch (err) {
-          resolve("");
-        }
-      };
-
-      if ((window as any).pdfjsLib) {
-        runExtraction((window as any).pdfjsLib);
-      } else {
-        const script = document.createElement("script");
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-        script.onload = () => {
-          const pdfjsLib = (window as any).pdfjsLib;
-          pdfjsLib.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-          runExtraction(pdfjsLib);
-        };
-        script.onerror = () => resolve("");
-        document.body.appendChild(script);
-      }
-    });
-  };
-
-  // විශ්වීය Parser (English / Sinhala / Scanned fallback)
-  const parseScriptIntoScenes = (raw: string, filename: string = ""): SceneEntity[] => {
-    const isSinhala = /[\u0D80-\u0DFF]/.test(raw) || /සිංහල|පිටපත|දර්ශන/i.test(filename);
-    const isTwelveAngry = /12|ANGRY|MEN/i.test(filename) || /JUROR|COURT/i.test(raw);
-
-    // 1. "12 Angry Men" වැනි Scanned PDF එකක text එක අඩුවෙන් ආවොත් සැබෑ Script එක අනුව Scenes සැකසීම
-    if (isTwelveAngry && raw.trim().length < 200) {
-      return [
-        {
-          id: "SCENE-01",
-          sceneNumber: 1,
-          slugline: "SCENE 01: EXT. N.Y. COURT OF GENERAL SESSIONS - DAY",
-          locationType: "EXT (Exterior)",
-          timeOfDay: "DAY",
-          synopsis: "A large, imposing gray stone court building under an overcast summer sky. Ordinary citizens move up the grand exterior steps as the camera dollies slowly into the pillars.",
-          characters: ["ORDINARY CITIZENS", "POLICE GUARDS"],
-          props: ["LEGAL BRIEFCASES", "NEWSPAPER", "ENTRY BADGES"],
-          dialogues: [
-            { speaker: "GUARD", line: "Keep moving through the main checkpoint, please." }
-          ],
-          plannedShots: 3
-        },
-        {
-          id: "SCENE-02",
-          sceneNumber: 2,
-          slugline: "SCENE 02: INT. THE COURTROOM - CONTINUOUS",
-          locationType: "INT (Interior)",
-          timeOfDay: "DAY",
-          synopsis: "A deathly quiet courtroom. The Judge delivers his final instruction to the jury. The young accused man sits vulnerable and fearful at the defense table.",
-          characters: ["JUDGE", "THE ACCUSED", "COURT CLERK"],
-          props: ["WATER PITCHER", "WATER GLASS", "GAVEL", "CASE TRANSCRIPTS"],
-          dialogues: [
-            { speaker: "JUDGE", line: "Murder in the first degree is the most serious charge. If there is reasonable doubt, bring me a verdict of not guilty." },
-            { speaker: "JUDGE", line: "In the event you find the accused guilty, the death sentence is mandatory." }
-          ],
-          plannedShots: 3
-        },
-        {
-          id: "SCENE-03",
-          sceneNumber: 3,
-          slugline: "SCENE 03: INT. JURY ROOM - DAY",
-          locationType: "INT (Interior)",
-          timeOfDay: "DAY",
-          synopsis: "A very hot, oppressive summer afternoon in a bare deliberation room. The twelve jurors enter preceded by the Guard who locks the door. A preliminary vote is called.",
-          characters: ["FOREMAN", "JUROR #3", "JUROR #7", "JUROR #8", "GUARD"],
-          props: ["PAPER BALLOTS", "WATER COOLER", "SWITCH-KNIFE", "FAN", "PENCILS"],
-          dialogues: [
-            { speaker: "FOREMAN", line: "All those voting guilty raise your hands. That's eleven for guilty. Not guilty?" },
-            { speaker: "JUROR #8", line: "It's not easy for me to raise my hand and send a boy off to die without talking about it first." },
-            { speaker: "JUROR #3", line: "He knifed his own father. Four inches into the chest! The boy is guilty." }
-          ],
-          plannedShots: 3
-        },
-        {
-          id: "SCENE-04",
-          sceneNumber: 4,
-          slugline: "SCENE 04: INT. JURY ROOM (EVIDENCE DEMONSTRATION) - DAY",
-          locationType: "INT (Interior)",
-          timeOfDay: "DAY",
-          synopsis: "Juror #8 withdraws an identical switchblade from his pocket and drives it into the wooden table beside the murder weapon, shocking the entire room.",
-          characters: ["JUROR #8", "JUROR #4", "JUROR #3", "10TH JUROR"],
-          props: ["SWITCHBLADE KNIFE", "EVIDENCE TAG", "WOODEN TABLE", "APARTMENT DIAGRAM"],
-          dialogues: [
-            { speaker: "4TH JUROR", line: "Take a look at that knife. The storekeeper said it was the only one of its kind." },
-            { speaker: "8TH JUROR", line: "The knife comes from a little pawnshop three blocks from his house. It cost six dollars." },
-            { speaker: "3RD JUROR", line: "You pulled a bright trick! But what does that prove? It's still the same knife!" }
-          ],
-          plannedShots: 3
-        },
-        {
-          id: "SCENE-05",
-          sceneNumber: 5,
-          slugline: "SCENE 05: INT. JURY ROOM (STORM BREAK) - NIGHT",
-          locationType: "INT (Interior)",
-          timeOfDay: "NIGHT / RAIN",
-          synopsis: "The sky turns completely black and heavy rain lashes against the windows. The fluorescent lights hum to life. A deadlock of 6 to 6 vote creates intense confrontation.",
-          characters: ["FOREMAN", "JUROR #8", "JUROR #3", "JUROR #10", "5TH JUROR"],
-          props: ["ELECTRIC FAN", "RAIN WATER", "COUGH DROPS", "NOTEPAD"],
-          dialogues: [
-            { speaker: "FOREMAN", line: "Six to six. We have an even split in this room." },
-            { speaker: "3RD JUROR", line: "Let go of me! I'll kill him! I'll kill him!" },
-            { speaker: "8TH JUROR", line: "You don't really mean you'll kill me, do you?" }
-          ],
-          plannedShots: 3
-        },
-        {
-          id: "SCENE-06",
-          sceneNumber: 6,
-          slugline: "SCENE 06: EXT. COURTHOUSE STEPS - RAIN / DAY",
-          locationType: "EXT (Exterior)",
-          timeOfDay: "DAY",
-          synopsis: "The trial concludes with acquittal. The jurors emerge into the pelting rain on the courthouse steps. Juror #8 and Juror #9 exchange names before parting ways.",
-          characters: ["JUROR #8 (DAVIS)", "JUROR #9 (MCCARDLE)"],
-          props: ["COATS", "UMBRELLAS", "COURTHOUSE STEPS"],
-          dialogues: [
-            { speaker: "JUROR #9", line: "What's your name?" },
-            { speaker: "JUROR #8", line: "Davis." },
-            { speaker: "JUROR #9", line: "My name is McCardle. Well, so long." }
-          ],
-          plannedShots: 3
-        }
-      ];
-    }
-
-    // 2. සාමාන්‍ය Script Parse කිරීම (Text ඇති PDF හෝ Pasted Text)
-    const normalized = raw.replace(/\r\n/g, "\n");
-    const sluglinePattern = /^(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|(?:INT|EXT|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)[\s.:\-_])/i;
-    const lines = normalized.split("\n");
-
-    const parsed: SceneEntity[] = [];
-    let currentScene: SceneEntity | null = null;
-    let synopsisBuffer: string[] = [];
-    let currentSpeaker: string | null = null;
-
-    const propDictionary = [
-      "KNIFE", "SWITCHBLADE", "GUN", "REVOLVER", "PHONE", "CAR", "BAG", "BRIEFCASE", "WATER",
-      "GLASS", "PITCHER", "FAN", "CLOCK", "DIAGRAM", "BINOCULARS", "WALKIE-TALKIE", "HARD DRIVE",
-      "තුවක්කුව", "පිහිය", "දුරකථනය", "සිතියම", "වතුර", "වීදුරුව", "පුවත්පත", "විදුලි පන්දම", "ස්කෑනරය"
-    ];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line) continue;
-
-      if (sluglinePattern.test(line) || (/^(INT\.|EXT\.|INT |EXT )/i.test(line) && line.length < 80)) {
-        if (currentScene) {
-          currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || (isSinhala ? "දර්ශනයේ පසුතල විස්තරය." : "Scene action staging.");
-          parsed.push(currentScene);
-          synopsisBuffer = [];
-          currentSpeaker = null;
-        }
-
-        const sceneNum = parsed.length + 1;
-        const isExt = /EXT|බාහිර/i.test(line);
-        const isNight = /NIGHT|රාත්‍රී|DARK/i.test(line);
-
-        currentScene = {
-          id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
-          sceneNumber: sceneNum,
-          slugline: line.toUpperCase(),
-          locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
-          timeOfDay: isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY"),
-          synopsis: "",
-          characters: [],
-          props: [],
-          dialogues: [],
-          plannedShots: 3
-        };
-        continue;
-      }
-
-      if (currentScene) {
-        if (line.includes(":") || (line.includes("-") && !line.startsWith("-"))) {
-          const parts = line.split(/[:\-]/);
-          const spk = parts[0].trim();
-          const speech = parts.slice(1).join(":").trim();
-          if (spk.length > 1 && spk.length < 30 && speech.length > 0) {
-            if (!currentScene.characters.includes(spk)) currentScene.characters.push(spk);
-            if (currentScene.dialogues.length < 4) {
-              currentScene.dialogues.push({ speaker: spk, line: speech.replace(/^["“”]|["“”]$/g, "") });
-            }
-            continue;
-          }
-        }
-
-        if (line === line.toUpperCase() && line.length > 2 && line.length < 25 && !line.includes(".")) {
-          currentSpeaker = line;
-          if (!currentScene.characters.includes(line)) currentScene.characters.push(line);
-          continue;
-        }
-
-        if (currentSpeaker && line.length > 2) {
-          if (currentScene.dialogues.length < 4) {
-            currentScene.dialogues.push({ speaker: currentSpeaker, line: line.replace(/^["“”]|["“”]$/g, "") });
-          }
-          currentSpeaker = null;
-          continue;
-        }
-
-        for (const pr of propDictionary) {
-          if (line.toUpperCase().includes(pr.toUpperCase()) && !currentScene.props.includes(pr)) {
-            currentScene.props.push(pr);
-          }
-        }
-
-        if (synopsisBuffer.length < 3 && !line.startsWith("(")) {
-          synopsisBuffer.push(line);
-        }
-      }
-    }
-
-    if (currentScene) {
-      currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || (isSinhala ? "දර්ශනයේ පසුතල විස්තරය." : "Scene action staging.");
-      parsed.push(currentScene);
-    }
-
-    // 3. කිසිදු slugline එකක් හසු නොවූ විට (Paragraph Fallback)
-    if (parsed.length === 0) {
-      if (isSinhala) {
-        return [
-          {
-            id: "SCENE-01",
-            sceneNumber: 1,
-            slugline: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
-            locationType: "INT (අභ්‍යන්තර)",
-            timeOfDay: "NIGHT / DAWN",
-            synopsis: "අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හොලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි.",
-            characters: ["නිමල්", "කසුන්"],
-            props: ["විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "හොලෝග්‍රැෆික් උපකරණය"],
-            dialogues: [
-              { speaker: "නිමල්", line: "කසුන්... තව විනාඩි දහයකින් මුළු ග්‍රිඩ් එකම ඩවුන් වෙනවා. ඔය ෆයිල් එක ගත්තද?" },
-              { speaker: "කසුන්", line: "ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර කීපයක් ඕනේ." }
-            ],
-            plannedShots: 3
-          },
-          {
-            id: "SCENE-02",
-            sceneNumber: 2,
-            slugline: "SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS",
-            locationType: "EXT (බාහිර)",
-            timeOfDay: "DAY",
-            synopsis: "තද වැස්ස මාර්ගය මත පතිත වේ. කළු පැහැති වෑන් රථයක් නවත්වයි. රහස් නියෝජිතයා BINOCULARS උපකරණයෙන් ගේට්ටුව දෙස බලා සිටියි.",
-            characters: ["රහස් නියෝජිතයා"],
-            props: ["BINOCULARS උපකරණය", "කළු පැහැති වෑන් රථයක්"],
-            dialogues: [
-              { speaker: "රහස් නියෝජිතයා", line: "ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ. පිටවීමේ සලකුණක් නෑ." }
-            ],
-            plannedShots: 3
-          }
-        ];
-      } else {
-        return [
-          {
-            id: "SCENE-01",
-            sceneNumber: 1,
-            slugline: "SCENE 01: INT. SAFE HOUSE LAB - NIGHT",
-            locationType: "INT (Interior)",
-            timeOfDay: "NIGHT",
-            synopsis: "Rain lashes against the reinforced glass windows. Marcus loads fresh rounds into his service revolver.",
-            characters: ["MARCUS", "ELENA"],
-            props: ["REVOLVER", "MAP", "COMMUNICATION DEVICE"],
-            dialogues: [
-              { speaker: "MARCUS", line: "We have twenty minutes before the extraction team arrives." },
-              { speaker: "ELENA", line: "Then stop talking and pack the gear." }
-            ],
-            plannedShots: 3
-          },
-          {
-            id: "SCENE-02",
-            sceneNumber: 2,
-            slugline: "SCENE 02: EXT. HARBOR ROAD - CONTINUOUS",
-            locationType: "EXT (Exterior)",
-            timeOfDay: "DAY",
-            synopsis: "Tactical vehicles idle beside shipping containers in heavy mist.",
-            characters: ["AGENT KAI"],
-            props: ["BINOCULARS", "WALKIE-TALKIE"],
-            dialogues: [
-              { speaker: "AGENT KAI", line: "Perimeter secure. Target is heading for dock three." }
-            ],
-            plannedShots: 3
-          }
-        ];
-      }
-    }
-
-    return parsed.slice(0, 15);
-  };
-
+  // File Upload
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadedFile(file);
   };
 
-  // PDF Breakdown ධාවනය (100% ක් Fail නොවී වැඩ කරයි)
-  const handleRunPdfBreakdown = async () => {
-    if (!uploadedFile) return;
+  // Backend API එක මඟින් පිටපත Parse කිරීම (Universal Serverless Pipeline)
+  const handleExecuteBreakdown = async () => {
+    if (!uploadedFile && !scriptText.trim()) return;
 
     setIsProcessing(true);
-    let extracted = "";
-
     try {
-      if (uploadedFile.type === "application/pdf" || uploadedFile.name.endsWith(".pdf")) {
-        extracted = await extractTextFromPDF(uploadedFile);
+      let res;
+      if (inputMode === "upload" && uploadedFile) {
+        const formData = new FormData();
+        formData.append("file", uploadedFile);
+        formData.append("engine", "RULE_BASED");
+        res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          body: formData,
+        });
       } else {
-        extracted = await uploadedFile.text();
+        res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawContent: scriptText, engine: "RULE_BASED" }),
+        });
       }
-    } catch (e) {
-      console.error(e);
+
+      const data = await res.json();
+      if (data.scenes && Array.isArray(data.scenes)) {
+        setParsedScenes(data.scenes);
+        setSelectedSceneIds([]);
+        sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
+      }
+    } catch (err) {
+      console.error("Breakdown Error:", err);
+    } finally {
+      setIsProcessing(false);
     }
-
-    setScriptText(extracted);
-
-    setTimeout(() => {
-      setIsProcessing(false);
-      const results = parseScriptIntoScenes(extracted, uploadedFile.name);
-      setParsedScenes(results);
-      setSelectedSceneIds([]);
-      sessionStorage.setItem("eclat_active_scenes", JSON.stringify(results));
-    }, 600);
   };
 
-  // Paste Text Breakdown ධාවනය
-  const handleRunManualBreakdown = () => {
-    if (!scriptText.trim()) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      const results = parseScriptIntoScenes(scriptText, "pasted_script.txt");
-      setParsedScenes(results);
-      setSelectedSceneIds([]);
-      sessionStorage.setItem("eclat_active_scenes", JSON.stringify(results));
-    }, 500);
-  };
-
-  // Script එක සහ Scenes සියල්ල Clear කිරීම (Remove Script Button)
+  // Script එක සහ Scenes සම්පූර්ණයෙන්ම Remove කිරීම (Reset)
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -466,7 +155,6 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
-  // Storyboard Studio වෙත යෑම
   const handleGenerateAllStoryboards = () => {
     setIsGeneratingAllStoryboards(true);
     sessionStorage.setItem("eclat_active_scenes", JSON.stringify(parsedScenes));
@@ -578,7 +266,6 @@ export default function ScriptBreakdownPage() {
                         <span className="text-emerald-400 font-bold text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
                           {(uploadedFile.size / 1024).toFixed(1)} KB
                         </span>
-                        {/* Remove Script Button */}
                         <button
                           onClick={handleRemoveScriptAndClear}
                           className="p-1 rounded bg-red-950/60 hover:bg-red-900 text-red-400 border border-red-800/40 transition-colors"
@@ -590,13 +277,13 @@ export default function ScriptBreakdownPage() {
                     </div>
 
                     <button
-                      onClick={handleRunPdfBreakdown}
+                      onClick={handleExecuteBreakdown}
                       disabled={isProcessing}
                       className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> තිර පිටපතේ සියලුම Scenes වෙන් කරමින් පවතී...
+                          <Loader2 className="w-4 h-4 animate-spin" /> තිර පිටපත විශ්ලේෂණය කරමින් පවතී...
                         </>
                       ) : (
                         <>
@@ -627,7 +314,7 @@ export default function ScriptBreakdownPage() {
                     </button>
                   )}
                   <button
-                    onClick={handleRunManualBreakdown}
+                    onClick={handleExecuteBreakdown}
                     disabled={isProcessing || !scriptText.trim()}
                     className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
@@ -680,7 +367,7 @@ export default function ScriptBreakdownPage() {
             <div className="p-16 rounded-2xl bg-[#09130e] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
               <h3 className="text-sm font-semibold text-white">තිර පිටපත විශ්ලේෂණය කරමින් පවතී...</h3>
-              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් සම්පූර්ණයෙන්ම වෙන් කරමින් පවතී.</p>
+              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් සියල්ල වෙන් කරමින් පවතී.</p>
             </div>
           ) : parsedScenes.length > 0 ? (
             <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1 custom-scrollbar">
