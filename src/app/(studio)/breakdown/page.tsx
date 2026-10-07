@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -38,7 +38,7 @@ interface SceneEntity {
   props: string[];
   dialogues: DialogueItem[];
   plannedShots: number;
-  visualPrompt?: string;
+  visualPrompt: string;
 }
 
 export default function ScriptBreakdownPage() {
@@ -55,13 +55,27 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
+  // Load from sessionStorage on mount (data persists across internal pages)
+  useEffect(() => {
+    try {
+      const saved = sessionStorage.getItem("eclat_active_scenes");
+      if (saved) {
+        const scenes = JSON.parse(saved);
+        setParsedScenes(scenes);
+        setSelectedSceneIds(scenes.map((s: SceneEntity) => s.id));
+      }
+    } catch (e) {
+      console.error(e);
+    }
+  }, []);
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadedFile(file);
   };
 
-  // Browser එක freeze නොවී කෙළින්ම Server API එකෙන් Parse කරගැනීම
+  // Pure dynamic execution via backend API
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
@@ -79,7 +93,7 @@ export default function ScriptBreakdownPage() {
         res = await fetch("/api/screenplay/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rawText: scriptText, fileName: "pasted_text.txt" }),
+          body: JSON.stringify({ rawText: scriptText }),
         });
       }
 
@@ -90,12 +104,13 @@ export default function ScriptBreakdownPage() {
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
       }
     } catch (err) {
-      console.error("Parsing request failed:", err);
+      console.error("Execution failed:", err);
     } finally {
       setIsProcessing(false);
     }
   };
 
+  // Clear everything
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -152,22 +167,56 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
-  const handleGenerateAllStoryboards = () => {
-    setIsGeneratingAllStoryboards(true);
-    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(parsedScenes));
-    setTimeout(() => {
-      setIsGeneratingAllStoryboards(false);
-      router.push("/storyboard");
-    }, 600);
-  };
+  // Save storyboard cards & navigate
+  const handleGenerateStoryboards = (targetScenes: SceneEntity[]) => {
+    if (targetScenes.length === 0) return;
 
-  const handleGenerateSceneStoryboard = (sceneId: string) => {
-    setGeneratingSceneId(sceneId);
-    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(parsedScenes));
-    setTimeout(() => {
-      setGeneratingSceneId(null);
-      router.push("/storyboard");
-    }, 500);
+    // Load existing frames if any
+    let existingFrames: any[] = [];
+    try {
+      const stored = sessionStorage.getItem("eclat_storyboard_frames");
+      if (stored) existingFrames = JSON.parse(stored);
+    } catch (e) {
+      console.error(e);
+    }
+
+    const newFrames = targetScenes.flatMap((sc) => [
+      {
+        id: `sb-${sc.sceneNumber}-a`,
+        sceneNumber: sc.sceneNumber,
+        shotNumber: `SHOT ${String(sc.sceneNumber).padStart(2, "0")}A`,
+        shotTitle: `Wide Master Framing (WMS)`,
+        slugline: sc.slugline,
+        lensAngle: "28mm Anamorphic T2.0",
+        movement: "Slow Push-In Tracking",
+        visualPrompt: sc.visualPrompt,
+        characters: sc.characters,
+        props: sc.props,
+        imageType: "wide"
+      },
+      {
+        id: `sb-${sc.sceneNumber}-b`,
+        sceneNumber: sc.sceneNumber,
+        shotNumber: `SHOT ${String(sc.sceneNumber).padStart(2, "0")}B`,
+        shotTitle: `Medium Close Action (MCU)`,
+        slugline: sc.slugline,
+        lensAngle: "50mm Prime T1.5",
+        movement: "Dynamic Eye-Level",
+        visualPrompt: sc.visualPrompt,
+        characters: sc.characters,
+        props: sc.props,
+        imageType: "close"
+      }
+    ]);
+
+    // Merge without duplicates
+    const frameMap = new Map();
+    existingFrames.forEach((f) => frameMap.set(f.id, f));
+    newFrames.forEach((f) => frameMap.set(f.id, f));
+    const merged = Array.from(frameMap.values());
+
+    sessionStorage.setItem("eclat_storyboard_frames", JSON.stringify(merged));
+    router.push("/storyboard");
   };
 
   return (
@@ -187,7 +236,10 @@ export default function ScriptBreakdownPage() {
 
         <div className="flex items-center gap-3">
           <button
-            onClick={handleGenerateAllStoryboards}
+            onClick={() => {
+              const selected = parsedScenes.filter((s) => selectedSceneIds.includes(s.id));
+              handleGenerateStoryboards(selected.length > 0 ? selected : parsedScenes);
+            }}
             disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
             className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
@@ -489,19 +541,11 @@ export default function ScriptBreakdownPage() {
                         {scene.plannedShots} Planned Shots
                       </span>
                       <button
-                        onClick={() => handleGenerateSceneStoryboard(scene.id)}
+                        onClick={() => handleGenerateStoryboards([scene])}
                         disabled={generatingSceneId === scene.id}
                         className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                       >
-                        {generatingSceneId === scene.id ? (
-                          <>
-                            <Loader2 className="w-3 h-3 animate-spin" /> Loading Storyboard...
-                          </>
-                        ) : (
-                          <>
-                            Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
-                          </>
-                        )}
+                        Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
