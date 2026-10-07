@@ -54,284 +54,45 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // PDF ගොනුවේ අකුරු කියවීම සහ Binary කේත පෙරීම
-  const extractTextFromPDF = async (file: File): Promise<string> => {
-    return new Promise((resolve) => {
-      const runExtraction = async (pdfjsLib: any) => {
-        try {
-          const arrayBuffer = await file.arrayBuffer();
-          const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
-          let fullText = "";
-
-          for (let i = 1; i <= pdf.numPages; i++) {
-            const page = await pdf.getPage(i);
-            const textContent = await page.getTextContent();
-            const pageText = textContent.items
-              .map((item: any) => item.str)
-              .join(" ");
-            fullText += pageText + "\n";
-          }
-
-          // PDF Binary Junk පෙරීම
-          const clean = fullText
-            .replace(/%PDF-[\s\S]*?endobj/gi, "")
-            .replace(/\/Type\s*\/[A-Za-z0-9]+/gi, "")
-            .replace(/[^\u0D80-\u0DFFa-zA-Z0-9.,!?'" \n\r\t\-:]/g, " ")
-            .trim();
-
-          resolve(clean);
-        } catch (err) {
-          console.error("PDF Read Error:", err);
-          resolve("");
-        }
-      };
-
-      if ((window as any).pdfjsLib) {
-        runExtraction((window as any).pdfjsLib);
-      } else {
-        const script = document.createElement("script");
-        script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
-        script.onload = () => {
-          const pdfjsLib = (window as any).pdfjsLib;
-          pdfjsLib.GlobalWorkerOptions.workerSrc =
-            "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
-          runExtraction(pdfjsLib);
-        };
-        script.onerror = () => resolve("");
-        document.body.appendChild(script);
-      }
-    });
-  };
-
-  // සිංහල සම්පූර්ණ පිටපත් සඳහා ස්වභාවික දර්ශන සැකසුම
-  const getSinhalaProductionScenes = (): SceneEntity[] => {
-    return [
-      {
-        id: "SCENE-01",
-        sceneNumber: 1,
-        slugline: "SCENE 01: INT. පැරණි තාක්ෂණ විද්‍යාගාරය - NIGHT",
-        locationType: "INT (අභ්‍යන්තර)",
-        timeOfDay: "NIGHT / DAWN",
-        synopsis: "අඳුරු කාමරය මැද නිල් සහ කොළ පරිගණක තිර දැල්වෙයි. පිටතින් ධාරානිපාත වැසි හඬ ඇසෙයි. කසුන් මේසය මත ඇති හොලෝග්‍රැෆික් උපකරණය පරීක්ෂා කරයි. ඔහුගේ අතේ කුඩා විදුලි පන්දමක් සහ ඩිජිටල් ස්කෑනරයක් ඇත.",
-        characters: ["නිමල්", "කසුන්"],
-        props: ["විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "හොලෝග්‍රැෆික් උපකරණය"],
-        dialogues: [
-          { speaker: "නිමල්", line: "කසුන්... තව විනාඩි දහයකින් මුළු ග්‍රිඩ් එකම ඩවුන් වෙනවා. ඔය ෆයිල් එක ගත්තද?" },
-          { speaker: "කසුන්", line: "ප්‍රොසෙස් එක 90% ක් ඉවරයි. තව තත්පර තිහක් ඕනේ. දොර ළඟට වෙලා බලාගෙන ඉන්න." }
-        ],
-        plannedShots: 3
-      },
-      {
-        id: "SCENE-02",
-        sceneNumber: 2,
-        slugline: "SCENE 02: EXT. වරාය පිවිසුම් මාර්ගය - CONTINUOUS",
-        locationType: "EXT (බාහිර)",
-        timeOfDay: "DAY",
-        synopsis: "තද වැස්ස මාර්ගය මත පතිත වේ. කළු පැහැති වෑන් රථයක් නවත්වයි. රහස් නියෝජිතයා BINOCULARS උපකරණයෙන් ගේට්ටුව දෙස බලා සිටියි.",
-        characters: ["රහස් නියෝජිතයා"],
-        props: ["BINOCULARS උපකරණය", "කළු පැහැති වෑන් රථයක්"],
-        dialogues: [
-          { speaker: "රහස් නියෝජිතයා", line: "ඉලක්කය තවමත් ගොඩනැගිල්ල ඇතුළේ. පිටවීමේ සලකුණක් නෑ." }
-        ],
-        plannedShots: 3
-      },
-      {
-        id: "SCENE-03",
-        sceneNumber: 3,
-        slugline: "SCENE 03: INT. ප්‍රධාන පාලක මැදිරිය - NIGHT",
-        locationType: "INT (අභ්‍යන්තර)",
-        timeOfDay: "NIGHT",
-        synopsis: "පරිගණක තිරයේ දත්ත හුවමාරුව අවසන් වේ. කසුන් ENCRYPTED HARD DRIVE එක ගලවා ගනී. හදිසි අනතුරු ඇඟවීමේ රතු ලාම්පු දැල්වෙයි.",
-        characters: ["නිමල්", "කසුන්"],
-        props: ["දෘඪ තැටිය", "හදිසි අනතුරු ඇඟවීමේ ලාම්පු"],
-        dialogues: [
-          { speaker: "නිමල්", line: "උන් මේන් පවර් එක කැපුවා! දැන්ම යන්න වෙනවා!" },
-          { speaker: "කසුන්", line: "දෘඪ තැටිය ගත්තා. පිටුපස දොරෙන් එළියට බහිමු!" }
-        ],
-        plannedShots: 3
-      },
-      {
-        id: "SCENE-04",
-        sceneNumber: 4,
-        slugline: "SCENE 04: EXT. වරාය ජැටිය - DAWN",
-        locationType: "EXT (බාහිර)",
-        timeOfDay: "DAWN / අලුයම",
-        synopsis: "අලුයම මීදුමෙන් වැසුණු වරාය පරිශ්‍රය. කසුන් සහ නිමල් බහාලුම් අතරින් බෝට්ටුව දෙසට වේගයෙන් දිව යති.",
-        characters: ["කසුන්", "නිමල්"],
-        props: ["බහාලුම්", "මෝටර් බෝට්ටුව"],
-        dialogues: [
-          { speaker: "නිමල්", line: "බෝට්ටුව තියෙන්නේ තුන්වෙනි ජැටිය ළඟ. ඉක්මන් කරන්න!" }
-        ],
-        plannedShots: 3
-      }
-    ];
-  };
-
-  // විශ්ලේෂණ එන්ජිම
-  const parseScriptText = (rawContent: string, fileName: string = ""): SceneEntity[] => {
-    const isSinhala = /[\u0D80-\u0DFF]/.test(rawContent) || /සිංහල|පිටපත|script/i.test(fileName);
-    const isBinaryJunk = rawContent.includes("%PDF") || rawContent.includes("/Catalog") || rawContent.includes("endobj");
-
-    // Binary දත්ත හඳුනාගතහොත් හෝ අකුරු කියවීමට නොහැකි වුවහොත් පිරිසිදු දර්ශන ලබාදීම
-    if (isBinaryJunk || rawContent.trim().length < 50) {
-      if (isSinhala) {
-        return getSinhalaProductionScenes();
-      }
-    }
-
-    const slugRegex = /^(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)/i;
-    const lines = rawContent.split(/\r?\n/);
-    const results: SceneEntity[] = [];
-    let currentScene: SceneEntity | null = null;
-    let synopsisBuffer: string[] = [];
-    let activeSpeaker: string | null = null;
-
-    const propWords = [
-      "KNIFE", "GUN", "PHONE", "CAR", "BAG", "WATER", "GLASS", "CLOCK", "PAPER", "FAN", "MONEY",
-      "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "බෑගය", "වතුර", "වීදුරුව", "මුදල්", "විදුලි පන්දම", "ස්කෑනරය", "සිතියම"
-    ];
-
-    for (let i = 0; i < lines.length; i++) {
-      const line = lines[i].trim();
-      if (!line || line.startsWith("%PDF") || line.startsWith("/")) continue;
-
-      if (slugRegex.test(line) || (/^(INT|EXT)\s/i.test(line) && line.length < 80)) {
-        if (currentScene) {
-          currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || (isSinhala ? "දර්ශනයේ පසුබිම් විස්තරය." : "Scene action description.");
-          results.push(currentScene);
-          synopsisBuffer = [];
-          activeSpeaker = null;
-        }
-
-        const sceneNum = results.length + 1;
-        const isExt = /EXT|බාහිර/i.test(line);
-        const isNight = /NIGHT|රාත්‍රී|DARK/i.test(line);
-
-        currentScene = {
-          id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
-          sceneNumber: sceneNum,
-          slugline: line.toUpperCase(),
-          locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
-          timeOfDay: isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY"),
-          synopsis: "",
-          characters: [],
-          props: [],
-          dialogues: [],
-          plannedShots: 3
-        };
-        continue;
-      }
-
-      if (currentScene) {
-        if (line.includes(":") || (line.includes("-") && !line.startsWith("-"))) {
-          const parts = line.split(/[:\-]/);
-          const spk = parts[0].trim();
-          const speech = parts.slice(1).join(":").trim();
-          if (spk.length > 1 && spk.length < 30 && speech.length > 0) {
-            if (!currentScene.characters.includes(spk)) currentScene.characters.push(spk);
-            if (currentScene.dialogues.length < 4) {
-              currentScene.dialogues.push({ speaker: spk, line: speech.replace(/^["“”]|["“”]$/g, "") });
-            }
-            continue;
-          }
-        }
-
-        if (line === line.toUpperCase() && line.length > 2 && line.length < 25 && !line.includes(".")) {
-          activeSpeaker = line;
-          if (!currentScene.characters.includes(line)) currentScene.characters.push(line);
-          continue;
-        }
-
-        if (activeSpeaker && line.length > 1) {
-          if (currentScene.dialogues.length < 4) {
-            currentScene.dialogues.push({ speaker: activeSpeaker, line: line.replace(/^["“”]|["“”]$/g, "") });
-          }
-          activeSpeaker = null;
-          continue;
-        }
-
-        propWords.forEach((pw) => {
-          if (line.toUpperCase().includes(pw.toUpperCase()) && !currentScene!.props.includes(pw)) {
-            currentScene!.props.push(pw);
-          }
-        });
-
-        if (synopsisBuffer.length < 3 && !line.startsWith("(") && !line.includes("obj")) {
-          synopsisBuffer.push(line);
-        }
-      }
-    }
-
-    if (currentScene) {
-      currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || (isSinhala ? "දර්ශනයේ පසුබිම් විස්තරය." : "Scene action description.");
-      results.push(currentScene);
-    }
-
-    if (results.length === 0) {
-      return isSinhala ? getSinhalaProductionScenes() : [
-        {
-          id: "SCENE-01",
-          sceneNumber: 1,
-          slugline: "SCENE 01: INT. SAFE HOUSE - NIGHT",
-          locationType: "INT (Interior)",
-          timeOfDay: "NIGHT",
-          synopsis: "Rain lashes against the reinforced glass windows. Marcus loads fresh rounds into his service revolver.",
-          characters: ["MARCUS", "ELENA"],
-          props: ["REVOLVER", "MAP"],
-          dialogues: [
-            { speaker: "MARCUS", line: "We have twenty minutes before the extraction team arrives." }
-          ],
-          plannedShots: 3
-        }
-      ];
-    }
-
-    return results;
-  };
-
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     setUploadedFile(file);
   };
 
-  const handleRunPdfBreakdown = async () => {
-    if (!uploadedFile) return;
+  // Pure Dynamic API Ingestion
+  const handleExecuteBreakdown = async () => {
+    if (!uploadedFile && !scriptText.trim()) return;
 
     setIsProcessing(true);
-    let extracted = "";
-
     try {
-      if (uploadedFile.type === "application/pdf" || uploadedFile.name.endsWith(".pdf")) {
-        extracted = await extractTextFromPDF(uploadedFile);
+      let res: Response;
+      if (inputMode === "upload" && uploadedFile) {
+        const formData = new FormData();
+        formData.append("file", uploadedFile);
+        res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          body: formData,
+        });
       } else {
-        extracted = await uploadedFile.text();
+        res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawText: scriptText }),
+        });
       }
-    } catch (e) {
-      console.error(e);
+
+      const data = await res.json();
+      if (data.scenes && Array.isArray(data.scenes)) {
+        setParsedScenes(data.scenes);
+        setSelectedSceneIds(data.scenes.map((s: SceneEntity) => s.id));
+        sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
+      }
+    } catch (err) {
+      console.error("API Breakdown Failed:", err);
+    } finally {
+      setIsProcessing(false);
     }
-
-    setScriptText(extracted);
-
-    setTimeout(() => {
-      setIsProcessing(false);
-      const results = parseScriptText(extracted, uploadedFile.name);
-      setParsedScenes(results);
-      setSelectedSceneIds([]);
-      sessionStorage.setItem("eclat_active_scenes", JSON.stringify(results));
-    }, 600);
-  };
-
-  const handleRunManualBreakdown = () => {
-    if (!scriptText.trim()) return;
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
-      const results = parseScriptText(scriptText, "manual_script.txt");
-      setParsedScenes(results);
-      setSelectedSceneIds([]);
-      sessionStorage.setItem("eclat_active_scenes", JSON.stringify(results));
-    }, 500);
   };
 
   const handleRemoveScriptAndClear = () => {
@@ -348,7 +109,7 @@ export default function ScriptBreakdownPage() {
   const handleDeleteScene = (id: string) => {
     const updated = parsedScenes.filter((s) => s.id !== id);
     setParsedScenes(updated);
-    setSelectedSceneIds((prev) => prev.filter((selectedId) => selectedId !== id));
+    setSelectedSceneIds((prev) => prev.filter((item) => item !== id));
     sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
   };
 
@@ -414,13 +175,13 @@ export default function ScriptBreakdownPage() {
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Intelligent Scene Parser (සිංහල & English)
+            <Sparkles className="w-3.5 h-3.5" /> Universal Dynamic Script Parser
           </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Script Breakdown Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
+            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් සජීවීව වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
           </p>
         </div>
 
@@ -456,7 +217,7 @@ export default function ScriptBreakdownPage() {
                     : "text-slate-400 hover:text-white"
                   }`}
               >
-                <UploadCloud className="w-3.5 h-3.5" /> Upload Screenplay (PDF)
+                <UploadCloud className="w-3.5 h-3.5" /> Upload Screenplay
               </button>
               <button
                 onClick={() => setInputMode("paste")}
@@ -477,14 +238,12 @@ export default function ScriptBreakdownPage() {
                   </div>
                   <h4 className="text-sm font-bold text-white mb-1">Select Screenplay File</h4>
                   <p className="text-xs text-slate-400 max-w-xs mb-2">
-                    Supports <strong className="text-slate-200">.PDF</strong>,{" "}
-                    <strong className="text-slate-200">.FDX</strong>, and{" "}
-                    <strong className="text-slate-200">.TXT</strong>
+                    Supports any <strong className="text-slate-200">PDF</strong>, <strong className="text-slate-200">TXT</strong>, or screenplay file
                   </p>
                   <input
                     id="file-input-upload"
                     type="file"
-                    accept=".pdf,.fdx,.txt"
+                    accept=".pdf,.txt,.fdx,.fountain"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -504,7 +263,7 @@ export default function ScriptBreakdownPage() {
                         <button
                           onClick={handleRemoveScriptAndClear}
                           className="p-1 rounded bg-red-950/60 hover:bg-red-900 text-red-400 border border-red-800/40 transition-colors"
-                          title="Remove uploaded script"
+                          title="Remove script"
                         >
                           <X className="w-3.5 h-3.5" />
                         </button>
@@ -512,17 +271,17 @@ export default function ScriptBreakdownPage() {
                     </div>
 
                     <button
-                      onClick={handleRunPdfBreakdown}
+                      onClick={handleExecuteBreakdown}
                       disabled={isProcessing}
                       className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> තිර පිටපතේ සියලුම Scenes වෙන් කරමින් පවතී...
+                          <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Screenplay via API...
                         </>
                       ) : (
                         <>
-                          <Play className="w-3.5 h-3.5 fill-current" /> Parse & Breakdown PDF Script
+                          <Play className="w-3.5 h-3.5 fill-current" /> Execute Dynamic Breakdown
                         </>
                       )}
                     </button>
@@ -534,7 +293,7 @@ export default function ScriptBreakdownPage() {
                 <textarea
                   value={scriptText}
                   onChange={(e) => setScriptText(e.target.value)}
-                  placeholder="ඔබේ තිර පිටපත මෙහි paste කරන්න (සිංහල හෝ English)..."
+                  placeholder="Paste any screenplay here (English or Sinhala)..."
                   rows={13}
                   className="w-full bg-[#050607] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
                 />
@@ -549,11 +308,11 @@ export default function ScriptBreakdownPage() {
                     </button>
                   )}
                   <button
-                    onClick={handleRunManualBreakdown}
+                    onClick={handleExecuteBreakdown}
                     disabled={isProcessing || !scriptText.trim()}
                     className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                   >
-                    <Play className="w-3.5 h-3.5 fill-current" /> Parse Pasted Script
+                    <Play className="w-3.5 h-3.5 fill-current" /> Execute Dynamic Breakdown
                   </button>
                 </div>
               </div>
@@ -561,7 +320,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Parsed Scenes Output */}
+        {/* Right Column: Parsed Scenes Output List */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
             <div className="flex items-center gap-3">
@@ -602,7 +361,7 @@ export default function ScriptBreakdownPage() {
             <div className="p-16 rounded-2xl bg-[#09130e] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
               <h3 className="text-sm font-semibold text-white">තිර පිටපත විශ්ලේෂණය කරමින් පවතී...</h3>
-              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, බඩු භාණ්ඩ සහ දෙබස් සියල්ල වෙන් කරමින් පවතී.</p>
+              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, උපකරණ සහ දෙබස් සජීවීව වෙන් කරමින් පවතී.</p>
             </div>
           ) : parsedScenes.length > 0 ? (
             <div className="space-y-4 max-h-[750px] overflow-y-auto pr-1 custom-scrollbar">
@@ -804,8 +563,6 @@ export default function ScriptBreakdownPage() {
                     onChange={(e) => setEditingScene({ ...editingScene, locationType: e.target.value })}
                     className="w-full bg-[#050607] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
                   >
-                    <option value="INT (අභ්‍යන්තර)">INT (අභ්‍යන්තර)</option>
-                    <option value="EXT (බාහිර)">EXT (බාහිර)</option>
                     <option value="INT (Interior)">INT (Interior)</option>
                     <option value="EXT (Exterior)">EXT (Exterior)</option>
                   </select>

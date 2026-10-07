@@ -1,73 +1,78 @@
 import { NextResponse } from "next/server";
 
+interface ExtractedScene {
+    id: string;
+    sceneNumber: number;
+    slugline: string;
+    locationType: string;
+    timeOfDay: string;
+    synopsis: string;
+    characters: string[];
+    props: string[];
+    dialogues: { speaker: string; line: string }[];
+    plannedShots: number;
+}
+
 export async function POST(req: Request) {
     try {
         const contentType = req.headers.get("content-type") || "";
-        let rawContent = "";
-        let engine = "RULE_BASED";
+        let rawText = "";
 
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
             const file = formData.get("file") as File;
-            engine = (formData.get("engine") as string) || "RULE_BASED";
-
-            if (file) {
-                const buffer = await file.arrayBuffer();
-                // UTF-8 stream decoding
-                const decoder = new TextDecoder("utf-8");
-                rawContent = decoder.decode(buffer);
-
-                // Binary/Scanned characters පිරිසිදු කර පෙළ වෙන් කිරීම
-                rawContent = rawContent.replace(/[^\x20-\x7E\u0D80-\u0DFF\n\r\t]/g, " ");
+            if (!file) {
+                return NextResponse.json({ error: "No file provided" }, { status: 400 });
             }
+            const buffer = await file.arrayBuffer();
+            const decoder = new TextDecoder("utf-8");
+            rawText = decoder.decode(buffer);
+            // Clean non-text streams while preserving Sinhala Unicode & English text
+            rawText = rawText.replace(/[^\u0D80-\u0DFFa-zA-Z0-9\s.,!?'"()\-:\/]/g, " ");
         } else {
             const body = await req.json();
-            rawContent = body.rawContent || "";
-            engine = body.engine || "RULE_BASED";
+            rawText = body.rawText || "";
         }
 
-        if (!rawContent.trim()) {
-            return NextResponse.json({ error: "Script content is empty." }, { status: 400 });
+        if (!rawText.trim()) {
+            return NextResponse.json({ error: "Empty script content" }, { status: 400 });
         }
 
-        // 1. Language Detection Logic (සිංහල ද ඉංග්‍රීසි ද හඳුනාගැනීම)
-        const isSinhala = /[\u0D80-\u0DFF]/.test(rawContent);
-
-        // 2. Dynamic Universal Slugline Matcher
-        const lines = rawContent.split(/\r?\n/);
-        const scenes: any[] = [];
-        let currentScene: any = null;
+        // Thesis Section 5.3.2: Universal Deterministic Parser Logic
+        const lines = rawText.split(/\r?\n/);
+        const scenes: ExtractedScene[] = [];
+        let currentScene: ExtractedScene | null = null;
         let synopsisBuffer: string[] = [];
-        let activeSpeaker: string | null = null;
 
-        const slugRegex = /^(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)/i;
-        const propWords = [
-            "GUN", "KNIFE", "PHONE", "CAR", "BAG", "WATER", "GLASS", "CLOCK", "PAPER", "FAN", "MONEY", "CAMERA",
-            "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "කාර්", "බෑගය", "වතුර", "වීදුරුව", "මුදල්", "විදුලි පන්දම", "ස්කෑනරය"
+        // Universal slugline regex: matches INT, EXT, SCENE, දර්ශනය, අභ්‍යන්තර, බාහිර
+        const sluglineRegex = /^(SCENE\s*\d+|දර්ශනය\s*\d+|(?:INT|EXT|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)[\.\s\:\-])/i;
+        const characterRegex = /^([A-Z\u0D80-\u0DFF\s]{2,25})$/;
+        const propKeywords = [
+            "GUN", "REVOLVER", "KNIFE", "SWITCHBLADE", "PHONE", "CAMERA", "BRIEFCASE", "BOTTLE", "MAP", "CAR", "FAN", "CLOCK", "PAPER",
+            "තුවක්කුව", "පිහිය", "දුරකථනය", "කැමරාව", "සිතියම", "රථය", "කාර්", "විදුලි පන්දම", "ස්කෑනරය", "ඔරලෝසුව"
         ];
 
         for (let i = 0; i < lines.length; i++) {
             const line = lines[i].trim();
             if (!line) continue;
 
-            if (slugRegex.test(line) || (/^(INT|EXT)\s/i.test(line) && line.length < 80)) {
+            if (sluglineRegex.test(line)) {
                 if (currentScene) {
-                    currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || (isSinhala ? "දර්ශනයේ පසුබිම් විස්තරය." : "Scene action staging.");
+                    currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "Dramatic action and narrative staging.";
                     scenes.push(currentScene);
                     synopsisBuffer = [];
-                    activeSpeaker = null;
                 }
 
-                const sceneNum = scenes.length + 1;
                 const isExt = /EXT|බාහිර/i.test(line);
-                const isNight = /NIGHT|රාත්‍රී|DARK/i.test(line);
+                const isNight = /NIGHT|රාත්‍රී|DARK|අඳුරු/i.test(line);
+                const sceneNum = scenes.length + 1;
 
                 currentScene = {
                     id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
                     sceneNumber: sceneNum,
                     slugline: line.toUpperCase(),
-                    locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
-                    timeOfDay: isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY"),
+                    locationType: isExt ? "EXT (Exterior)" : "INT (Interior)",
+                    timeOfDay: isNight ? "NIGHT" : "DAY",
                     synopsis: "",
                     characters: [],
                     props: [],
@@ -78,41 +83,56 @@ export async function POST(req: Request) {
             }
 
             if (currentScene) {
-                // Dialogues Extraction
+                // Speaker Cue Detection
+                if (characterRegex.test(line) && !line.includes(".") && !line.includes(":")) {
+                    const charName = line.toUpperCase().trim();
+                    if (!currentScene.characters.includes(charName) && charName.length < 25) {
+                        currentScene.characters.push(charName);
+                    }
+                    // Check next line for dialogue
+                    if (i + 1 < lines.length) {
+                        const nextLine = lines[i + 1].trim();
+                        if (nextLine && !sluglineRegex.test(nextLine) && !characterRegex.test(nextLine)) {
+                            currentScene.dialogues.push({
+                                speaker: charName,
+                                line: nextLine.replace(/^["“”]|["“”]$/g, "")
+                            });
+                            i++;
+                            continue;
+                        }
+                    }
+                    continue;
+                }
+
+                // Inline Dialogue Detection (Speaker: Line)
                 if (line.includes(":") || (line.includes("-") && !line.startsWith("-"))) {
-                    const parts = line.split(/[:\-]/);
-                    const spk = parts[0].trim();
-                    const speech = parts.slice(1).join(":").trim();
-                    if (spk.length > 1 && spk.length < 30 && speech.length > 0) {
-                        if (!currentScene.characters.includes(spk)) currentScene.characters.push(spk);
+                    const delimiter = line.includes(":") ? ":" : "-";
+                    const [speaker, ...rest] = line.split(delimiter);
+                    const dialogueText = rest.join(delimiter).trim();
+                    const cleanSpeaker = speaker.trim().toUpperCase();
+
+                    if (cleanSpeaker.length > 1 && cleanSpeaker.length < 25 && dialogueText.length > 0) {
+                        if (!currentScene.characters.includes(cleanSpeaker)) {
+                            currentScene.characters.push(cleanSpeaker);
+                        }
                         if (currentScene.dialogues.length < 4) {
-                            currentScene.dialogues.push({ speaker: spk, line: speech.replace(/^["“”]|["“”]$/g, "") });
+                            currentScene.dialogues.push({
+                                speaker: cleanSpeaker,
+                                line: dialogueText.replace(/^["“”]|["“”]$/g, "")
+                            });
                         }
                         continue;
                     }
                 }
 
-                // Speaker Headings
-                if (line === line.toUpperCase() && line.length > 2 && line.length < 25 && !line.includes(".")) {
-                    activeSpeaker = line;
-                    if (!currentScene.characters.includes(line)) currentScene.characters.push(line);
-                    continue;
+                // Prop Extraction
+                for (const prop of propKeywords) {
+                    if (line.toUpperCase().includes(prop) && !currentScene.props.includes(prop)) {
+                        currentScene.props.push(prop);
+                    }
                 }
 
-                if (activeSpeaker && line.length > 1) {
-                    if (currentScene.dialogues.length < 4) {
-                        currentScene.dialogues.push({ speaker: activeSpeaker, line: line.replace(/^["“”]|["“”]$/g, "") });
-                    }
-                    activeSpeaker = null;
-                    continue;
-                }
-
-                propWords.forEach((pw) => {
-                    if (line.toUpperCase().includes(pw.toUpperCase()) && !currentScene.props.includes(pw)) {
-                        currentScene.props.push(pw);
-                    }
-                });
-
+                // Synopsis / Action line accumulation
                 if (synopsisBuffer.length < 3 && !line.startsWith("(")) {
                     synopsisBuffer.push(line);
                 }
@@ -120,25 +140,25 @@ export async function POST(req: Request) {
         }
 
         if (currentScene) {
-            currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || (isSinhala ? "දර්ශනයේ පසුබිම් විස්තරය." : "Scene action staging.");
+            currentScene.synopsis = synopsisBuffer.slice(0, 3).join(" ") || "Dramatic action and narrative staging.";
             scenes.push(currentScene);
         }
 
-        // ස්ක්‍රිප්ට් එකේ සම්මත sluglines නොමැති විට ඡේද අනුව scenes වෙන් කිරීම
-        if (scenes.length === 0) {
-            const paragraphs = rawContent.split(/\n\s*\n/).filter((p) => p.trim().length > 40);
-            paragraphs.forEach((p, idx) => {
+        // Dynamic Paragraph-based segmentation if unformatted text is provided
+        if (scenes.length === 0 && rawText.trim().length > 40) {
+            const blocks = rawText.split(/\n\s*\n/).filter((b) => b.trim().length > 25);
+            blocks.forEach((blk, idx) => {
                 const sNum = idx + 1;
-                const isExt = /EXT|බාහිර/i.test(p);
-                const isNight = /NIGHT|රාත්‍රී/i.test(p);
+                const isExt = /EXT|බාහිර/i.test(blk);
+                const isNight = /NIGHT|රාත්‍රී/i.test(blk);
                 scenes.push({
                     id: `SCENE-${String(sNum).padStart(2, "0")}`,
                     sceneNumber: sNum,
-                    slugline: `SCENE ${String(sNum).padStart(2, "0")}: ${isExt ? (isSinhala ? "EXT. බාහිර දර්ශනය" : "EXT. LOCATION SEQUENCE") : (isSinhala ? "INT. අභ්‍යන්තර දර්ශනය" : "INT. LOCATION SEQUENCE")}`,
-                    locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
-                    timeOfDay: isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY"),
-                    synopsis: p.slice(0, 200).trim() + "...",
-                    characters: isSinhala ? ["ප්‍රධාන චරිතය"] : ["LEAD ROLE"],
+                    slugline: `SCENE ${String(sNum).padStart(2, "0")}: ${isExt ? "EXT. SCENE SEQUENCE" : "INT. SCENE SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`,
+                    locationType: isExt ? "EXT" : "INT",
+                    timeOfDay: isNight ? "NIGHT" : "DAY",
+                    synopsis: blk.slice(0, 200).trim() + "...",
+                    characters: [],
                     props: [],
                     dialogues: [],
                     plannedShots: 3
@@ -148,6 +168,6 @@ export async function POST(req: Request) {
 
         return NextResponse.json({ success: true, count: scenes.length, scenes });
     } catch (error: any) {
-        return NextResponse.json({ error: error.message || "Parsing failed." }, { status: 500 });
+        return NextResponse.json({ error: error.message || "Parsing failed" }, { status: 500 });
     }
 }
