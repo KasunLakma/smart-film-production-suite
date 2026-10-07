@@ -38,6 +38,7 @@ interface SceneEntity {
   props: string[];
   dialogues: DialogueItem[];
   plannedShots: number;
+  visualPrompt?: string;
 }
 
 export default function ScriptBreakdownPage() {
@@ -60,7 +61,7 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // Pure Dynamic API Ingestion
+  // Pure API Breakdown Execution (Server-Side Multi-Tier Pipeline)
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
@@ -89,7 +90,7 @@ export default function ScriptBreakdownPage() {
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
       }
     } catch (err) {
-      console.error("API Breakdown Failed:", err);
+      console.error("Breakdown failed:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -171,7 +172,6 @@ export default function ScriptBreakdownPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 font-sans">
-      {/* Top Banner */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -204,7 +204,6 @@ export default function ScriptBreakdownPage() {
         </div>
       </div>
 
-      {/* Main Grid */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
         {/* Left Column: Upload / Paste */}
         <div className="lg:col-span-5 space-y-4">
