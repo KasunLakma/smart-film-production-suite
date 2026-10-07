@@ -79,7 +79,7 @@ export default function ScriptBreakdownPage() {
         res = await fetch("/api/screenplay/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rawText: scriptText }),
+          body: JSON.stringify({ rawText: scriptText, fileName: "pasted_text.txt" }),
         });
       }
 
