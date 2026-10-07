@@ -1,12 +1,20 @@
 import { NextResponse } from "next/server";
 import { GoogleGenAI } from "@google/genai";
 
-const ai = new GoogleGenAI();
+export const maxDuration = 60; // Vercel function timeout එක තත්පර 60 දක්වා වැඩි කිරීම
 
 export async function POST(req: Request) {
     try {
+        const apiKey = process.env.GEMINI_API_KEY;
+        if (!apiKey) {
+            return NextResponse.json({ error: "GEMINI_API_KEY is not configured" }, { status: 500 });
+        }
+
+        const ai = new GoogleGenAI({ apiKey });
         const contentType = req.headers.get("content-type") || "";
-        let rawText = "";
+
+        let filePart: any = null;
+        let textContent = "";
 
         if (contentType.includes("multipart/form-data")) {
             const formData = await req.formData();
@@ -16,70 +24,67 @@ export async function POST(req: Request) {
             }
 
             const buffer = await file.arrayBuffer();
-            const decoder = new TextDecoder("utf-8", { fatal: false });
-            const decoded = decoder.decode(buffer);
+            const base64Data = Buffer.from(buffer).toString("base64");
+            const mimeType = file.type || (file.name.endsWith(".pdf") ? "application/pdf" : "text/plain");
 
-            // Clean binary stream tags and preserve Unicode Sinhala & English characters
-            rawText = decoded
-                .replace(/%PDF-[\s\S]*?(?=stream|BT|\n)/gi, " ")
-                .replace(/stream[\s\S]*?endstream/gi, " ")
-                .replace(/<<[\s\S]*?>>/g, " ")
-                .replace(/\b\d+\s+\d+\s+obj\b[\s\S]*?\bendobj\b/gi, " ")
-                .replace(/[^\u0D80-\u0DFFa-zA-Z0-9\s.,!?'"()\-:\/]/g, " ")
-                .replace(/\s+/g, " ")
-                .slice(0, 70000); // Send sufficient context block to Gemini
+            filePart = {
+                inlineData: {
+                    data: base64Data,
+                    mimeType: mimeType,
+                },
+            };
         } else {
             const body = await req.json();
-            rawText = (body.rawText || "").slice(0, 70000);
-        }
-
-        if (!rawText.trim()) {
-            return NextResponse.json({ error: "Script content is empty" }, { status: 400 });
+            textContent = body.rawText || "";
         }
 
         const systemPrompt = `
-You are an expert film pre-production breakdown supervisor. Analyze the following screenplay text and break it down into sequential scenes.
+You are an expert film pre-production breakdown supervisor. Analyze this screenplay document (whether native text or scanned/image PDF).
 
-STRICT INSTRUCTIONS:
-1. Detect whether the script is written in Sinhala or English.
-2. If Sinhala: Output sluglines, synopsis, characters, and dialogues in authentic Sinhala.
-3. If English: Output sluglines, synopsis, characters, and dialogues in authentic English.
-4. For EVERY scene, you MUST generate a high-detail English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g. "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic, photorealistic 8k"). Even if the scene is in Sinhala, the "visualPrompt" MUST BE IN ENGLISH.
-5. Parse all genuine scenes found in the manuscript. Do not hardcode or limit artificially.
+STRICT OPERATIONAL RULES:
+1. DETECT LANGUAGE: Determine if the script is in Sinhala or English.
+2. SCRIPT DETAILS EXTRACTION:
+   - If Sinhala: Extract sluglines, synopses, characters, and dialogues purely in authentic Sinhala.
+   - If English: Extract them purely in authentic English.
+3. FOR STORYBOARD PRE-VISUALIZATION:
+   - For EVERY scene, create a high-detail English "visualPrompt" optimized for 16:9 cinematic image generation (e.g., "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic, photorealistic 8k"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
+4. PARSE ALL SCENES: Extract all genuine narrative scenes sequentially across the entire manuscript.
 
-Return ONLY a valid JSON array of objects with this schema (no markdown, no backticks, only pure JSON):
+Output ONLY a valid JSON array of objects conforming exactly to this structure (no markdown formatting, no backticks, only pure JSON):
 [
   {
     "id": "SCENE-01",
     "sceneNumber": 1,
-    "slugline": "string",
+    "slugline": "SCENE 01: INT/EXT LOCATION - DAY/NIGHT",
     "locationType": "INT" or "EXT",
     "timeOfDay": "DAY" or "NIGHT" or "DAWN" etc.,
-    "synopsis": "string",
-    "characters": ["string"],
-    "props": ["string"],
-    "dialogues": [{"speaker": "string", "line": "string"}],
+    "synopsis": "detailed narrative action staging",
+    "characters": ["character1", "character2"],
+    "props": ["prop1", "prop2"],
+    "dialogues": [{"speaker": "NAME", "line": "dialogue line"}],
     "plannedShots": 3,
-    "visualPrompt": "string"
+    "visualPrompt": "Cinematic 16:9 widescreen movie still..."
   }
 ]
-
-Script Content:
-${rawText}
 `;
+
+        const contents = filePart ? [filePart, systemPrompt] : [textContent, systemPrompt];
 
         const response = await ai.models.generateContent({
             model: "gemini-2.5-flash",
-            contents: systemPrompt,
+            contents: contents,
             config: {
                 responseMimeType: "application/json",
             },
         });
 
-        const parsedData = JSON.parse(response.text || "[]");
+        const outputText = response.text || "[]";
+        const cleanedJson = outputText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
+        const parsedData = JSON.parse(cleanedJson);
+
         return NextResponse.json({ success: true, count: parsedData.length, scenes: parsedData });
     } catch (error: any) {
-        console.error("Screenplay Parse Error:", error);
-        return NextResponse.json({ error: error.message || "Failed to parse script" }, { status: 500 });
+        console.error("Screenplay AI Parse Error:", error);
+        return NextResponse.json({ error: error.message || "Failed to parse screenplay" }, { status: 500 });
     }
 }
