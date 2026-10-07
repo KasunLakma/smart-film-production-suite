@@ -49,13 +49,11 @@ export default function ScriptBreakdownPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
-  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
 
   const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // Load from sessionStorage on mount (data persists across page switches)
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("eclat_active_scenes");
@@ -65,7 +63,7 @@ export default function ScriptBreakdownPage() {
         setSelectedSceneIds(scenes.map((s: SceneEntity) => s.id));
       }
     } catch (e) {
-      console.error("Failed to load saved scenes:", e);
+      console.error(e);
     }
   }, []);
 
@@ -75,31 +73,45 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // Pure dynamic execution via backend Gemini API
+  // Client-side stream decoding: 413 Payload Too Large ගැටලුව මඟහැරීමට
+  const extractTextFromFile = async (file: File): Promise<string> => {
+    const buffer = await file.arrayBuffer();
+    const decoder = new TextDecoder("utf-8", { fatal: false });
+    const text = decoder.decode(buffer);
+
+    return text
+      .replace(/%PDF-[\s\S]*?(?=stream|BT|\n)/gi, " ")
+      .replace(/stream[\s\S]*?endstream/gi, " ")
+      .replace(/<<[\s\S]*?>>/g, " ")
+      .replace(/\b\d+\s+\d+\s+obj\b[\s\S]*?\bendobj\b/gi, " ")
+      .replace(/[^\u0D80-\u0DFFa-zA-Z0-9\s.,!?'"()\-:\/]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  };
+
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
     setIsProcessing(true);
     try {
-      let res: Response;
+      let textToSend = scriptText.trim();
       if (inputMode === "upload" && uploadedFile) {
-        const formData = new FormData();
-        formData.append("file", uploadedFile);
-        res = await fetch("/api/screenplay/parse", {
-          method: "POST",
-          body: formData,
-        });
-      } else {
-        res = await fetch("/api/screenplay/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rawText: scriptText }),
-        });
+        textToSend = await extractTextFromFile(uploadedFile);
       }
+
+      if (!textToSend || textToSend.length < 20) {
+        throw new Error("පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය.");
+      }
+
+      const res = await fetch("/api/screenplay/parse", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rawText: textToSend }),
+      });
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Server error: ${res.status}`);
+        throw new Error(errData.error || `Server responded with ${res.status}`);
       }
 
       const data = await res.json();
@@ -108,7 +120,7 @@ export default function ScriptBreakdownPage() {
         setSelectedSceneIds(data.scenes.map((s: SceneEntity) => s.id));
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
       } else {
-        alert("පිටපතෙන් දර්ශන හඳුනා ගැනීමට නොහැකි විය. කරුණාකර පිටපත පරීක්ෂා කරන්න.");
+        alert("දර්ශන හඳුනාගැනීමට නොහැකි විය.");
       }
     } catch (err: any) {
       console.error("Execution failed:", err);
@@ -118,7 +130,6 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // Clear all data
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -175,7 +186,6 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
-  // Save storyboard cards & navigate to Storyboard Page
   const handleGenerateStoryboards = (targetScenes: SceneEntity[]) => {
     if (targetScenes.length === 0) return;
 
@@ -249,21 +259,13 @@ export default function ScriptBreakdownPage() {
             disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
             className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
-            {isGeneratingAllStoryboards ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing Storyboards...
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
-              </>
-            )}
+            <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Upload / Paste */}
+        {/* Left Column */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
@@ -334,7 +336,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Screenplay via API...
+                          <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Screenplay via Gemini...
                         </>
                       ) : (
                         <>
@@ -354,30 +356,19 @@ export default function ScriptBreakdownPage() {
                   rows={13}
                   className="w-full bg-[#050607] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
                 />
-                <div className="flex items-center gap-2">
-                  {scriptText && (
-                    <button
-                      onClick={handleRemoveScriptAndClear}
-                      className="px-3 py-3 rounded-xl bg-red-950/60 hover:bg-red-900 border border-red-800/40 text-red-400 text-xs font-bold transition-all"
-                      title="Clear Script"
-                    >
-                      <Trash2 className="w-4 h-4" />
-                    </button>
-                  )}
-                  <button
-                    onClick={handleExecuteBreakdown}
-                    disabled={isProcessing || !scriptText.trim()}
-                    className="flex-1 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <Play className="w-3.5 h-3.5 fill-current" /> Execute Dynamic Breakdown
-                  </button>
-                </div>
+                <button
+                  onClick={handleExecuteBreakdown}
+                  disabled={isProcessing || !scriptText.trim()}
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" /> Execute Dynamic Breakdown
+                </button>
               </div>
             )}
           </div>
         </div>
 
-        {/* Right Column: Parsed Scenes Output List */}
+        {/* Right Column: Output List */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
             <div className="flex items-center gap-3">
@@ -465,7 +456,6 @@ export default function ScriptBreakdownPage() {
                         <button
                           onClick={() => setEditingScene(scene)}
                           className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-300 border border-emerald-950/80 transition-all ml-1"
-                          title="Edit Scene"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -473,7 +463,6 @@ export default function ScriptBreakdownPage() {
                         <button
                           onClick={() => handleDeleteScene(scene.id)}
                           className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-emerald-950/80 transition-all"
-                          title="Delete Scene"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -485,10 +474,9 @@ export default function ScriptBreakdownPage() {
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      {/* Characters */}
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                          <Users className="w-3 h-3 text-emerald-400" /> චරිත / Characters ({scene.characters.length})
+                          <Users className="w-3 h-3 text-emerald-400" /> චරිත ({scene.characters.length})
                         </span>
                         <div className="flex flex-wrap gap-1.5">
                           {scene.characters.map((char, idx) => (
@@ -502,10 +490,9 @@ export default function ScriptBreakdownPage() {
                         </div>
                       </div>
 
-                      {/* Props */}
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
-                          <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / Props ({scene.props.length})
+                          <Box className="w-3 h-3 text-emerald-400" /> උපකරණ ({scene.props.length})
                         </span>
                         <div className="flex flex-wrap gap-1.5">
                           {scene.props.map((prop, idx) => (
@@ -520,11 +507,10 @@ export default function ScriptBreakdownPage() {
                       </div>
                     </div>
 
-                    {/* Dialogues */}
                     {scene.dialogues && scene.dialogues.length > 0 && (
                       <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
                         <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
-                          <MessageSquare className="w-3 h-3 text-emerald-400" /> දෙබස් / Key Dialogues ({scene.dialogues.length})
+                          <MessageSquare className="w-3 h-3 text-emerald-400" /> දෙබස් ({scene.dialogues.length})
                         </span>
                         <div className="space-y-1.5 divide-y divide-emerald-950/30">
                           {scene.dialogues.map((dlg, dIdx) => (
@@ -548,7 +534,6 @@ export default function ScriptBreakdownPage() {
                       </span>
                       <button
                         onClick={() => handleGenerateStoryboards([scene])}
-                        disabled={generatingSceneId === scene.id}
                         className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                       >
                         Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
@@ -604,8 +589,8 @@ export default function ScriptBreakdownPage() {
                     onChange={(e) => setEditingScene({ ...editingScene, locationType: e.target.value })}
                     className="w-full bg-[#050607] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
                   >
-                    <option value="INT (Interior)">INT (Interior)</option>
-                    <option value="EXT (Exterior)">EXT (Exterior)</option>
+                    <option value="INT">INT (අභ්‍යන්තර)</option>
+                    <option value="EXT">EXT (බාහිර)</option>
                   </select>
                 </div>
                 <div>
@@ -620,7 +605,7 @@ export default function ScriptBreakdownPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis / Action Line</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis</label>
                 <textarea
                   rows={3}
                   value={editingScene.synopsis}
