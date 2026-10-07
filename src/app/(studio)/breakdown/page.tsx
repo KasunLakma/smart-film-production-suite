@@ -61,7 +61,7 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // Pure API Breakdown Execution (Server-Side Multi-Tier Pipeline)
+  // Browser එක freeze නොවී කෙළින්ම Server API එකෙන් Parse කරගැනීම
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
@@ -90,7 +90,7 @@ export default function ScriptBreakdownPage() {
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
       }
     } catch (err) {
-      console.error("Breakdown failed:", err);
+      console.error("Parsing request failed:", err);
     } finally {
       setIsProcessing(false);
     }
@@ -433,18 +433,14 @@ export default function ScriptBreakdownPage() {
                           <Users className="w-3 h-3 text-emerald-400" /> චරිත / Characters ({scene.characters.length})
                         </span>
                         <div className="flex flex-wrap gap-1.5">
-                          {scene.characters.length > 0 ? (
-                            scene.characters.map((char, idx) => (
-                              <span
-                                key={idx}
-                                className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-emerald-300 font-medium"
-                              >
-                                {char}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-500 italic">ප්‍රධාන චරිත</span>
-                          )}
+                          {scene.characters.map((char, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-emerald-300 font-medium"
+                            >
+                              {char}
+                            </span>
+                          ))}
                         </div>
                       </div>
 
@@ -454,18 +450,14 @@ export default function ScriptBreakdownPage() {
                           <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / Props ({scene.props.length})
                         </span>
                         <div className="flex flex-wrap gap-1.5">
-                          {scene.props.length > 0 ? (
-                            scene.props.map((prop, idx) => (
-                              <span
-                                key={idx}
-                                className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-slate-300 font-medium"
-                              >
-                                {prop}
-                              </span>
-                            ))
-                          ) : (
-                            <span className="text-xs text-slate-500 italic">සාමාන්‍ය පසුතල සැකසුම</span>
-                          )}
+                          {scene.props.map((prop, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2.5 py-1 rounded-lg bg-[#0e1f16] border border-emerald-500/20 text-xs text-slate-300 font-medium"
+                            >
+                              {prop}
+                            </span>
+                          ))}
                         </div>
                       </div>
                     </div>
