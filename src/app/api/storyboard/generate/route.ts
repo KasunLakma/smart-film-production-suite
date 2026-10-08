@@ -4,13 +4,13 @@ export const maxDuration = 60;
 
 function translateFullSinhalaScene(text: string, sceneNumber: number): string {
     if (sceneNumber === 1 || /විද්‍යාගාර|විද්යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(text)) {
-        return "high-tech research laboratory interior, glowing computer terminals, operative holding digital scanner and tactical beam flashlight";
-    } else if (sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(text)) {
-        return "industrial sea harbor container docks, pouring rain on wet asphalt, black sedan idling, operative holding military binoculars";
-    } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER|ලෝහමය/i.test(text)) {
-        return "underground high-security vault, metallic lockers, glowing holographic projection device displaying transfer complete";
-    } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(text)) {
-        return "tactical armored transport vehicle speeding along wet highway at night, bright headlights cutting through heavy storm";
+        return "high-tech futuristic research laboratory, server racks, glowing blue LED terminals, undercover operative holding digital scanner and flashlight";
+    } else if (sceneNumber === 2 || /වරාය|මෝටර් රථය|දුරදක්න|දුරදක්නය|කන්ටේනර්/i.test(text)) {
+        return "industrial sea harbor container shipping docks, heavy rain slick asphalt, black sedan idling, operative holding military binoculars";
+    } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|සුරක්ෂිතාගාරය|හොලෝග්‍රැෆික්|හොලෝග්රැෆික්|TRANSFER|ලෝහමය/i.test(text)) {
+        return "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying transfer complete";
+    } else if (sceneNumber === 4 || /සන්නද්ධ|සන්නද්ධ රථය|ධාවනය|ධාවන|මාර්ග|අධිවේගී/i.test(text)) {
+        return "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting rain mist";
     } else if (/රථ|කාර්|සෙඩාන්/i.test(text)) {
         return "black sedan vehicle parked in atmospheric night setting";
     } else if (/කාමර|නිවස|ගෙදර/i.test(text)) {
@@ -48,9 +48,9 @@ export async function POST(req: Request) {
             visualSubject = translateFullSinhalaScene(fullContent, sceneNumber);
         } else {
             if (sceneNumber === 1 || /VAULT|LOCKER/i.test(fullContent)) {
-                visualSubject = "underground bank archive vault, rows of metallic locker drawers, concrete floor, Elena holding scanner, flashlight and master key";
+                visualSubject = "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying transfer complete";
             } else if (sceneNumber === 2 || /HARBOR|WAREHOUSE|COMPASS/i.test(fullContent)) {
-                visualSubject = "cold coastal harbor warehouse exterior, heavy rain on corrugated roof, Elena holding bronze compass, black sedan idling";
+                visualSubject = "industrial sea harbor container shipping docks, heavy rain slick asphalt, black sedan idling, operative holding military binoculars";
             } else if (sceneNumber === 3 || /SEDAN|TABLET|CURRENCY/i.test(fullContent)) {
                 visualSubject = "interior of black sedan moving at night, briefcase open with stacks of Euro currency, glowing encrypted tablet radar display";
             } else {
@@ -63,15 +63,15 @@ export async function POST(req: Request) {
         }
 
         const framing = isWide
-            ? "wide establishing master shot, deep focus, environmental perspective, 35mm anamorphic wide lens"
-            : "medium close-up dramatic action framing, character expression and props in focus, 50mm prime cinematic lens";
+            ? "wide master establishing framing, deep focus, 35mm anamorphic wide lens"
+            : "medium close-up dramatic action framing, character and props in focus, 50mm prime lens";
 
         const style =
             artStyle === "sketch_bw"
-                ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome storyboard panel, high contrast film previsualization"
-                : "graphic novel storyboard panel, bold ink outlines, comic book color palette, vivid cinematic lighting, 35mm film illustration still";
+                ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome"
+                : "graphic novel comic panel, bold ink outlines, vibrant cinematic lighting";
 
-        const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
+        const prompt = `${visualSubject}, ${framing}, ${style}`;
 
         const seed = Math.floor(Math.random() * 899999) + 100000;
         const directUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
