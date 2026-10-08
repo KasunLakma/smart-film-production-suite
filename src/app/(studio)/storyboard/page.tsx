@@ -41,7 +41,6 @@ export default function StoryboardPage() {
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
   const [activeScriptId, setActiveScriptId] = useState("default");
 
-  // Script එක වෙනස් වන විට Cache එක සම්පූර්ණයෙන්ම වෙන් වන Dynamic Key එක
   const STORAGE_KEY = `cine_sb_${activeScriptId}_${artStyle}`;
   const isQueueRunning = useRef(false);
 
@@ -127,6 +126,22 @@ export default function StoryboardPage() {
     );
   };
 
+  // පින්තූරය load වීම fail වුවහොත් ක්ෂණිකව retry කරන handler එක
+  const handleImageError = (shot: StoryboardShot) => {
+    const isWide = shot.id.endsWith("-A");
+    const newSeed = Math.floor(Math.random() * 899999) + 100000;
+    const fallbackUrl = shot.visualPrompt
+      ? `https://image.pollinations.ai/prompt/${encodeURIComponent(shot.visualPrompt)}?width=1280&height=720&seed=${newSeed}&nologo=true`
+      : "";
+
+    if (fallbackUrl) {
+      saveToCache(shot.id, fallbackUrl);
+      setShots((prev) =>
+        prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: fallbackUrl } : s))
+      );
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
@@ -138,7 +153,6 @@ export default function StoryboardPage() {
         try {
           const parsed = JSON.parse(storedScenes);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // පිටපතේ අන්තර්ගතය අනුව Script එක හඳුනාගැනීම (Sinhala vs English)
             const allText = parsed.map((s: any) => `${s.slugline} ${s.synopsis}`).join(" ");
             const isSinhala = /[\u0D80-\u0DFF]/.test(allText);
             const scriptId = isSinhala ? "sinhala_script" : "english_script";
@@ -201,7 +215,6 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Page Load වූ සැනින් පිළිවෙළින් frames render වන queue එක[cite: 25]
   useEffect(() => {
     if (shots.length === 0 || isQueueRunning.current) return;
 
@@ -366,6 +379,7 @@ export default function StoryboardPage() {
                     alt={shot.shotNumber}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
+                    onError={() => handleImageError(shot)}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
                     <a
