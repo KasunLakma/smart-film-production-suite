@@ -39,7 +39,7 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const STORAGE_KEY = `cine_storyboard_thesis_${artStyle}`;
+  const STORAGE_KEY = `cine_sb_semantic_v1_${artStyle}`;
   const isQueueRunning = useRef(false);
 
   const getSavedCache = (): Record<string, string> => {
@@ -68,8 +68,8 @@ export default function StoryboardPage() {
     }
   };
 
-  // නියම AI API එක Call කර සැබෑ රූපය ලබා ගැනීමේ Function එක
-  const fetchAiFrame = async (shot: StoryboardShot) => {
+  // දර්ශනයේ සැබෑ විස්තර API එකට යවා සැබෑ AI රූපය ලබා ගැනීම
+  const fetchSceneSpecificFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
     const cached = getSavedCache()[shot.id];
 
@@ -90,9 +90,11 @@ export default function StoryboardPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           slugline: shot.sceneSlug,
+          synopsis: shot.synopsis,
+          characters: shot.characters,
+          props: shot.props,
           isWide,
-          artStyle,
-          synopsis: shot.synopsis
+          artStyle
         })
       });
 
@@ -186,7 +188,7 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Page Load වූ සැනින් පිළිවෙළින් AI Frames render වන ස්වයංක්‍රීය Queue එක
+  // Auto Queue: පිටුවට ආ සැණින් දර්ශනයෙන් දර්ශනයට අදාළ නිශ්චිත රූප generate වීම
   useEffect(() => {
     if (shots.length === 0 || isQueueRunning.current) return;
 
@@ -198,8 +200,8 @@ export default function StoryboardPage() {
 
     const runQueue = async () => {
       for (const item of pending) {
-        await fetchAiFrame(item);
-        await new Promise((r) => setTimeout(r, 600));
+        await fetchSceneSpecificFrame(item);
+        await new Promise((r) => setTimeout(r, 650));
       }
       isQueueRunning.current = false;
     };
@@ -212,7 +214,7 @@ export default function StoryboardPage() {
     clearAllCache();
     const targetShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      await fetchAiFrame(shot);
+      await fetchSceneSpecificFrame(shot);
       await new Promise((r) => setTimeout(r, 700));
     }
     setIsGeneratingAll(false);
@@ -334,7 +336,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...[cite: 19]</span>
+                  <span className="text-xs font-medium tracking-wide">Synthesizing Scene-Specific Frame...</span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}[cite: 19]</span>
                 </div>
               ) : shot.imageUrl ? (
@@ -358,7 +360,7 @@ export default function StoryboardPage() {
                         const cache = getSavedCache();
                         delete cache[shot.id];
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-                        fetchAiFrame(shot);
+                        fetchSceneSpecificFrame(shot);
                       }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
