@@ -3,7 +3,7 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 
 function translateFullSinhalaScene(text: string, sceneNumber: number): string {
-    if (sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(text)) {
+    if (sceneNumber === 1 || /විද්‍යාගාර|විද්යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(text)) {
         return "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
     } else if (sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(text)) {
         return "industrial sea harbor container docks, pouring heavy rain on wet asphalt, black sedan idling, operative holding military binoculars";
@@ -11,13 +11,15 @@ function translateFullSinhalaScene(text: string, sceneNumber: number): string {
         return "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
     } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(text)) {
         return "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and heavy rain";
+    } else if (/රථ|කාර්|සෙඩාන්/i.test(text)) {
+        return "black sedan vehicle parked in atmospheric night setting";
     } else if (/කාමර|නිවස|ගෙදර/i.test(text)) {
         return "cinematic interior house room with warm dramatic moody lighting";
     } else if (/පාර|වීදිය|නගර/i.test(text)) {
         return "cinematic urban city street at dusk, wet pavement and ambient lighting";
     } else if (/කැලෑ|වනය|ගස්/i.test(text)) {
         return "atmospheric dense forest scene, mist hanging between trees, cinematic lighting";
-    } else if (/මුහුද|වෙරළ|වරාය/i.test(text)) {
+    } else if (/මුහුද|වෙරළ/i.test(text)) {
         return "coastal ocean shore, dramatic sky and moody atmosphere";
     }
 
@@ -71,8 +73,8 @@ export async function POST(req: Request) {
 
         const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
-        const uniqueSeed = Math.floor(Math.random() * 9000000) + 1000000;
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${uniqueSeed}&nologo=true`;
+        const seed = Math.floor(Math.random() * 9000000) + 1000000;
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
 
         return NextResponse.json({
             success: true,
@@ -83,4 +85,5 @@ export async function POST(req: Request) {
         console.error("Storyboard API Error:", error);
         return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
     }
-}
+}
+

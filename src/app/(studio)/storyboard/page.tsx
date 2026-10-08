@@ -41,12 +41,13 @@ export default function StoryboardPage() {
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
   const [activeScriptKey, setActiveScriptKey] = useState("");
 
-  const STORAGE_KEY = activeScriptKey ? `cine_sb_manual_${activeScriptKey}_${artStyle}` : "";
+  const scriptType = activeScriptKey.includes("sinhala") ? "sinhala" : "english";
+  const STORAGE_KEY = activeScriptKey ? `cine_sb_${scriptType}_${artStyle}` : "";
 
   const getSavedCache = (key = STORAGE_KEY): Record<string, { url: string; prompt: string }> => {
     if (!key || typeof window === "undefined") return {};
     try {
-      const saved = localStorage.getItem(key);
+      const saved = localStorage.getItem(key) || localStorage.getItem(`cine_sb_manual_${scriptType}_${artStyle}`);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -65,6 +66,7 @@ export default function StoryboardPage() {
   const clearAllCache = () => {
     if (STORAGE_KEY && typeof window !== "undefined") {
       localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(`cine_sb_manual_${scriptType}_${artStyle}`);
       setShots((prev) => prev.map((s) => ({ ...s, imageUrl: "", visualPrompt: "" })));
     }
   };
@@ -77,7 +79,7 @@ export default function StoryboardPage() {
     let visualSubject = "";
 
     if (isSinhala) {
-      if (shot.sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(fullText)) {
+      if (shot.sceneNumber === 1 || /විද්‍යාගාර|විද්යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(fullText)) {
         visualSubject = "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
       } else if (shot.sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(fullText)) {
         visualSubject = "industrial sea harbor container docks, pouring heavy rain on wet asphalt, black sedan idling, operative holding military binoculars";
@@ -85,13 +87,15 @@ export default function StoryboardPage() {
         visualSubject = "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
       } else if (shot.sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(fullText)) {
         visualSubject = "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and heavy rain";
+      } else if (/රථ|කාර්|සෙඩාන්/i.test(fullText)) {
+        visualSubject = "black sedan vehicle parked in atmospheric night setting";
       } else if (/කාමර|නිවස|ගෙදර/i.test(fullText)) {
         visualSubject = "cinematic interior house room with warm dramatic moody lighting";
       } else if (/පාර|වීදිය|නගර/i.test(fullText)) {
         visualSubject = "cinematic urban city street at dusk, wet pavement and ambient lighting";
       } else if (/කැලෑ|වනය|ගස්/i.test(fullText)) {
         visualSubject = "atmospheric dense forest scene, mist hanging between trees, cinematic lighting";
-      } else if (/මුහුද|වෙරළ|වරාය/i.test(fullText)) {
+      } else if (/මුහුද|වෙරළ/i.test(fullText)) {
         visualSubject = "coastal ocean shore, dramatic sky and moody atmosphere";
       } else {
         visualSubject = "cinematic interior moody scene, atmospheric lighting, high contrast dramatic setup";
@@ -124,56 +128,18 @@ export default function StoryboardPage() {
     return `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
   };
 
-  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Strict Manual Trigger Mode)
+  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Manual Click Synthesis Mode)
   const handleGenerateFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
     setShots((prev) =>
       prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
     );
 
-    try {
-      const res = await fetch("/api/storyboard/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sceneNumber: shot.sceneNumber,
-          slugline: shot.sceneSlug,
-          synopsis: shot.synopsis,
-          isWide,
-          artStyle,
-          props: shot.props,
-          characters: shot.characters
-        })
-      });
-
-      if (res.ok) {
-        const data = await res.json();
-        if (data.imageUrl && data.prompt) {
-          saveToCache(shot.id, data.imageUrl, data.prompt);
-          setShots((prev) =>
-            prev.map((s) =>
-              s.id === shot.id
-                ? {
-                  ...s,
-                  imageUrl: data.imageUrl,
-                  visualPrompt: data.prompt,
-                  isGenerating: false
-                }
-                : s
-            )
-          );
-          return;
-        }
-      }
-    } catch (e) {
-      console.warn("API route error, falling back to client generation:", e);
-    }
-
-    // Fallback client prompt & URL generation
     const prompt = generateScenePrompt(shot, isWide);
-    const uniqueSeed = Math.floor(Math.random() * 9000000) + 1000000;
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${uniqueSeed}&nologo=true`;
+    const seed = Math.floor(Math.random() * 9000000) + 1000000;
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
 
+    // Immediately update state and save to cache so <img> renders straight away
     saveToCache(shot.id, imageUrl, prompt);
     setShots((prev) =>
       prev.map((s) =>
@@ -187,6 +153,23 @@ export default function StoryboardPage() {
           : s
       )
     );
+
+    // Asynchronously log/post to route if active
+    try {
+      fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sceneNumber: shot.sceneNumber,
+          slugline: shot.sceneSlug,
+          synopsis: shot.synopsis,
+          isWide,
+          artStyle,
+          props: shot.props,
+          characters: shot.characters
+        })
+      }).catch(() => { });
+    } catch { }
   };
 
   // Initial Sync: Breakdown එකේ active scenes නැතිනම් Storyboard එක හිස්ව තැබීම
@@ -215,13 +198,13 @@ export default function StoryboardPage() {
 
         const sampleText = parsed.map((s: any) => `${s.slugline} ${s.synopsis} ${(s.characters || []).join(" ")} ${(s.props || []).join(" ")}`).join(" ");
         const isSinhala = /[\u0D80-\u0DFF]/.test(sampleText);
-        const scriptId = isSinhala ? "sinhala_script" : "english_script";
+        const scriptId = isSinhala ? "sinhala" : "english";
         setActiveScriptKey(scriptId);
 
-        const currentKey = `cine_sb_manual_${scriptId}_${artStyle}`;
+        const currentKey = `cine_sb_${scriptId}_${artStyle}`;
         let cached: Record<string, { url: string; prompt: string }> = {};
         try {
-          const saved = localStorage.getItem(currentKey);
+          const saved = localStorage.getItem(currentKey) || localStorage.getItem(`cine_sb_manual_${scriptId}_${artStyle}`);
           if (saved) cached = JSON.parse(saved);
         } catch { }
 
