@@ -74,11 +74,35 @@ export async function POST(req: Request) {
         const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
         const seed = Math.floor(Math.random() * 899999) + 100000;
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
+        const directUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
+
+        try {
+            const controller = new AbortController();
+            const timeout = setTimeout(() => controller.abort(), 12000);
+
+            const imageRes = await fetch(directUrl, { signal: controller.signal });
+            clearTimeout(timeout);
+
+            if (imageRes.ok) {
+                const arrayBuffer = await imageRes.arrayBuffer();
+                const buffer = Buffer.from(arrayBuffer);
+                const base64 = buffer.toString("base64");
+                const mimeType = imageRes.headers.get("content-type") || "image/jpeg";
+                const dataUri = `data:${mimeType};base64,${base64}`;
+
+                return NextResponse.json({
+                    success: true,
+                    imageUrl: dataUri,
+                    prompt
+                });
+            }
+        } catch (fetchErr) {
+            console.warn("Server-side image fetch failed or timed out, returning direct URL fallback:", fetchErr);
+        }
 
         return NextResponse.json({
             success: true,
-            imageUrl,
+            imageUrl: directUrl,
             prompt
         });
     } catch (error: any) {

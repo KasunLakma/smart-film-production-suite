@@ -129,9 +129,54 @@ export default function StoryboardPage() {
     return `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
   };
 
-  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Direct Instant Mode)
-  const handleGenerateFrame = (shot: StoryboardShot) => {
+  // Generate Frame බටන් එක ක්ලික් කළ විට AI Image Synthesis වීම
+  const handleGenerateFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
+
+    // Brief loading state
+    setShots((prev) =>
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
+    );
+
+    try {
+      const res = await fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sceneNumber: shot.sceneNumber,
+          slugline: shot.sceneSlug,
+          synopsis: shot.synopsis,
+          isWide,
+          artStyle,
+          props: shot.props,
+          characters: shot.characters
+        })
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.imageUrl && data.prompt) {
+          saveToCache(shot.id, data.imageUrl, data.prompt);
+          setShots((prev) =>
+            prev.map((s) =>
+              s.id === shot.id
+                ? {
+                  ...s,
+                  imageUrl: data.imageUrl,
+                  visualPrompt: data.prompt,
+                  isGenerating: false
+                }
+                : s
+            )
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("API route error, falling back to client generation:", e);
+    }
+
+    // Client fallback URL generation if server endpoint fails
     const prompt = generateScenePrompt(shot, isWide);
     const seed = Math.floor(Math.random() * 899999) + 100000;
     const finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
@@ -149,22 +194,6 @@ export default function StoryboardPage() {
           : s
       )
     );
-
-    try {
-      fetch("/api/storyboard/generate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          sceneNumber: shot.sceneNumber,
-          slugline: shot.sceneSlug,
-          synopsis: shot.synopsis,
-          isWide,
-          artStyle,
-          props: shot.props,
-          characters: shot.characters
-        })
-      }).catch(() => { });
-    } catch { }
   };
 
   const handleGenerateAllFrames = () => {
