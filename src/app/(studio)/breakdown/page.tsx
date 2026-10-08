@@ -49,11 +49,13 @@ export default function ScriptBreakdownPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
+  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
 
   const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
+  // Load from sessionStorage on mount (දත්ත පිටු මාරු වන විට නොමැකී පවතී)
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("eclat_active_scenes");
@@ -63,7 +65,7 @@ export default function ScriptBreakdownPage() {
         setSelectedSceneIds(scenes.map((s: SceneEntity) => s.id));
       }
     } catch (e) {
-      console.error(e);
+      console.error("Failed to load saved scenes:", e);
     }
   }, []);
 
@@ -73,41 +75,27 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // Client-side stream decoding: 413 Payload Too Large ගැටලුව මඟහැරීමට
-  const extractTextFromFile = async (file: File): Promise<string> => {
-    const buffer = await file.arrayBuffer();
-    const decoder = new TextDecoder("utf-8", { fatal: false });
-    const text = decoder.decode(buffer);
-
-    return text
-      .replace(/%PDF-[\s\S]*?(?=stream|BT|\n)/gi, " ")
-      .replace(/stream[\s\S]*?endstream/gi, " ")
-      .replace(/<<[\s\S]*?>>/g, " ")
-      .replace(/\b\d+\s+\d+\s+obj\b[\s\S]*?\bendobj\b/gi, " ")
-      .replace(/[^\u0D80-\u0DFFa-zA-Z0-9\s.,!?'"()\-:\/]/g, " ")
-      .replace(/\s+/g, " ")
-      .trim();
-  };
-
+  // FormData හරහා සෘජුවම Backend වෙත යැවීම
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
     setIsProcessing(true);
     try {
-      let textToSend = scriptText.trim();
+      let res: Response;
       if (inputMode === "upload" && uploadedFile) {
-        textToSend = await extractTextFromFile(uploadedFile);
+        const formData = new FormData();
+        formData.append("file", uploadedFile);
+        res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          body: formData,
+        });
+      } else {
+        res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rawText: scriptText }),
+        });
       }
-
-      if (!textToSend || textToSend.length < 20) {
-        throw new Error("පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය.");
-      }
-
-      const res = await fetch("/api/screenplay/parse", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rawText: textToSend }),
-      });
 
       if (!res.ok) {
         const errData = await res.json().catch(() => ({}));
@@ -120,7 +108,7 @@ export default function ScriptBreakdownPage() {
         setSelectedSceneIds(data.scenes.map((s: SceneEntity) => s.id));
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
       } else {
-        alert("දර්ශන හඳුනාගැනීමට නොහැකි විය.");
+        alert("පිටපතෙන් දර්ශන හඳුනා ගැනීමට නොහැකි විය.");
       }
     } catch (err: any) {
       console.error("Execution failed:", err);
@@ -130,6 +118,7 @@ export default function ScriptBreakdownPage() {
     }
   };
 
+  // සියලු දත්ත මුළුමනින්ම ඉවත් කිරීම
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -186,6 +175,7 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
+  // Storyboard cards සකසා Storyboard පිටුවට redirect වීම
   const handleGenerateStoryboards = (targetScenes: SceneEntity[]) => {
     if (targetScenes.length === 0) return;
 
@@ -259,13 +249,21 @@ export default function ScriptBreakdownPage() {
             disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
             className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
-            <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
+            {isGeneratingAllStoryboards ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing Storyboards...
+              </>
+            ) : (
+              <>
+                <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
+              </>
+            )}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column */}
+        {/* Left Column: Upload / Paste */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
@@ -336,7 +334,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Screenplay via Gemini...
+                          <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Screenplay Streams...
                         </>
                       ) : (
                         <>
@@ -368,7 +366,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Output List */}
+        {/* Right Column: Parsed Scenes Output List */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
             <div className="flex items-center gap-3">
@@ -456,6 +454,7 @@ export default function ScriptBreakdownPage() {
                         <button
                           onClick={() => setEditingScene(scene)}
                           className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-emerald-500/20 text-slate-400 hover:text-emerald-300 border border-emerald-950/80 transition-all ml-1"
+                          title="Edit Scene"
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
@@ -463,6 +462,7 @@ export default function ScriptBreakdownPage() {
                         <button
                           onClick={() => handleDeleteScene(scene.id)}
                           className="p-1.5 rounded-lg bg-[#0e1d15] hover:bg-red-500/20 text-slate-400 hover:text-red-400 border border-emerald-950/80 transition-all"
+                          title="Delete Scene"
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -474,6 +474,7 @@ export default function ScriptBreakdownPage() {
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
+                      {/* Characters */}
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
                           <Users className="w-3 h-3 text-emerald-400" /> චරිත ({scene.characters.length})
@@ -490,6 +491,7 @@ export default function ScriptBreakdownPage() {
                         </div>
                       </div>
 
+                      {/* Props */}
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
                           <Box className="w-3 h-3 text-emerald-400" /> උපකරණ ({scene.props.length})
@@ -507,6 +509,7 @@ export default function ScriptBreakdownPage() {
                       </div>
                     </div>
 
+                    {/* Dialogues */}
                     {scene.dialogues && scene.dialogues.length > 0 && (
                       <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
                         <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
@@ -534,6 +537,7 @@ export default function ScriptBreakdownPage() {
                       </span>
                       <button
                         onClick={() => handleGenerateStoryboards([scene])}
+                        disabled={generatingSceneId === scene.id}
                         className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                       >
                         Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
@@ -589,8 +593,10 @@ export default function ScriptBreakdownPage() {
                     onChange={(e) => setEditingScene({ ...editingScene, locationType: e.target.value })}
                     className="w-full bg-[#050607] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
                   >
-                    <option value="INT">INT (අභ්‍යන්තර)</option>
-                    <option value="EXT">EXT (බාහිර)</option>
+                    <option value="INT (අභ්‍යන්තර)">INT (අභ්‍යන්තර)</option>
+                    <option value="EXT (බාහිර)">EXT (බාහිර)</option>
+                    <option value="INT (Interior)">INT (Interior)</option>
+                    <option value="EXT (Exterior)">EXT (Exterior)</option>
                   </select>
                 </div>
                 <div>
@@ -605,7 +611,7 @@ export default function ScriptBreakdownPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis / Action Line</label>
                 <textarea
                   rows={3}
                   value={editingScene.synopsis}
