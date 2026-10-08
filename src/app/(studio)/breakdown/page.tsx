@@ -49,13 +49,12 @@ export default function ScriptBreakdownPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
-  const [generatingSceneId, setGeneratingSceneId] = useState<string | null>(null);
 
   const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // Load from sessionStorage on mount (දත්ත පිටු මාරු වන විට නොමැකී පවතී)
+  // Load from sessionStorage on mount
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("eclat_active_scenes");
@@ -65,7 +64,7 @@ export default function ScriptBreakdownPage() {
         setSelectedSceneIds(scenes.map((s: SceneEntity) => s.id));
       }
     } catch (e) {
-      console.error("Failed to load saved scenes:", e);
+      console.error(e);
     }
   }, []);
 
@@ -75,40 +74,186 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // FormData හරහා සෘජුවම Backend වෙත යැවීම
+  // Browser-based Client PDF.js loader (413 Payload Too Large ගැටලුව 100% නැති කරයි)
+  const loadPdfJs = async (): Promise<any> => {
+    if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
+
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = () => {
+        const pdfjs = (window as any).pdfjsLib;
+        pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(pdfjs);
+      };
+      script.onerror = () => reject(new Error("PDF engine load කිරීම අසාර්ථක විය."));
+      document.head.appendChild(script);
+    });
+  };
+
+  // PDF එකෙන් නියම අකුරු පමණක් Client side එකේදීම කියවීම
+  const extractTextFromPdf = async (file: File): Promise<string> => {
+    const pdfjs = await loadPdfJs();
+    const arrayBuffer = await file.arrayBuffer();
+    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
+    const pdf = await loadingTask.promise;
+
+    let fullText = "";
+    for (let i = 1; i <= pdf.numPages; i++) {
+      const page = await pdf.getPage(i);
+      const textContent = await page.getTextContent();
+      const pageText = textContent.items.map((item: any) => item.str).join(" ");
+      fullText += pageText + "\n\n";
+    }
+    return fullText;
+  };
+
+  // Standalone Universal Script Parser Engine
+  const parseScriptContent = (rawText: string): SceneEntity[] => {
+    const cleanScript = rawText.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+    const isSinhala = /[\u0D80-\u0DFF]/.test(cleanScript);
+
+    const slugRegex = /(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|(?:INT|EXT|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)[\.\s\:\-])/i;
+    let chunks: string[] = [];
+
+    if (slugRegex.test(cleanScript)) {
+      const splitRegex = /(?=(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර))/gi;
+      chunks = cleanScript.split(splitRegex).map((c) => c.trim()).filter((c) => c.length > 25);
+    } else {
+      chunks = cleanScript.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 35);
+      if (chunks.length > 30) {
+        const grouped: string[] = [];
+        for (let i = 0; i < chunks.length; i += 3) {
+          grouped.push(chunks.slice(i, i + 3).join("\n\n"));
+        }
+        chunks = grouped;
+      }
+    }
+
+    if (chunks.length === 0) {
+      chunks = [cleanScript];
+    }
+
+    const propTokens = [
+      "GUN", "KNIFE", "PHONE", "CAR", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE", "GLASS", "MONEY", "KEY",
+      "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "ලිපිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය", "වීදුරුව", "මුදල්", "යතුර"
+    ];
+
+    return chunks.map((chunk, index) => {
+      const sceneNum = index + 1;
+      const firstLine = chunk.split("\n")[0].trim();
+
+      const isExt = /EXT|බාහිර/i.test(firstLine) || /EXT|බාහිර/i.test(chunk);
+      const isNight = /NIGHT|රාත්‍රී|DARK|සන්ධ්‍යා/i.test(firstLine) || /NIGHT|රාත්‍රී/i.test(chunk);
+
+      let slugline = "";
+      const slugMatch = chunk.match(/(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|INT\.|EXT\.|අභ්‍යන්තර|බාහිර)(.*?)(?=[.?!]|\n|$)/i);
+      if (slugMatch && slugMatch[0].length > 4) {
+        slugline = slugMatch[0].trim().toUpperCase();
+      } else {
+        slugline = isSinhala
+          ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. බාහිර පසුතලය" : "INT. අභ්‍යන්තර පසුතලය"} - ${isNight ? "රාත්‍රී" : "දහවල්"}`
+          : `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. SCENE SEQUENCE" : "INT. SCENE SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`;
+      }
+
+      const characters: string[] = [];
+      const charMatches = chunk.match(/([A-Z\u0D80-\u0DFF]{2,25})(?=\s*[:\-])/g);
+      if (charMatches) {
+        charMatches.forEach((c) => {
+          const cleanName = c.trim();
+          if (
+            !characters.includes(cleanName) &&
+            characters.length < 5 &&
+            !cleanName.includes("SCENE") &&
+            !cleanName.includes("දර්ශනය") &&
+            !cleanName.includes("INT") &&
+            !cleanName.includes("EXT")
+          ) {
+            characters.push(cleanName);
+          }
+        });
+      }
+      if (characters.length === 0) {
+        characters.push(isSinhala ? "ප්‍රධාන චරිතය" : "LEAD ROLE");
+      }
+
+      const dialogues: DialogueItem[] = [];
+      const lines = chunk.split("\n");
+      lines.forEach((l) => {
+        if (l.includes(":") || l.includes("-")) {
+          const [spk, ...rest] = l.split(/[:\-]/);
+          const lineTxt = rest.join(":").trim();
+          if (spk.trim().length > 1 && spk.trim().length < 25 && lineTxt.length > 2 && dialogues.length < 3) {
+            dialogues.push({
+              speaker: spk.trim(),
+              line: lineTxt.replace(/^["“”]|["“”]$/g, "")
+            });
+          }
+        }
+      });
+
+      const props: string[] = [];
+      propTokens.forEach((p) => {
+        if (chunk.toUpperCase().includes(p.toUpperCase()) && !props.includes(p) && props.length < 4) {
+          props.push(p);
+        }
+      });
+      if (props.length === 0) {
+        props.push(isSinhala ? "ප්‍රධාන පසුතල උපකරණ" : "KEY SCENE PROP");
+      }
+
+      const cleanSynopsis = chunk.replace(slugline, "").replace(/\s+/g, " ").trim();
+      const synopsis = cleanSynopsis.length > 20
+        ? cleanSynopsis.slice(0, 260) + "..."
+        : chunk.slice(0, 260) + "...";
+
+      const visualPrompt = `Cinematic 16:9 movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic night lighting, moody atmosphere" : "bright natural daylight illumination"}, 35mm anamorphic lens, photorealistic 8k, setting: ${slugline.replace(/[\u0D80-\u0DFF]/g, "film location")}.`;
+
+      return {
+        id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
+        sceneNumber: sceneNum,
+        slugline,
+        locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
+        timeOfDay: isNight ? (isSinhala ? "NIGHT / රාත්‍රී" : "NIGHT") : (isSinhala ? "DAY / දහවල්" : "DAY"),
+        synopsis,
+        characters,
+        props,
+        dialogues,
+        plannedShots: 3,
+        visualPrompt
+      };
+    });
+  };
+
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
     setIsProcessing(true);
     try {
-      let res: Response;
+      let rawContent = "";
+
       if (inputMode === "upload" && uploadedFile) {
-        const formData = new FormData();
-        formData.append("file", uploadedFile);
-        res = await fetch("/api/screenplay/parse", {
-          method: "POST",
-          body: formData,
-        });
+        if (uploadedFile.name.toLowerCase().endsWith(".pdf") || uploadedFile.type === "application/pdf") {
+          rawContent = await extractTextFromPdf(uploadedFile);
+        } else {
+          rawContent = await uploadedFile.text();
+        }
       } else {
-        res = await fetch("/api/screenplay/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ rawText: scriptText }),
-        });
+        rawContent = scriptText;
       }
 
-      if (!res.ok) {
-        const errData = await res.json().catch(() => ({}));
-        throw new Error(errData.error || `Server responded with ${res.status}`);
+      if (!rawContent || rawContent.trim().length < 20) {
+        throw new Error("පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය.");
       }
 
-      const data = await res.json();
-      if (data.scenes && Array.isArray(data.scenes) && data.scenes.length > 0) {
-        setParsedScenes(data.scenes);
-        setSelectedSceneIds(data.scenes.map((s: SceneEntity) => s.id));
-        sessionStorage.setItem("eclat_active_scenes", JSON.stringify(data.scenes));
+      const scenes = parseScriptContent(rawContent);
+
+      if (scenes.length > 0) {
+        setParsedScenes(scenes);
+        setSelectedSceneIds(scenes.map((s) => s.id));
+        sessionStorage.setItem("eclat_active_scenes", JSON.stringify(scenes));
       } else {
-        alert("පිටපතෙන් දර්ශන හඳුනා ගැනීමට නොහැකි විය.");
+        alert("දර්ශන හඳුනා ගැනීමට නොහැකි විය.");
       }
     } catch (err: any) {
       console.error("Execution failed:", err);
@@ -118,7 +263,6 @@ export default function ScriptBreakdownPage() {
     }
   };
 
-  // සියලු දත්ත මුළුමනින්ම ඉවත් කිරීම
   const handleRemoveScriptAndClear = () => {
     setUploadedFile(null);
     setScriptText("");
@@ -175,7 +319,6 @@ export default function ScriptBreakdownPage() {
     setEditingScene(null);
   };
 
-  // Storyboard cards සකසා Storyboard පිටුවට redirect වීම
   const handleGenerateStoryboards = (targetScenes: SceneEntity[]) => {
     if (targetScenes.length === 0) return;
 
@@ -249,21 +392,13 @@ export default function ScriptBreakdownPage() {
             disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
             className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
-            {isGeneratingAllStoryboards ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Sequencing Storyboards...
-              </>
-            ) : (
-              <>
-                <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
-              </>
-            )}
+            <Wand2 className="w-4 h-4" /> Generate All Storyboards ({parsedScenes.length})
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        {/* Left Column: Upload / Paste */}
+        {/* Left Column */}
         <div className="lg:col-span-5 space-y-4">
           <div className="p-5 rounded-2xl bg-[#09130e] border border-emerald-950/70 flex flex-col">
             <div className="flex items-center justify-between p-1 bg-[#050b07] rounded-xl border border-emerald-950/60 mb-4">
@@ -334,7 +469,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> Analyzing Screenplay Streams...
+                          <Loader2 className="w-4 h-4 animate-spin" /> Processing Screenplay...
                         </>
                       ) : (
                         <>
@@ -537,7 +672,6 @@ export default function ScriptBreakdownPage() {
                       </span>
                       <button
                         onClick={() => handleGenerateStoryboards([scene])}
-                        disabled={generatingSceneId === scene.id}
                         className="px-3 py-1.5 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                       >
                         Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
@@ -611,7 +745,7 @@ export default function ScriptBreakdownPage() {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis / Action Line</label>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis</label>
                 <textarea
                   rows={3}
                   value={editingScene.synopsis}
