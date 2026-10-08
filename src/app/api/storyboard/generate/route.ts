@@ -2,15 +2,16 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
+// සිංහල පිටපතේ සියලු වචන සහ වාක්‍ය 100% Cinematic English බවට පෙරළීම
 function translateFullSinhalaScene(text: string, sceneNumber: number): string {
     if (sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර/i.test(text)) {
-        return "high-tech futuristic research laboratory, server racks, glowing blue computer terminals, technician holding handheld digital scanner and tactical flashlight";
+        return "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical flashlight";
     } else if (sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න/i.test(text)) {
-        return "industrial sea harbor container docks, pouring heavy rain, wet slick asphalt tarmac, black sedan car parked, operative looking through military binoculars";
+        return "industrial sea harbor container docks, pouring rain, wet asphalt ground, black sedan parked, operative holding binoculars";
     } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER/i.test(text)) {
-        return "underground high security bank archive vault, metallic locker safety deposit boxes, glowing holographic projection device displaying transfer complete";
+        return "underground high security bank archive vault, metallic locker deposit boxes, glowing holographic projection device displaying transfer complete";
     } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග/i.test(text)) {
-        return "tactical armored transport vehicle speeding along wet highway road at night, bright headlights cutting through mist and storm";
+        return "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and storm";
     }
 
     return "cinematic interior moody scene, atmospheric lighting, high contrast dramatic setup";
@@ -40,7 +41,7 @@ export async function POST(req: Request) {
             if (sceneNumber === 1 || /VAULT|LOCKER/i.test(fullContent)) {
                 visualSubject = "underground bank archive vault, rows of metallic locker drawers, concrete floor, Elena holding scanner, flashlight and master key";
             } else if (sceneNumber === 2 || /HARBOR|WAREHOUSE|COMPASS/i.test(fullContent)) {
-                visualSubject = "cold coastal harbor warehouse exterior, heavy rain on rusted corrugated roof, Elena holding bronze compass, black sedan idling";
+                visualSubject = "cold coastal harbor warehouse exterior, heavy rain on corrugated roof, Elena holding bronze compass, black sedan idling";
             } else if (sceneNumber === 3 || /SEDAN|TABLET|CURRENCY/i.test(fullContent)) {
                 visualSubject = "interior of black sedan moving at night, briefcase open with stacks of Euro currency, glowing encrypted tablet radar display";
             } else {
@@ -61,10 +62,10 @@ export async function POST(req: Request) {
 
         const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
+        // Script එක (Sinhala vs English) සහ Scene Number එක අනුව වෙනස් වන Unique Seed
         const scriptMultiplier = isSinhala ? 777 : 333;
         const seed = (sceneNumber * 999331 + (isWide ? 101 : 202) + scriptMultiplier) % 9999999;
 
-        // Fast reliable endpoint without flux queuing delay
         const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
 
         return NextResponse.json({

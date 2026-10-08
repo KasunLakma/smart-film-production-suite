@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal,
@@ -41,38 +41,46 @@ export default function StoryboardPage() {
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
   const [activeScriptId, setActiveScriptId] = useState("default");
 
-  // Script එක සහ Art Style එක අනුව Persistent Cache එක
-  const STORAGE_KEY = `cine_sb_manual_${activeScriptId}_${artStyle}`;
+  // Script එක අනුව Cache එක වෙන් කිරීම (සිංහල සහ ඉංග්‍රීසි එකතු වීම වළක්වයි)
+  const cacheKey = `cine_sb_${activeScriptId}_${artStyle}`;
+  const isQueueRunning = useRef(false);
 
-  const getSavedCache = (key = STORAGE_KEY): Record<string, { url: string; prompt: string }> => {
+  const getSavedCache = (): Record<string, string> => {
     if (typeof window === "undefined") return {};
     try {
-      const saved = localStorage.getItem(key);
+      const saved = localStorage.getItem(cacheKey);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
     }
   };
 
-  const saveToCache = (shotId: string, url: string, prompt: string) => {
+  const saveToCache = (shotId: string, url: string) => {
     if (typeof window === "undefined") return;
     try {
       const current = getSavedCache();
-      current[shotId] = { url, prompt };
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+      current[shotId] = url;
+      localStorage.setItem(cacheKey, JSON.stringify(current));
     } catch { }
   };
 
   const clearAllCache = () => {
     if (typeof window !== "undefined") {
-      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem(cacheKey);
       setShots((prev) => prev.map((s) => ({ ...s, imageUrl: "", visualPrompt: "" })));
     }
   };
 
-  // පරිශීලකයා Generate Frame බටන් එක ක්ලික් කළ විට පමණක් ක්‍රියාත්මක වේ (Manual Only)
-  const handleGenerateFrame = async (shot: StoryboardShot) => {
+  const fetchSceneSpecificFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
+    const cached = getSavedCache()[shot.id];
+
+    if (cached) {
+      setShots((prev) =>
+        prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s))
+      );
+      return;
+    }
 
     setShots((prev) =>
       prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
@@ -95,7 +103,7 @@ export default function StoryboardPage() {
 
       const data = await res.json();
       if (data.success && data.imageUrl) {
-        saveToCache(shot.id, data.imageUrl, data.prompt);
+        saveToCache(shot.id, data.imageUrl);
         setShots((prev) =>
           prev.map((s) =>
             s.id === shot.id
@@ -111,7 +119,7 @@ export default function StoryboardPage() {
         return;
       }
     } catch (e) {
-      console.error("Manual frame generation failed:", e);
+      console.error("Frame generation request failed:", e);
     }
 
     setShots((prev) =>
@@ -119,7 +127,6 @@ export default function StoryboardPage() {
     );
   };
 
-  // Initial Load - දර්ශන කියවා ගැනීම සහ තමන් අතින් Generate කර ඇති පින්තූර පමණක් පෙන්වීම
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
@@ -131,14 +138,18 @@ export default function StoryboardPage() {
         try {
           const parsed = JSON.parse(storedScenes);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            // සිංහලද ඉංග්‍රීසිද අනුව Script එක තීරණය කිරීම
+            // Script එක සිංහලද ඉංග්‍රීසිද හඳුනා ගැනීම
             const allText = parsed.map((s: any) => `${s.slugline} ${s.synopsis}`).join(" ");
             const isSinhala = /[\u0D80-\u0DFF]/.test(allText);
             const scriptId = isSinhala ? "sinhala_script" : "english_script";
             setActiveScriptId(scriptId);
 
-            const dynamicKey = `cine_sb_manual_${scriptId}_${artStyle}`;
-            const cached = getSavedCache(dynamicKey);
+            const dynamicKey = `cine_sb_${scriptId}_${artStyle}`;
+            let cached: Record<string, string> = {};
+            try {
+              const saved = localStorage.getItem(dynamicKey);
+              if (saved) cached = JSON.parse(saved);
+            } catch { }
 
             setSceneList(parsed.map((s: any) => ({ id: s.id, slugline: s.slugline })));
 
@@ -163,8 +174,7 @@ export default function StoryboardPage() {
                 characters: scene.characters || [],
                 props: scene.props || [],
                 isGenerating: false,
-                imageUrl: cached[idA]?.url || "",
-                visualPrompt: cached[idA]?.prompt || ""
+                imageUrl: cached[idA] || ""
               });
 
               newShots.push({
@@ -181,37 +191,50 @@ export default function StoryboardPage() {
                 characters: scene.characters || [],
                 props: scene.props || [],
                 isGenerating: false,
-                imageUrl: cached[idB]?.url || "",
-                visualPrompt: cached[idB]?.prompt || ""
+                imageUrl: cached[idB] || ""
               });
             });
 
             setShots(newShots);
             setFilterScene(activeFilter);
-          } else {
-            setShots([]);
-            setSceneList([]);
           }
         } catch (e) {
           console.error(e);
         }
-      } else {
-        setShots([]);
-        setSceneList([]);
       }
     }
   }, [artStyle]);
 
-  // සියලුම Frames එකවර generate කිරීමට අවශ්‍ය වූ විට පමණක්
+  // Page Load වූ සැනින් පිළිවෙළින් frames render වන Queue එක (PDF කේතය)[cite: 23, 24]
+  useEffect(() => {
+    if (shots.length === 0 || isQueueRunning.current) return;
+
+    const currentShots =
+      filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
+    const pending = currentShots.filter((s) => !s.imageUrl && !s.isGenerating);
+    if (pending.length === 0) return;
+
+    isQueueRunning.current = true;
+
+    const runQueue = async () => {
+      for (const item of pending) {
+        await fetchSceneSpecificFrame(item);
+        await new Promise((r) => setTimeout(r, 700));
+      }
+      isQueueRunning.current = false;
+    };
+
+    runQueue();
+  }, [shots, filterScene]);
+
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
+    clearAllCache();
     const targetShots =
       filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      if (!shot.imageUrl) {
-        await handleGenerateFrame(shot);
-        await new Promise((r) => setTimeout(r, 600));
-      }
+      await fetchSceneSpecificFrame(shot);
+      await new Promise((r) => setTimeout(r, 800));
     }
     setIsGeneratingAll(false);
   };
@@ -221,7 +244,6 @@ export default function StoryboardPage() {
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 font-sans">
-      {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
           <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
@@ -231,7 +253,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization (Manual Trigger Mode)[cite: 25].
+            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots එකින් එක Render වේ.
           </p>
         </div>
 
@@ -256,7 +278,7 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Rendering Panels...[cite: 26]
+                <Loader2 className="w-4 h-4 animate-spin" /> Rendering All Panels...[cite: 26]
               </>
             ) : (
               <>
@@ -267,7 +289,6 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Filter & Art Style Bar */}
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
@@ -296,7 +317,6 @@ export default function StoryboardPage() {
           ))}
         </div>
 
-        {/* Style Selector */}
         <div className="flex items-center gap-2 bg-[#050607] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
             <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:[cite: 28]
@@ -322,7 +342,6 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredShots.map((shot) => (
           <div
@@ -357,7 +376,12 @@ export default function StoryboardPage() {
                       <Download className="w-3 h-3" /> Download[cite: 30]
                     </a>
                     <button
-                      onClick={() => handleGenerateFrame(shot)}
+                      onClick={() => {
+                        const cache = getSavedCache();
+                        delete cache[shot.id];
+                        localStorage.setItem(cacheKey, JSON.stringify(cache));
+                        fetchSceneSpecificFrame(shot);
+                      }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 30]
@@ -366,13 +390,8 @@ export default function StoryboardPage() {
                 </>
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
-                  <button
-                    onClick={() => handleGenerateFrame(shot)}
-                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
-                  >
-                    <Wand2 className="w-3.5 h-3.5" /> Generate Frame
-                  </button>
-                  <span className="text-[11px] text-slate-500 mt-2">Click to render this 16:9 shot</span>
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500/40 mb-2" />
+                  <span className="text-xs text-slate-400">Queueing Panel Render...[cite: 30]</span>
                 </div>
               )}
 
@@ -385,7 +404,7 @@ export default function StoryboardPage() {
               <div className="absolute bottom-2 right-2 pointer-events-none flex items-center gap-1.5">
                 {shot.imageUrl && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-[10px] text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Studio Ready
+                    <CheckCircle2 className="w-3 h-3" /> Studio Ready[cite: 31]
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-800">
