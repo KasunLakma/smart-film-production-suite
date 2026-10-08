@@ -1,5 +1,4 @@
 import { NextResponse } from "next/server";
-import { GoogleGenAI } from "@google/genai";
 
 export const maxDuration = 60;
 
@@ -10,7 +9,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "GEMINI_API_KEY සකසා නොමැත." }, { status: 500 });
         }
 
-        const ai = new GoogleGenAI({ apiKey });
         const body = await req.json();
         const rawText = (body.rawText || "").trim();
 
@@ -20,14 +18,14 @@ export async function POST(req: Request) {
 
         const scriptSlice = rawText.slice(0, 35000);
 
-        const systemPrompt = `
+        const prompt = `
 You are an expert film pre-production assistant. Analyze the following screenplay text and break it down into sequential scenes.
 
 STRICT RULES:
 1. Detect whether the script is written in Sinhala or English.
 2. If Sinhala: Output sluglines, synopsis, characters, and dialogues purely in authentic Sinhala.
 3. If English: Output sluglines, synopsis, characters, and dialogues purely in authentic English.
-4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g. "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, the "visualPrompt" MUST BE IN ENGLISH.
+4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g., "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
 5. Parse all genuine sequential scenes found in the text.
 
 Return ONLY a valid JSON array conforming to this schema (no markdown, no backticks, only pure JSON):
@@ -38,7 +36,7 @@ Return ONLY a valid JSON array conforming to this schema (no markdown, no backti
     "slugline": "SCENE 01: INT/EXT LOCATION - DAY/NIGHT",
     "locationType": "INT" or "EXT",
     "timeOfDay": "DAY" or "NIGHT" or "DAWN" etc.,
-    "synopsis": "brief scene description",
+    "synopsis": "brief scene staging description",
     "characters": ["character1"],
     "props": ["prop1"],
     "dialogues": [{"speaker": "NAME", "line": "dialogue line"}],
@@ -51,35 +49,33 @@ Screenplay Text:
 ${scriptSlice}
 `;
 
-        // Active Gemini models waterfall - endpoints වලට අනුව ස්වයංක්‍රීයව fallback වීම
-        const candidateModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"];
-        let responseText = "";
-        let lastError: any = null;
+        // Direct Google REST API (v1 / v1beta endpoints bypass all SDK lookup bugs)
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
 
-        for (const modelName of candidateModels) {
-            try {
-                const response = await ai.models.generateContent({
-                    model: modelName,
-                    contents: systemPrompt,
-                    config: {
-                        responseMimeType: "application/json",
-                    },
-                });
-                if (response.text) {
-                    responseText = response.text;
-                    break;
+        const apiRes = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [
+                    {
+                        parts: [{ text: prompt }]
+                    }
+                ],
+                generationConfig: {
+                    responseMimeType: "application/json"
                 }
-            } catch (err: any) {
-                lastError = err;
-                console.warn(`Model ${modelName} failed, trying next...`, err.message);
-            }
+            })
+        });
+
+        if (!apiRes.ok) {
+            const errText = await apiRes.text();
+            console.error("Gemini REST API Error:", errText);
+            throw new Error(`Google API Error: ${apiRes.status} - ${errText}`);
         }
 
-        if (!responseText) {
-            throw new Error(lastError?.message || "Gemini API මඟින් දත්ත ලබාගැනීමට නොහැකි විය.");
-        }
-
-        const cleanedJson = responseText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
+        const resJson = await apiRes.json();
+        const rawCandidate = resJson.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        const cleanedJson = rawCandidate.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
         const parsedScenes = JSON.parse(cleanedJson);
 
         return NextResponse.json({ success: true, count: parsedScenes.length, scenes: parsedScenes });
