@@ -54,6 +54,7 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
+  // Load from sessionStorage
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("eclat_active_scenes");
@@ -117,7 +118,7 @@ export default function ScriptBreakdownPage() {
         return fullText;
       }
     } catch (err) {
-      console.warn("PDF fallback extraction triggered:", err);
+      console.warn("PDF extraction fallback triggered:", err);
     }
 
     const buffer = await file.arrayBuffer();
@@ -168,7 +169,6 @@ export default function ScriptBreakdownPage() {
           : `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. LOCATION SEQUENCE" : "INT. LOCATION SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`;
       }
 
-      // Format slugline cleanly
       let slugline = heading.replace(/^TITLE:[^\n]*/gi, "").trim();
       if (!slugline.toUpperCase().includes("SCENE") && !slugline.includes("දර්ශනය")) {
         slugline = isSinhala
@@ -231,7 +231,7 @@ export default function ScriptBreakdownPage() {
         props.push(isSinhala ? "ඩිජිටල් ස්කෑනරය" : "BRIEFCASE");
       }
 
-      // Synopsis (Clean narrative body without title/heading)
+      // Clean Synopsis Body
       let bodyLines = lines.slice(1);
       let synopsis = bodyLines
         .filter(l => !l.startsWith("TITLE:") && !l.startsWith("WRITTEN BY:") && !l.startsWith("GENRE:"))
@@ -472,10 +472,11 @@ export default function ScriptBreakdownPage() {
                   <p className="text-xs text-slate-400 max-w-xs mb-2">
                     Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and <strong className="text-slate-200">.TXT</strong>
                   </p>
+                  {/* .pdf, application/pdf සහ .txt නිවැරදිව ලබා දීමෙන් File Picker එකේදී නිවැරදිව filter වේ */}
                   <input
                     id="file-input-upload"
                     type="file"
-                    accept=".pdf,.txt,.fdx,.fountain"
+                    accept=".pdf,application/pdf,.txt,text/plain,.fdx"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -720,7 +721,7 @@ export default function ScriptBreakdownPage() {
                         onClick={() => handleGenerateStoryboards([scene])}
                         className="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
                       >
-                        Generate Storyboard <ArrowRight className="w-3 h-3" />
+                        Generate Storyboard <ArrowRight className="w-3.5 h-3.5" />
                       </button>
                     </div>
                   </div>
