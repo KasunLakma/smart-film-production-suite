@@ -4,13 +4,13 @@ export const maxDuration = 60;
 
 function translateFullSinhalaScene(text: string, sceneNumber: number): string {
     if (sceneNumber === 1 || /විද්‍යාගාර|විද්යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(text)) {
-        return "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
+        return "high-tech research laboratory interior, glowing computer terminals, operative holding digital scanner and tactical beam flashlight";
     } else if (sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(text)) {
-        return "industrial sea harbor container docks, pouring heavy rain on wet asphalt, black sedan idling, operative holding military binoculars";
+        return "industrial sea harbor container docks, pouring rain on wet asphalt, black sedan idling, operative holding military binoculars";
     } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER|ලෝහමය/i.test(text)) {
-        return "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
+        return "underground high-security vault, metallic lockers, glowing holographic projection device displaying transfer complete";
     } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(text)) {
-        return "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and heavy rain";
+        return "tactical armored transport vehicle speeding along wet highway at night, bright headlights cutting through heavy storm";
     } else if (/රථ|කාර්|සෙඩාන්/i.test(text)) {
         return "black sedan vehicle parked in atmospheric night setting";
     } else if (/කාමර|නිවස|ගෙදර/i.test(text)) {
@@ -73,7 +73,7 @@ export async function POST(req: Request) {
 
         const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
-        const seed = Math.floor(Math.random() * 9000000) + 1000000;
+        const seed = Math.floor(Math.random() * 899999) + 100000;
         const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
 
         return NextResponse.json({
@@ -86,4 +86,5 @@ export async function POST(req: Request) {
         return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
     }
 }
+
 

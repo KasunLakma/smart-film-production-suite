@@ -42,12 +42,12 @@ export default function StoryboardPage() {
   const [activeScriptKey, setActiveScriptKey] = useState("");
 
   const scriptType = activeScriptKey.includes("sinhala") ? "sinhala" : "english";
-  const STORAGE_KEY = activeScriptKey ? `cine_sb_${scriptType}_${artStyle}` : "";
+  const STORAGE_KEY = activeScriptKey ? `cine_sb_manual_${scriptType}_${artStyle}` : "";
 
   const getSavedCache = (key = STORAGE_KEY): Record<string, { url: string; prompt: string }> => {
     if (!key || typeof window === "undefined") return {};
     try {
-      const saved = localStorage.getItem(key) || localStorage.getItem(`cine_sb_manual_${scriptType}_${artStyle}`);
+      const saved = localStorage.getItem(key) || localStorage.getItem(`cine_sb_${scriptType}_${artStyle}`);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -66,7 +66,7 @@ export default function StoryboardPage() {
   const clearAllCache = () => {
     if (STORAGE_KEY && typeof window !== "undefined") {
       localStorage.removeItem(STORAGE_KEY);
-      localStorage.removeItem(`cine_sb_manual_${scriptType}_${artStyle}`);
+      localStorage.removeItem(`cine_sb_${scriptType}_${artStyle}`);
       setShots((prev) => prev.map((s) => ({ ...s, imageUrl: "", visualPrompt: "" })));
     }
   };
@@ -80,13 +80,13 @@ export default function StoryboardPage() {
 
     if (isSinhala) {
       if (shot.sceneNumber === 1 || /විද්‍යාගාර|විද්යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(fullText)) {
-        visualSubject = "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
+        visualSubject = "high-tech research laboratory interior, glowing computer terminals, operative holding digital scanner and tactical beam flashlight";
       } else if (shot.sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(fullText)) {
-        visualSubject = "industrial sea harbor container docks, pouring heavy rain on wet asphalt, black sedan idling, operative holding military binoculars";
+        visualSubject = "industrial sea harbor container docks, pouring rain on wet asphalt, black sedan idling, operative holding military binoculars";
       } else if (shot.sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER|ලෝහමය/i.test(fullText)) {
-        visualSubject = "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
+        visualSubject = "underground high-security vault, metallic lockers, glowing holographic projection device displaying transfer complete";
       } else if (shot.sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(fullText)) {
-        visualSubject = "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and heavy rain";
+        visualSubject = "tactical armored transport vehicle speeding along wet highway at night, bright headlights cutting through heavy storm";
       } else if (/රථ|කාර්|සෙඩාන්/i.test(fullText)) {
         visualSubject = "black sedan vehicle parked in atmospheric night setting";
       } else if (/කාමර|නිවස|ගෙදර/i.test(fullText)) {
@@ -166,6 +166,12 @@ export default function StoryboardPage() {
     } catch { }
   };
 
+  const handleGenerateAllFrames = () => {
+    shots.forEach((shot) => {
+      handleGenerateFrame(shot);
+    });
+  };
+
   // Initial Sync: Breakdown එකේ active scenes නැතිනම් Storyboard එක හිස්ව තැබීම
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -195,10 +201,10 @@ export default function StoryboardPage() {
         const scriptId = isSinhala ? "sinhala" : "english";
         setActiveScriptKey(scriptId);
 
-        const currentKey = `cine_sb_${scriptId}_${artStyle}`;
+        const currentKey = `cine_sb_manual_${scriptId}_${artStyle}`;
         let cached: Record<string, { url: string; prompt: string }> = {};
         try {
-          const saved = localStorage.getItem(currentKey) || localStorage.getItem(`cine_sb_manual_${scriptId}_${artStyle}`);
+          const saved = localStorage.getItem(currentKey) || localStorage.getItem(`cine_sb_${scriptId}_${artStyle}`);
           if (saved) cached = JSON.parse(saved);
         } catch { }
 
@@ -278,6 +284,14 @@ export default function StoryboardPage() {
         </div>
 
         <div className="flex items-center gap-3">
+          {shots.length > 0 && (
+            <button
+              onClick={handleGenerateAllFrames}
+              className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer"
+            >
+              <Wand2 className="w-4 h-4" /> Synthesize All Frames
+            </button>
+          )}
           <Link
             href="/breakdown"
             className="px-4 py-2.5 rounded-xl bg-[#09130e] hover:bg-[#0e1d15] border border-emerald-950 text-slate-300 text-xs font-semibold transition-all flex items-center gap-2"
