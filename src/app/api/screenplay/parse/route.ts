@@ -1,6 +1,4 @@
 import { NextResponse } from "next/server";
-// @ts-ignore
-import pdfParse from "pdf-parse";
 
 export const maxDuration = 60;
 
@@ -33,7 +31,9 @@ export async function POST(req: Request) {
             const buffer = Buffer.from(await file.arrayBuffer());
 
             if (file.name.toLowerCase().endsWith(".pdf") || file.type === "application/pdf") {
-                // PDF zlib streams decode කර සැබෑ පෙළ (real clean text) කියවීම
+                // Next.js Turbopack ගැටලුව මඟහැරීමට CJS require භාවිතය
+                // eslint-disable-next-line @typescript-eslint/no-require-imports
+                const pdfParse = require("pdf-parse/lib/pdf-parse.js");
                 const pdfData = await pdfParse(buffer);
                 fullText = pdfData.text || "";
             } else {
@@ -61,7 +61,6 @@ export async function POST(req: Request) {
             const splitRegex = /(?=(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර))/gi;
             chunks = cleanScript.split(splitRegex).map((c: string) => c.trim()).filter((c: string) => c.length > 25);
         } else {
-            // Sluglines නොමැති නම් ස්වභාවික ඡේද අනුව වෙන් කිරීම
             chunks = cleanScript.split(/\n\s*\n/).map((c: string) => c.trim()).filter((c: string) => c.length > 35);
             if (chunks.length > 30) {
                 const grouped: string[] = [];
