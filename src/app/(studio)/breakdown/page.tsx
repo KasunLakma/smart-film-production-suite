@@ -54,7 +54,7 @@ export default function ScriptBreakdownPage() {
   const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
   const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
 
-  // Load from sessionStorage on mount
+  // Load from sessionStorage
   useEffect(() => {
     try {
       const saved = sessionStorage.getItem("eclat_active_scenes");
@@ -74,7 +74,7 @@ export default function ScriptBreakdownPage() {
     setUploadedFile(file);
   };
 
-  // Browser-based Client PDF.js loader (413 Payload Too Large ගැටලුව 100% නැති කරයි)
+  // Robust PDF.js loader with fallback
   const loadPdfJs = async (): Promise<any> => {
     if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
 
@@ -91,37 +91,72 @@ export default function ScriptBreakdownPage() {
     });
   };
 
-  // PDF එකෙන් නියම අකුරු පමණක් Client side එකේදීම කියවීම
+  // High-performance text extraction handling large script PDFs (like 12 Angry Men)
   const extractTextFromPdf = async (file: File): Promise<string> => {
-    const pdfjs = await loadPdfJs();
-    const arrayBuffer = await file.arrayBuffer();
-    const loadingTask = pdfjs.getDocument({ data: arrayBuffer });
-    const pdf = await loadingTask.promise;
+    try {
+      const pdfjs = await loadPdfJs();
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjs.getDocument({
+        data: arrayBuffer,
+        cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+        cMapPacked: true,
+      });
+      const pdf = await loadingTask.promise;
 
-    let fullText = "";
-    for (let i = 1; i <= pdf.numPages; i++) {
-      const page = await pdf.getPage(i);
-      const textContent = await page.getTextContent();
-      const pageText = textContent.items.map((item: any) => item.str).join(" ");
-      fullText += pageText + "\n\n";
+      let fullText = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
+        const pageLines = textContent.items
+          .map((item: any) => item.str || "")
+          .filter((str: string) => str.trim().length > 0)
+          .join(" ");
+        if (pageLines.trim()) {
+          fullText += pageLines + "\n\n";
+        }
+      }
+
+      if (fullText.trim().length > 40) {
+        return fullText;
+      }
+    } catch (err) {
+      console.warn("PDF.js extraction fallback triggered:", err);
     }
-    return fullText;
+
+    // Direct stream extraction fallback
+    const buffer = await file.arrayBuffer();
+    const decoder = new TextDecoder("utf-8", { fatal: false });
+    const raw = decoder.decode(buffer);
+    const cleaned = raw
+      .replace(/stream[\s\S]*?endstream/gi, " ")
+      .replace(/[^\u0D80-\u0DFFa-zA-Z0-9\s.,!?'"()\-:\/]/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+
+    return cleaned;
   };
 
-  // Standalone Universal Script Parser Engine
+  // Screenplay parsing engine with Cover/Title Page sanitization
   const parseScriptContent = (rawText: string): SceneEntity[] => {
-    const cleanScript = rawText.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
+    let cleanScript = rawText.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
     const isSinhala = /[\u0D80-\u0DFF]/.test(cleanScript);
 
+    // 1. Remove Cover/Title page noise before first scene heading
+    const firstSceneIndex = cleanScript.search(/(?:^|\n)\s*(?:SCENE\s*0?1\b|දර්ශනය\s*0?1\b|INT[\.\s\-]|EXT[\.\s\-]|අභ්‍යන්තර|බාහිර)/i);
+    if (firstSceneIndex > 0 && firstSceneIndex < 1500) {
+      cleanScript = cleanScript.slice(firstSceneIndex).trim();
+    }
+
+    // 2. Segment by Slugline markers
     const slugRegex = /(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|(?:INT|EXT|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර)[\.\s\:\-])/i;
     let chunks: string[] = [];
 
     if (slugRegex.test(cleanScript)) {
       const splitRegex = /(?=(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර))/gi;
-      chunks = cleanScript.split(splitRegex).map((c) => c.trim()).filter((c) => c.length > 25);
+      chunks = cleanScript.split(splitRegex).map((c) => c.trim()).filter((c) => c.length > 20);
     } else {
-      chunks = cleanScript.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 35);
-      if (chunks.length > 30) {
+      chunks = cleanScript.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 30);
+      if (chunks.length > 25) {
         const grouped: string[] = [];
         for (let i = 0; i < chunks.length; i += 3) {
           grouped.push(chunks.slice(i, i + 3).join("\n\n"));
@@ -135,8 +170,8 @@ export default function ScriptBreakdownPage() {
     }
 
     const propTokens = [
-      "GUN", "KNIFE", "PHONE", "CAR", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE", "GLASS", "MONEY", "KEY",
-      "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "ලිපිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය", "වීදුරුව", "මුදල්", "යතුර"
+      "GUN", "KNIFE", "PHONE", "CAR", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE", "GLASS", "MONEY", "KEY", "WATER", "COAT", "FAN",
+      "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "ලිපිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය", "වීදුරුව", "මුදල්", "යතුර", "විදුලි පංකාව"
     ];
 
     return chunks.map((chunk, index) => {
@@ -146,16 +181,23 @@ export default function ScriptBreakdownPage() {
       const isExt = /EXT|බාහිර/i.test(firstLine) || /EXT|බාහිර/i.test(chunk);
       const isNight = /NIGHT|රාත්‍රී|DARK|සන්ධ්‍යා/i.test(firstLine) || /NIGHT|රාත්‍රී/i.test(chunk);
 
+      // Clean Slugline extraction
       let slugline = "";
       const slugMatch = chunk.match(/(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|INT\.|EXT\.|අභ්‍යන්තර|බාහිර)(.*?)(?=[.?!]|\n|$)/i);
       if (slugMatch && slugMatch[0].length > 4) {
-        slugline = slugMatch[0].trim().toUpperCase();
+        slugline = slugMatch[0].trim().replace(/^[:.\-\s]+/, "").toUpperCase();
+        if (!slugline.startsWith("SCENE") && !slugline.startsWith("දර්ශනය")) {
+          slugline = isSinhala
+            ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${slugline}`
+            : `SCENE ${String(sceneNum).padStart(2, "0")}: ${slugline}`;
+        }
       } else {
         slugline = isSinhala
           ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. බාහිර පසුතලය" : "INT. අභ්‍යන්තර පසුතලය"} - ${isNight ? "රාත්‍රී" : "දහවල්"}`
-          : `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. SCENE SEQUENCE" : "INT. SCENE SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`;
+          : `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. LOCATION SEQUENCE" : "INT. LOCATION SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`;
       }
 
+      // Characters Extraction
       const characters: string[] = [];
       const charMatches = chunk.match(/([A-Z\u0D80-\u0DFF]{2,25})(?=\s*[:\-])/g);
       if (charMatches) {
@@ -177,6 +219,7 @@ export default function ScriptBreakdownPage() {
         characters.push(isSinhala ? "ප්‍රධාන චරිතය" : "LEAD ROLE");
       }
 
+      // Dialogues Extraction
       const dialogues: DialogueItem[] = [];
       const lines = chunk.split("\n");
       lines.forEach((l) => {
@@ -192,6 +235,7 @@ export default function ScriptBreakdownPage() {
         }
       });
 
+      // Props Extraction
       const props: string[] = [];
       propTokens.forEach((p) => {
         if (chunk.toUpperCase().includes(p.toUpperCase()) && !props.includes(p) && props.length < 4) {
@@ -202,12 +246,15 @@ export default function ScriptBreakdownPage() {
         props.push(isSinhala ? "ප්‍රධාන පසුතල උපකරණ" : "KEY SCENE PROP");
       }
 
-      const cleanSynopsis = chunk.replace(slugline, "").replace(/\s+/g, " ").trim();
-      const synopsis = cleanSynopsis.length > 20
-        ? cleanSynopsis.slice(0, 260) + "..."
-        : chunk.slice(0, 260) + "...";
+      // Synopsis Extraction without slugline duplication
+      let cleanSynopsis = chunk.replace(slugline, "").replace(/^.*?(?:INT\.|EXT\.|SCENE|දර්ශනය)[^\n]*\n?/i, "").replace(/\s+/g, " ").trim();
+      if (!cleanSynopsis || cleanSynopsis.length < 15) {
+        cleanSynopsis = chunk.replace(/\s+/g, " ").slice(0, 240);
+      }
+      const synopsis = cleanSynopsis.length > 240 ? cleanSynopsis.slice(0, 240) + "..." : cleanSynopsis;
 
-      const visualPrompt = `Cinematic 16:9 movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic night lighting, moody atmosphere" : "bright natural daylight illumination"}, 35mm anamorphic lens, photorealistic 8k, setting: ${slugline.replace(/[\u0D80-\u0DFF]/g, "film location")}.`;
+      // 100% English Visual Prompt for Storyboards
+      const visualPrompt = `Cinematic 16:9 movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic night lighting, shadows" : "bright natural day illumination"}, 35mm anamorphic frame, photorealistic 8k, setting: ${slugline.replace(/[\u0D80-\u0DFF]/g, "film set")}.`;
 
       return {
         id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
@@ -501,7 +548,7 @@ export default function ScriptBreakdownPage() {
           </div>
         </div>
 
-        {/* Right Column: Parsed Scenes Output List */}
+        {/* Right Column */}
         <div className="lg:col-span-7 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3 p-3.5 bg-[#09130e] border border-emerald-950/70 rounded-xl">
             <div className="flex items-center gap-3">
@@ -609,7 +656,6 @@ export default function ScriptBreakdownPage() {
                     </p>
 
                     <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-1">
-                      {/* Characters */}
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
                           <Users className="w-3 h-3 text-emerald-400" /> චරිත ({scene.characters.length})
@@ -626,7 +672,6 @@ export default function ScriptBreakdownPage() {
                         </div>
                       </div>
 
-                      {/* Props */}
                       <div className="space-y-1.5">
                         <span className="text-[11px] uppercase tracking-wider text-slate-400 font-semibold flex items-center gap-1.5">
                           <Box className="w-3 h-3 text-emerald-400" /> උපකරණ ({scene.props.length})
@@ -644,7 +689,6 @@ export default function ScriptBreakdownPage() {
                       </div>
                     </div>
 
-                    {/* Dialogues */}
                     {scene.dialogues && scene.dialogues.length > 0 && (
                       <div className="p-3 rounded-xl bg-[#060c08] border border-emerald-950/60 space-y-2 mt-2">
                         <span className="text-[11px] uppercase tracking-wider text-emerald-400 font-semibold flex items-center gap-1.5">
