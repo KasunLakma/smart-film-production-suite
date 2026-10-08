@@ -42,12 +42,12 @@ export default function StoryboardPage() {
   const [activeScriptKey, setActiveScriptKey] = useState("");
 
   const scriptType = activeScriptKey.includes("sinhala") ? "sinhala" : "english";
-  const STORAGE_KEY = activeScriptKey ? `cine_sb_manual_${scriptType}_${artStyle}` : "";
+  const STORAGE_KEY = activeScriptKey ? `cine_sb_${scriptType}_${artStyle}` : "";
 
   const getSavedCache = (key = STORAGE_KEY): Record<string, { url: string; prompt: string }> => {
     if (!key || typeof window === "undefined") return {};
     try {
-      const saved = localStorage.getItem(key) || localStorage.getItem(`cine_sb_${scriptType}_${artStyle}`);
+      const saved = localStorage.getItem(key) || localStorage.getItem(`cine_sb_manual_${scriptType}_${artStyle}`);
       return saved ? JSON.parse(saved) : {};
     } catch {
       return {};
@@ -60,6 +60,7 @@ export default function StoryboardPage() {
       const current = getSavedCache(STORAGE_KEY);
       current[shotId] = { url, prompt };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
+      localStorage.setItem(`cine_sb_manual_${scriptType}_${artStyle}`, JSON.stringify(current));
     } catch { }
   };
 
