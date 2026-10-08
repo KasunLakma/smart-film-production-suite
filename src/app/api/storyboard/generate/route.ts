@@ -4,50 +4,39 @@ export const maxDuration = 60;
 
 export async function POST(req: Request) {
     try {
-        const { slugline, isWide, artStyle } = await req.json();
-        const text = (slugline || "").toLowerCase();
+        const body = await req.json();
+        const { slugline = "", isWide = true, artStyle = "sketch_bw" } = body;
 
-        let sceneSubject = "";
-
-        if (/lab|research|tech|විද්‍යාගාර/.test(text) || /scene[\s_-]*0?1/.test(text)) {
-            sceneSubject = isWide
-                ? "high tech cybernetics research laboratory, glowing computer server racks, wide cinematic perspective, film storyboard sketch"
-                : "dynamic close-up action storyboard panel of technician gloved hands operating an illuminated tactical holographic scanner tool, circuit lights, no fashion portrait";
-        } else if (/harbor|port|dock|වරාය|නැව|බෝට්ටු/.test(text) || /scene[\s_-]*0?2/.test(text)) {
-            sceneSubject = isWide
-                ? "rainy industrial harbor checkpoint at night, stacked metal shipping containers, dark tactical surveillance van parked on wet tarmac, storyboard sketch"
-                : "dramatic over the shoulder close-up storyboard sketch of hooded tactical agent holding military binoculars looking through rain, water streaks, dynamic angle";
-        } else if (/control|command|office|පාලක/.test(text) || /scene[\s_-]*0?3/.test(text)) {
-            sceneSubject = isWide
-                ? "high security central operations command control center, emergency warning beacon alarms, banks of terminal monitors, film storyboard"
-                : "tight macro close-up action frame of operative hand swiftly extracting encrypted military hard drive cartridge from server chassis, sparks, motion lines";
-        } else {
-            // Scene 04 / Dawn / Escape
-            sceneSubject = isWide
-                ? "misty coastal container shipyard docks at dawn, morning sea fog rolling over ocean pier, wide cinematic angle, storyboards concept drawing"
-                : "medium dynamic low angle tracking action shot of two tactical operatives in intense sprint towards docked speed boat at dawn pier, urgency, cinematic frame";
+        // සිංහල අකුරු තිබේ නම් visual prompt එක සඳහා generic cinematic location එකක් බවට හැරවීම
+        let cleanLocation = slugline.replace(/[\u0D80-\u0DFF]/g, "cinematic film sequence").trim();
+        if (!cleanLocation || cleanLocation.length < 5) {
+            cleanLocation = "dramatic cinematic sequence in noir setting";
         }
 
-        let prompt = "";
-        if (artStyle === "graphic_novel") {
-            prompt = `graphic novel comic book illustration, dynamic comic panel, ${sceneSubject}, GTA concept art style, bold black ink outlines, cel shading, vibrant cinematic colors, 16:9 widescreen, no realistic photo, no 3d render`;
+        let stylePrompt = "";
+        if (artStyle === "sketch_bw") {
+            stylePrompt = `StudioBinder storyboard sketch, black and white pencil drawing, dynamic charcoal shading, detailed line art, professional film previsualization, anamorphic film framing, monochrome storyboard panel`;
         } else {
-            prompt = `black and white film storyboard drawing, studiobinder ink sketch, pencil crosshatching, ${sceneSubject}, bold ink linework, professional cinema sketch, chiaroscuro shading, 16:9 widescreen frame, no photo, no color, no portrait photo`;
+            stylePrompt = `graphic novel film storyboard, dynamic comic book color grading, rich moody ink outlines, cinematic lighting, 35mm film still illustration, anamorphic frame`;
         }
 
-        const seed = Math.floor(Math.random() * 899999) + 100000;
-        const cleanPrompt = encodeURIComponent(prompt);
-        const proxyUrl = `/api/storyboard/image?prompt=${cleanPrompt}&seed=${seed}`;
+        const shotFraming = isWide
+            ? "wide establishing cinematic master shot, deep focus, environmental perspective"
+            : "medium close-up dramatic action framing, character focus, intense lighting";
+
+        const fullPrompt = `${cleanLocation}, ${shotFraming}, ${stylePrompt}, 16:9 widescreen aspect ratio, highly detailed, masterwork`;
+        const encodedPrompt = encodeURIComponent(fullPrompt);
+        const seed = Math.floor(Math.random() * 999999);
+
+        // 16:9 HD Frame via Flux / Pollinations
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodedPrompt}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
 
         return NextResponse.json({
             success: true,
-            imageUrl: proxyUrl,
-            prompt
+            imageUrl
         });
     } catch (error: any) {
-        return NextResponse.json(
-            { success: false, error: error.message || "Failed" },
-            { status: 500 }
-        );
+        console.error("Storyboard API Error:", error);
+        return NextResponse.json({ error: error.message || "Frame generation failed" }, { status: 500 });
     }
 }

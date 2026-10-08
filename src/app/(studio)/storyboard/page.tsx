@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal,
@@ -34,7 +34,6 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  // Version bump cleans out old portraits / wireframes
   const STORAGE_KEY = `cine_storyboard_v3_${artStyle}`;
 
   const getSavedCache = (): Record<string, string> => {
@@ -59,20 +58,23 @@ export default function StoryboardPage() {
   const clearAllCache = () => {
     if (typeof window !== "undefined") {
       localStorage.removeItem(STORAGE_KEY);
-      setShots(prev => prev.map(s => ({ ...s, imageUrl: "" })));
+      setShots((prev) => prev.map((s) => ({ ...s, imageUrl: "" })));
     }
   };
 
   const fetchAiFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
     const cached = getSavedCache()[shot.id];
-
     if (cached) {
-      setShots(prev => prev.map(s => s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s));
+      setShots((prev) =>
+        prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s))
+      );
       return;
     }
 
-    setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: true } : s));
+    setShots((prev) =>
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
+    );
 
     try {
       const res = await fetch("/api/storyboard/generate", {
@@ -84,21 +86,27 @@ export default function StoryboardPage() {
       const data = await res.json();
       if (data.success && data.imageUrl) {
         saveToCache(shot.id, data.imageUrl);
-        setShots(prev => prev.map(s => s.id === shot.id ? {
-          ...s,
-          imageUrl: data.imageUrl,
-          isGenerating: false
-        } : s));
+        setShots((prev) =>
+          prev.map((s) =>
+            s.id === shot.id ? { ...s, imageUrl: data.imageUrl, isGenerating: false } : s
+          )
+        );
         return;
       }
-    } catch { }
+    } catch (e) {
+      console.error(e);
+    }
 
-    setShots(prev => prev.map(s => s.id === shot.id ? { ...s, isGenerating: false } : s));
+    setShots((prev) =>
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: false } : s))
+    );
   };
 
   useEffect(() => {
     if (typeof window !== "undefined") {
-      const storedScenes = localStorage.getItem("active_screenplay_scenes");
+      const storedScenes =
+        sessionStorage.getItem("eclat_active_scenes") ||
+        localStorage.getItem("active_screenplay_scenes");
       const activeFilter = localStorage.getItem("storyboard_filter") || "ALL";
       const cached = getSavedCache();
 
@@ -109,11 +117,9 @@ export default function StoryboardPage() {
             setSceneList(parsed.map((s: any) => ({ id: s.id, slugline: s.slugline })));
 
             const newShots: StoryboardShot[] = [];
-
             parsed.forEach((scene: any, index: number) => {
               const shotNumA = `SHOT ${String(index + 1).padStart(2, "0")}A`;
               const shotNumB = `SHOT ${String(index + 1).padStart(2, "0")}B`;
-
               const idA = `shot-${scene.id}-A`;
               const idB = `shot-${scene.id}-B`;
 
@@ -147,7 +153,9 @@ export default function StoryboardPage() {
             setShots(newShots);
             setFilterScene(activeFilter);
           }
-        } catch { }
+        } catch (e) {
+          console.error(e);
+        }
       }
     }
   }, [artStyle]);
@@ -155,12 +163,9 @@ export default function StoryboardPage() {
   // Queue to generate missing frames smoothly
   useEffect(() => {
     if (shots.length === 0) return;
-
-    const currentShots = filterScene === "ALL"
-      ? shots
-      : shots.filter(s => s.sceneId === filterScene);
-
-    const pending = currentShots.filter(s => !s.imageUrl && !s.isGenerating);
+    const currentShots =
+      filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
+    const pending = currentShots.filter((s) => !s.imageUrl && !s.isGenerating);
     if (pending.length === 0) return;
 
     let isMounted = true;
@@ -168,7 +173,7 @@ export default function StoryboardPage() {
       for (const item of pending) {
         if (!isMounted) break;
         await fetchAiFrame(item);
-        await new Promise(r => setTimeout(r, 600));
+        await new Promise((r) => setTimeout(r, 600));
       }
     };
     processQueue();
@@ -181,20 +186,20 @@ export default function StoryboardPage() {
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     clearAllCache();
-    const targetShots = filterScene === "ALL" ? shots : shots.filter(s => s.sceneId === filterScene);
+    const targetShots =
+      filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
       await fetchAiFrame(shot);
-      await new Promise(r => setTimeout(r, 700));
+      await new Promise((r) => setTimeout(r, 700));
     }
     setIsGeneratingAll(false);
   };
 
-  const filteredShots = filterScene === "ALL"
-    ? shots
-    : shots.filter(s => s.sceneId === filterScene);
+  const filteredShots =
+    filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
+    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 font-sans">
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
@@ -205,7 +210,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization — සියලුම Shots එකින් එක නිවැරදිව Render වේ.
+            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots එකින් එක නිවැරදිව Render වේ.
           </p>
         </div>
 
@@ -256,7 +261,6 @@ export default function StoryboardPage() {
           >
             All Sequences ({shots.length})
           </button>
-
           {sceneList.map((scn) => (
             <button
               key={scn.id}
@@ -272,7 +276,7 @@ export default function StoryboardPage() {
         </div>
 
         {/* Style Selector */}
-        <div className="flex items-center gap-2 bg-[#050b07] p-1 rounded-xl border border-emerald-950">
+        <div className="flex items-center gap-2 bg-[#050607] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
             <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
