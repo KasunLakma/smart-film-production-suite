@@ -128,25 +128,20 @@ export default function StoryboardPage() {
     return `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
   };
 
-  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Manual Click Synthesis Mode)
-  const handleGenerateFrame = async (shot: StoryboardShot) => {
+  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Direct Instant Mode)
+  const handleGenerateFrame = (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
-    setShots((prev) =>
-      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
-    );
-
     const prompt = generateScenePrompt(shot, isWide);
-    const seed = Math.floor(Math.random() * 9000000) + 1000000;
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
+    const seed = Math.floor(Math.random() * 899999) + 100000;
+    const finalUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
 
-    // Immediately update state and save to cache so <img> renders straight away
-    saveToCache(shot.id, imageUrl, prompt);
+    saveToCache(shot.id, finalUrl, prompt);
     setShots((prev) =>
       prev.map((s) =>
         s.id === shot.id
           ? {
             ...s,
-            imageUrl,
+            imageUrl: finalUrl,
             visualPrompt: prompt,
             isGenerating: false
           }
@@ -154,7 +149,6 @@ export default function StoryboardPage() {
       )
     );
 
-    // Asynchronously log/post to route if active
     try {
       fetch("/api/storyboard/generate", {
         method: "POST",
@@ -398,6 +392,11 @@ export default function StoryboardPage() {
                         alt={shot.shotNumber}
                         className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                         loading="lazy"
+                        onError={(e) => {
+                          const fallbackSeed = Math.floor(Math.random() * 899999) + 100000;
+                          const promptText = shot.visualPrompt || "cinematic scene";
+                          e.currentTarget.src = `https://image.pollinations.ai/prompt/${encodeURIComponent(promptText)}?width=1280&height=720&seed=${fallbackSeed}&nologo=true`;
+                        }}
                       />
                       <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
                         <a
