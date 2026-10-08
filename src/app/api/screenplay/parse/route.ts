@@ -7,7 +7,7 @@ export async function POST(req: Request) {
     try {
         const apiKey = process.env.GEMINI_API_KEY;
         if (!apiKey) {
-            return NextResponse.json({ error: "GEMINI_API_KEY සැකසී නොමැත" }, { status: 500 });
+            return NextResponse.json({ error: "GEMINI_API_KEY සකසා නොමැත." }, { status: 500 });
         }
 
         const ai = new GoogleGenAI({ apiKey });
@@ -18,7 +18,6 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය." }, { status: 400 });
         }
 
-        // Vercel timeout සහ payload ගැටලු මඟහැරීමට අවශ්‍ය ප්‍රශස්ත කොටස යැවීම
         const scriptSlice = rawText.slice(0, 35000);
 
         const systemPrompt = `
@@ -26,10 +25,10 @@ You are an expert film pre-production assistant. Analyze the following screenpla
 
 STRICT RULES:
 1. Detect whether the script is written in Sinhala or English.
-2. If Sinhala: Output sluglines, synopsis, characters, and dialogues purely in natural Sinhala.
-3. If English: Output sluglines, synopsis, characters, and dialogues purely in English.
+2. If Sinhala: Output sluglines, synopsis, characters, and dialogues purely in authentic Sinhala.
+3. If English: Output sluglines, synopsis, characters, and dialogues purely in authentic English.
 4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g. "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, the "visualPrompt" MUST BE IN ENGLISH.
-5. Parse all genuine scenes sequentially. Do not limit artificially.
+5. Parse all genuine sequential scenes found in the text.
 
 Return ONLY a valid JSON array conforming to this schema (no markdown, no backticks, only pure JSON):
 [
@@ -39,7 +38,7 @@ Return ONLY a valid JSON array conforming to this schema (no markdown, no backti
     "slugline": "SCENE 01: INT/EXT LOCATION - DAY/NIGHT",
     "locationType": "INT" or "EXT",
     "timeOfDay": "DAY" or "NIGHT" or "DAWN" etc.,
-    "synopsis": "brief staging description",
+    "synopsis": "brief scene description",
     "characters": ["character1"],
     "props": ["prop1"],
     "dialogues": [{"speaker": "NAME", "line": "dialogue line"}],
@@ -52,17 +51,35 @@ Screenplay Text:
 ${scriptSlice}
 `;
 
-        // නිවැරදි model නාමය: gemini-1.5-flash
-        const response = await ai.models.generateContent({
-            model: "gemini-1.5-flash",
-            contents: systemPrompt,
-            config: {
-                responseMimeType: "application/json",
-            },
-        });
+        // Active Gemini models waterfall - endpoints වලට අනුව ස්වයංක්‍රීයව fallback වීම
+        const candidateModels = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"];
+        let responseText = "";
+        let lastError: any = null;
 
-        const outputText = response.text || "[]";
-        const cleanedJson = outputText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
+        for (const modelName of candidateModels) {
+            try {
+                const response = await ai.models.generateContent({
+                    model: modelName,
+                    contents: systemPrompt,
+                    config: {
+                        responseMimeType: "application/json",
+                    },
+                });
+                if (response.text) {
+                    responseText = response.text;
+                    break;
+                }
+            } catch (err: any) {
+                lastError = err;
+                console.warn(`Model ${modelName} failed, trying next...`, err.message);
+            }
+        }
+
+        if (!responseText) {
+            throw new Error(lastError?.message || "Gemini API මඟින් දත්ත ලබාගැනීමට නොහැකි විය.");
+        }
+
+        const cleanedJson = responseText.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
         const parsedScenes = JSON.parse(cleanedJson);
 
         return NextResponse.json({ success: true, count: parsedScenes.length, scenes: parsedScenes });
