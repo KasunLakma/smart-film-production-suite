@@ -11,7 +11,8 @@ import {
   Sparkles,
   Palette,
   CheckCircle2,
-  Trash2
+  Trash2,
+  Download
 } from "lucide-react";
 
 interface StoryboardShot {
@@ -23,6 +24,7 @@ interface StoryboardShot {
   lens: string;
   cameraMovement: string;
   displayTitle: string;
+  visualPrompt?: string;
   imageUrl?: string;
   isGenerating?: boolean;
 }
@@ -34,7 +36,7 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const STORAGE_KEY = `cine_storyboard_v3_${artStyle}`;
+  const STORAGE_KEY = `cine_storyboard_v4_${artStyle}`;
 
   const getSavedCache = (): Record<string, string> => {
     if (typeof window === "undefined") return {};
@@ -62,10 +64,13 @@ export default function StoryboardPage() {
     }
   };
 
-  const fetchAiFrame = async (shot: StoryboardShot) => {
+  // ක්ෂණිකව නව Cinematic Frame එකක් සාදන function එක
+  const fetchAiFrame = async (shot: StoryboardShot, forceRefresh: boolean = false) => {
     const isWide = shot.id.endsWith("-A");
     const cached = getSavedCache()[shot.id];
-    if (cached) {
+
+    // Force refresh නොවන විට පමණක් cache එකෙන් ලබා ගැනීම
+    if (cached && !forceRefresh) {
       setShots((prev) =>
         prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s))
       );
@@ -77,6 +82,7 @@ export default function StoryboardPage() {
     );
 
     try {
+      // 1. API route එක විමසීම
       const res = await fetch("/api/storyboard/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -94,11 +100,26 @@ export default function StoryboardPage() {
         return;
       }
     } catch (e) {
-      console.error(e);
+      console.warn("Backend API route failed, using client direct generation:", e);
     }
 
+    // 2. Fallback: Client-side Direct High-Res Cinematic URL Generation
+    const cleanLocation = shot.sceneSlug.replace(/[\u0D80-\u0DFF]/g, "film set").trim();
+    const stylePrompt =
+      artStyle === "sketch_bw"
+        ? "StudioBinder storyboard sketch, black and white pencil drawing, detailed line art, charcoal shading, 16:9 anamorphic frame, cinematic storyboard panel"
+        : "graphic novel storyboard, comic book color palette, ink outline illustration, dramatic lighting, 16:9 movie still";
+    const framing = isWide ? "wide establishing master shot" : "medium close-up dramatic angle";
+
+    const promptText = encodeURIComponent(`${cleanLocation}, ${framing}, ${stylePrompt}, 8k resolution, cinematic composition`);
+    const seed = Math.floor(Math.random() * 9999999);
+    const directImageUrl = `https://image.pollinations.ai/prompt/${promptText}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
+
+    saveToCache(shot.id, directImageUrl);
     setShots((prev) =>
-      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: false } : s))
+      prev.map((s) =>
+        s.id === shot.id ? { ...s, imageUrl: directImageUrl, isGenerating: false } : s
+      )
     );
   };
 
@@ -132,6 +153,7 @@ export default function StoryboardPage() {
                 lens: "28mm Anamorphic T2.0",
                 cameraMovement: "Slow Push-In Tracking",
                 displayTitle: `${scene.id}: Wide Establishing Master`,
+                visualPrompt: scene.visualPrompt,
                 isGenerating: false,
                 imageUrl: cached[idA] || ""
               });
@@ -145,6 +167,7 @@ export default function StoryboardPage() {
                 lens: "50mm Prime T1.5",
                 cameraMovement: "Dynamic Eye-Level",
                 displayTitle: `${scene.id}: Close-Up Key Action`,
+                visualPrompt: scene.visualPrompt,
                 isGenerating: false,
                 imageUrl: cached[idB] || ""
               });
@@ -160,37 +183,14 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // Queue to generate missing frames smoothly
-  useEffect(() => {
-    if (shots.length === 0) return;
-    const currentShots =
-      filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
-    const pending = currentShots.filter((s) => !s.imageUrl && !s.isGenerating);
-    if (pending.length === 0) return;
-
-    let isMounted = true;
-    const processQueue = async () => {
-      for (const item of pending) {
-        if (!isMounted) break;
-        await fetchAiFrame(item);
-        await new Promise((r) => setTimeout(r, 600));
-      }
-    };
-    processQueue();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [filterScene, shots.length]);
-
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     clearAllCache();
     const targetShots =
       filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      await fetchAiFrame(shot);
-      await new Promise((r) => setTimeout(r, 700));
+      await fetchAiFrame(shot, true);
+      await new Promise((r) => setTimeout(r, 600));
     }
     setIsGeneratingAll(false);
   };
@@ -323,13 +323,22 @@ export default function StoryboardPage() {
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
+                  <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
+                    <a
+                      href={shot.imageUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                      download={`${shot.shotNumber}.jpg`}
+                      className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-white hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-white/20"
+                    >
+                      <Download className="w-3 h-3" /> Download
+                    </a>
                     <button
                       onClick={() => {
                         const cache = getSavedCache();
                         delete cache[shot.id];
                         localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-                        fetchAiFrame(shot);
+                        fetchAiFrame(shot, true);
                       }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
@@ -338,9 +347,14 @@ export default function StoryboardPage() {
                   </div>
                 </>
               ) : (
-                <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08] border border-dashed border-emerald-950/80">
-                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500/40 mb-2" />
-                  <span className="text-xs text-slate-400">Queueing Panel Render...</span>
+                <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
+                  <button
+                    onClick={() => fetchAiFrame(shot, true)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" /> Generate Frame
+                  </button>
+                  <span className="text-[11px] text-slate-500 mt-2">Click to render this 16:9 shot</span>
                 </div>
               )}
 
