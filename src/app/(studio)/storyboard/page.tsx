@@ -39,7 +39,7 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const STORAGE_KEY = `cine_sb_auto_v6_${artStyle}`;
+  const STORAGE_KEY = `cine_storyboard_thesis_${artStyle}`;
   const isQueueRunning = useRef(false);
 
   const getSavedCache = (): Record<string, string> => {
@@ -68,127 +68,60 @@ export default function StoryboardPage() {
     }
   };
 
-  // 1. භාෂාව හඳුනාගෙන 100% ක් නිවැරදි ඉංග්‍රීසි Prompt එකක් සෑදීම
-  const buildEnglishPrompt = (shot: StoryboardShot, isWide: boolean): string => {
-    const rawContent = `${shot.sceneSlug} ${shot.synopsis} ${shot.props.join(" ")}`;
-    const isSinhala = /[\u0D80-\u0DFF]/.test(rawContent);
+  // නියම AI API එක Call කර සැබෑ රූපය ලබා ගැනීමේ Function එක
+  const fetchAiFrame = async (shot: StoryboardShot) => {
+    const isWide = shot.id.endsWith("-A");
+    const cached = getSavedCache()[shot.id];
 
-    let locationEnglish = "";
-    let lightingEnglish = "";
-    let actionEnglish = "";
-
-    if (isSinhala) {
-      const isExt = /බාහිර|EXT/i.test(rawContent);
-      const isNight = /රාත්‍රී|NIGHT|අඳුරු|සන්ධ්‍යා|DARK/i.test(rawContent);
-
-      locationEnglish = isExt
-        ? "exterior film location setting, open cinematic space"
-        : "interior cinematic film room, moody architectural set";
-
-      lightingEnglish = isNight
-        ? "dramatic night atmospheric shadows, chiaroscuro low-key illumination"
-        : "natural daylight illumination, 35mm film aesthetic";
-
-      const validProps = shot.props.filter((p) => p !== "ප්‍රධාන පසුතල උපකරණ");
-      const propText = validProps.length > 0 ? `visible props (${validProps.join(", ")})` : "detailed prop setup";
-      const charText = shot.characters.length > 0 ? `characters (${shot.characters.join(" & ")}) in scene` : "lead actor staging";
-
-      actionEnglish = `${charText}, ${propText}`;
-    } else {
-      locationEnglish = shot.sceneSlug.replace(/SCENE\s*\d+[:.\-\s]*/i, "").trim() || "cinematic location sequence";
-      lightingEnglish = /NIGHT/i.test(shot.sceneSlug) ? "dark atmospheric night shadows" : "natural cinematic daylight";
-      actionEnglish = shot.synopsis.slice(0, 150).replace(/\s+/g, " ") || "actors in dynamic composition";
+    if (cached) {
+      setShots((prev) =>
+        prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s))
+      );
+      return;
     }
 
-    const framingEnglish = isWide
-      ? "wide establishing master shot, environmental depth, 35mm anamorphic wide lens"
-      : "medium close-up dramatic action framing, character focus, shallow depth of field, 50mm prime";
-
-    const styleEnglish = artStyle === "sketch_bw"
-      ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome drawing"
-      : "graphic novel storyboard panel, bold ink outlines, comic book color palette, vivid cinematic lighting";
-
-    return `${locationEnglish}, ${actionEnglish}, ${lightingEnglish}, ${framingEnglish}, ${styleEnglish}, 16:9 widescreen composition, 8k resolution`;
-  };
-
-  // 2. ක්ෂණිකව 16:9 Frame එකක් සාදන Generator එක (Timeout හෝ Fail නොවී 100% ක් පෙනේ)
-  const generateFrameDataUri = (shot: StoryboardShot, isWide: boolean, englishPrompt: string): string => {
-    const isBw = artStyle === "sketch_bw";
-    const bg1 = isBw ? "#18181b" : "#0c1f38";
-    const bg2 = isBw ? "#09090b" : "#040d1a";
-    const stroke = isBw ? "#e4e4e7" : "#38bdf8";
-    const fill = isBw ? "#71717a" : "#0284c7";
-    const accent = isBw ? "#f43f5e" : "#10b981";
-
-    const svg = `
-      <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-        <defs>
-          <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stop-color="${bg1}" />
-            <stop offset="100%" stop-color="${bg2}" />
-          </linearGradient>
-        </defs>
-        <rect width="1280" height="720" fill="url(#bg)" />
-        <rect x="30" y="30" width="1220" height="660" fill="none" stroke="${stroke}" stroke-width="2" stroke-opacity="0.3" />
-        <line x1="436" y1="30" x2="436" y2="690" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
-        <line x1="844" y1="30" x2="844" y2="690" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
-        <line x1="30" y1="250" x2="1250" y2="250" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
-        <line x1="30" y1="470" x2="1250" y2="470" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
-
-        ${isWide ? `
-          <line x1="60" y1="520" x2="1220" y2="520" stroke="${stroke}" stroke-width="3" />
-          <line x1="60" y1="690" x2="560" y2="520" stroke="${stroke}" stroke-width="3" />
-          <line x1="1220" y1="690" x2="720" y2="520" stroke="${stroke}" stroke-width="3" />
-          <circle cx="640" cy="430" r="26" fill="${fill}" />
-          <polygon points="615,520 628,460 652,460 665,520" fill="${fill}" />
-          <rect x="200" y="280" width="200" height="240" fill="none" stroke="${stroke}" stroke-width="2" />
-          <rect x="880" y="280" width="200" height="240" fill="none" stroke="${stroke}" stroke-width="2" />
-        ` : `
-          <circle cx="640" cy="300" r="95" fill="${fill}" />
-          <path d="M410 690 Q510 420 640 410 Q770 420 870 690 Z" fill="${fill}" />
-          <rect x="720" y="460" width="55" height="110" fill="${accent}" rx="8" />
-        `}
-
-        <text x="60" y="85" font-family="monospace" font-size="28" font-weight="bold" fill="#ffffff">${shot.shotNumber} • ${shot.shotType}</text>
-        <text x="60" y="120" font-family="monospace" font-size="18" fill="${isBw ? "#a1a1aa" : "#34d399"}">LENS: ${shot.lens} | MOVEMENT: ${shot.cameraMovement}</text>
-        <rect x="990" y="55" width="230" height="36" fill="${isBw ? "#3f3f46" : "#065f46"}" rx="6" />
-        <text x="1005" y="78" font-family="sans-serif" font-size="13" font-weight="bold" fill="#ffffff">${isBw ? "STUDIOBINDER INK SKETCH" : "GRAPHIC NOVEL COLOR"}</text>
-        <text x="60" y="655" font-family="monospace" font-size="14" fill="#a1a1aa">PROMPT: ${englishPrompt.slice(0, 110)}...</text>
-      </svg>
-    `;
-
-    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
-  };
-
-  // තනි Shot එකක් Render කිරීම
-  const renderSingleShot = async (shot: StoryboardShot) => {
-    const isWide = shot.id.endsWith("-A");
-    const englishPrompt = buildEnglishPrompt(shot, isWide);
-
     setShots((prev) =>
-      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true, visualPrompt: englishPrompt } : s))
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
     );
 
-    await new Promise((r) => setTimeout(r, 250));
+    try {
+      const res = await fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slugline: shot.sceneSlug,
+          isWide,
+          artStyle,
+          synopsis: shot.synopsis
+        })
+      });
 
-    const finalImageUri = generateFrameDataUri(shot, isWide, englishPrompt);
-    saveToCache(shot.id, finalImageUri);
+      const data = await res.json();
+      if (data.success && data.imageUrl) {
+        saveToCache(shot.id, data.imageUrl);
+        setShots((prev) =>
+          prev.map((s) =>
+            s.id === shot.id
+              ? {
+                ...s,
+                imageUrl: data.imageUrl,
+                visualPrompt: data.prompt,
+                isGenerating: false
+              }
+              : s
+          )
+        );
+        return;
+      }
+    } catch (e) {
+      console.error(e);
+    }
 
     setShots((prev) =>
-      prev.map((s) =>
-        s.id === shot.id
-          ? {
-            ...s,
-            imageUrl: finalImageUri,
-            visualPrompt: englishPrompt,
-            isGenerating: false
-          }
-          : s
-      )
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: false } : s))
     );
   };
 
-  // 3. Page එක Load වූ වහාම දර්ශන කියවා ගැනීම
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
@@ -253,31 +186,34 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
-  // 4. ස්වයංක්‍රීය පින්තූර Generation Queue එක (Auto Loader)
+  // Page Load වූ සැනින් පිළිවෙළින් AI Frames render වන ස්වයංක්‍රීය Queue එක
   useEffect(() => {
     if (shots.length === 0 || isQueueRunning.current) return;
 
-    const pending = shots.filter((s) => !s.imageUrl && !s.isGenerating);
+    const currentShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
+    const pending = currentShots.filter((s) => !s.imageUrl && !s.isGenerating);
     if (pending.length === 0) return;
 
     isQueueRunning.current = true;
 
-    const runAutoQueue = async () => {
+    const runQueue = async () => {
       for (const item of pending) {
-        await renderSingleShot(item);
+        await fetchAiFrame(item);
+        await new Promise((r) => setTimeout(r, 600));
       }
       isQueueRunning.current = false;
     };
 
-    runAutoQueue();
-  }, [shots]);
+    runQueue();
+  }, [shots, filterScene]);
 
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     clearAllCache();
     const targetShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      await renderSingleShot(shot);
+      await fetchAiFrame(shot);
+      await new Promise((r) => setTimeout(r, 700));
     }
     setIsGeneratingAll(false);
   };
@@ -296,7 +232,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots ස්වයංක්‍රීයව Render වේ[cite: 16].
+            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots එකින් එක නිවැරදිව Render වේ[cite: 16].
           </p>
         </div>
 
@@ -305,7 +241,7 @@ export default function StoryboardPage() {
             href="/breakdown"
             className="px-4 py-2.5 rounded-xl bg-[#09130e] hover:bg-[#0e1d15] border border-emerald-950 text-slate-300 text-xs font-semibold transition-all flex items-center gap-2"
           >
-            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script[cite: 17]
+            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script
           </Link>
           <button
             onClick={clearAllCache}
@@ -399,6 +335,7 @@ export default function StoryboardPage() {
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
                   <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...[cite: 19]</span>
+                  <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}[cite: 19]</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
@@ -406,6 +343,7 @@ export default function StoryboardPage() {
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
+                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
                     <a
@@ -416,7 +354,12 @@ export default function StoryboardPage() {
                       <Download className="w-3 h-3" /> Download
                     </a>
                     <button
-                      onClick={() => renderSingleShot(shot)}
+                      onClick={() => {
+                        const cache = getSavedCache();
+                        delete cache[shot.id];
+                        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
+                        fetchAiFrame(shot);
+                      }}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 20]
@@ -426,7 +369,7 @@ export default function StoryboardPage() {
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
                   <Loader2 className="w-6 h-6 animate-spin text-emerald-500/40 mb-2" />
-                  <span className="text-xs text-slate-400">Loading Storyboard Frame...</span>
+                  <span className="text-xs text-slate-400">Queueing Panel Render...[cite: 20]</span>
                 </div>
               )}
 
