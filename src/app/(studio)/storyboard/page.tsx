@@ -56,7 +56,7 @@ export default function StoryboardPage() {
   const saveToCache = (shotId: string, url: string, prompt: string) => {
     if (!STORAGE_KEY || typeof window === "undefined") return;
     try {
-      const current = getSavedCache();
+      const current = getSavedCache(STORAGE_KEY);
       current[shotId] = { url, prompt };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
     } catch { }
@@ -77,20 +77,26 @@ export default function StoryboardPage() {
     let visualSubject = "";
 
     if (isSinhala) {
-      // සිංහල පිටපතේ දර්ශන 4 (test sfsci.pdf)
-      if (shot.sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර/i.test(fullText)) {
+      if (shot.sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(fullText)) {
         visualSubject = "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
-      } else if (shot.sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න/i.test(fullText)) {
+      } else if (shot.sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(fullText)) {
         visualSubject = "industrial sea harbor container docks, pouring heavy rain on wet asphalt, black sedan idling, operative holding military binoculars";
-      } else if (shot.sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER/i.test(fullText)) {
+      } else if (shot.sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER|ලෝහමය/i.test(fullText)) {
         visualSubject = "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
-      } else if (shot.sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග/i.test(fullText)) {
+      } else if (shot.sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(fullText)) {
         visualSubject = "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and heavy rain";
+      } else if (/කාමර|නිවස|ගෙදර/i.test(fullText)) {
+        visualSubject = "cinematic interior house room with warm dramatic moody lighting";
+      } else if (/පාර|වීදිය|නගර/i.test(fullText)) {
+        visualSubject = "cinematic urban city street at dusk, wet pavement and ambient lighting";
+      } else if (/කැලෑ|වනය|ගස්/i.test(fullText)) {
+        visualSubject = "atmospheric dense forest scene, mist hanging between trees, cinematic lighting";
+      } else if (/මුහුද|වෙරළ|වරාය/i.test(fullText)) {
+        visualSubject = "coastal ocean shore, dramatic sky and moody atmosphere";
       } else {
         visualSubject = "cinematic interior moody scene, atmospheric lighting, high contrast dramatic setup";
       }
     } else {
-      // ඉංග්‍රීසි පිටපතේ දර්ශන 3 (THE SHADOW CIPHER.pdf)
       if (shot.sceneNumber === 1 || /VAULT|LOCKER/i.test(fullText)) {
         visualSubject = "underground bank archive vault, rows of metallic locker drawers, concrete floor, Elena holding scanner, flashlight and master key";
       } else if (shot.sceneNumber === 2 || /HARBOR|WAREHOUSE|COMPASS/i.test(fullText)) {
@@ -99,8 +105,10 @@ export default function StoryboardPage() {
         visualSubject = "interior of black sedan moving at night, briefcase open with stacks of Euro currency, glowing encrypted tablet radar display";
       } else {
         const cleanSlug = shot.sceneSlug.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
-        const cleanSynopsis = shot.synopsis.slice(0, 160).replace(/\s+/g, " ");
-        visualSubject = `${cleanSlug}, ${cleanSynopsis}`;
+        const cleanSynopsis = shot.synopsis.slice(0, 200).replace(/\s+/g, " ");
+        const propsInfo = shot.props.length > 0 ? `, key props: ${shot.props.join(", ")}` : "";
+        const charInfo = shot.characters.length > 0 ? `, featuring ${shot.characters.join(", ")}` : "";
+        visualSubject = `${cleanSlug}, ${cleanSynopsis}${propsInfo}${charInfo}`;
       }
     }
 
@@ -116,62 +124,78 @@ export default function StoryboardPage() {
     return `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
   };
 
-  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Direct Zero-Timeout Mode)
-  const handleGenerateFrame = (shot: StoryboardShot) => {
+  // Generate Frame බටන් එක ක්ලික් කළ විට පමණක් AI Image Synthesis වීම (Strict Manual Trigger Mode)
+  const handleGenerateFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
-    const prompt = generateScenePrompt(shot, isWide);
-
-    const isSinhala = activeScriptKey === "sinhala_script";
-    const scriptMultiplier = isSinhala ? 777 : 333;
-    const seed = (shot.sceneNumber * 999331 + (isWide ? 101 : 202) + scriptMultiplier) % 9999999;
-    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
-
     setShots((prev) =>
       prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
     );
 
-    const img = new Image();
-    img.src = imageUrl;
+    try {
+      const res = await fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          sceneNumber: shot.sceneNumber,
+          slugline: shot.sceneSlug,
+          synopsis: shot.synopsis,
+          isWide,
+          artStyle,
+          props: shot.props,
+          characters: shot.characters
+        })
+      });
 
-    img.onload = () => {
-      saveToCache(shot.id, imageUrl, prompt);
-      setShots((prev) =>
-        prev.map((s) =>
-          s.id === shot.id
-            ? {
-              ...s,
-              imageUrl,
-              visualPrompt: prompt,
-              isGenerating: false
-            }
-            : s
-        )
-      );
-    };
+      if (res.ok) {
+        const data = await res.json();
+        if (data.imageUrl && data.prompt) {
+          saveToCache(shot.id, data.imageUrl, data.prompt);
+          setShots((prev) =>
+            prev.map((s) =>
+              s.id === shot.id
+                ? {
+                  ...s,
+                  imageUrl: data.imageUrl,
+                  visualPrompt: data.prompt,
+                  isGenerating: false
+                }
+                : s
+            )
+          );
+          return;
+        }
+      }
+    } catch (e) {
+      console.warn("API route error, falling back to client generation:", e);
+    }
 
-    img.onerror = () => {
-      saveToCache(shot.id, imageUrl, prompt);
-      setShots((prev) =>
-        prev.map((s) =>
-          s.id === shot.id
-            ? {
-              ...s,
-              imageUrl,
-              visualPrompt: prompt,
-              isGenerating: false
-            }
-            : s
-        )
-      );
-    };
+    // Fallback client prompt & URL generation
+    const prompt = generateScenePrompt(shot, isWide);
+    const uniqueSeed = Math.floor(Math.random() * 9000000) + 1000000;
+    const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${uniqueSeed}&nologo=true`;
+
+    saveToCache(shot.id, imageUrl, prompt);
+    setShots((prev) =>
+      prev.map((s) =>
+        s.id === shot.id
+          ? {
+            ...s,
+            imageUrl,
+            visualPrompt: prompt,
+            isGenerating: false
+          }
+          : s
+      )
+    );
   };
 
-  // Initial Sync: Breakdown එකේ data නැතිනම් Storyboard එක හිස්ව තැබීම
+  // Initial Sync: Breakdown එකේ active scenes නැතිනම් Storyboard එක හිස්ව තැබීම
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
         sessionStorage.getItem("eclat_active_scenes") ||
-        localStorage.getItem("active_screenplay_scenes");
+        localStorage.getItem("active_screenplay_scenes") ||
+        localStorage.getItem("eclat_active_scenes");
 
       if (!storedScenes || storedScenes === "[]") {
         setShots([]);
@@ -189,7 +213,7 @@ export default function StoryboardPage() {
           return;
         }
 
-        const sampleText = parsed.map((s: any) => `${s.slugline} ${s.synopsis}`).join(" ");
+        const sampleText = parsed.map((s: any) => `${s.slugline} ${s.synopsis} ${(s.characters || []).join(" ")} ${(s.props || []).join(" ")}`).join(" ");
         const isSinhala = /[\u0D80-\u0DFF]/.test(sampleText);
         const scriptId = isSinhala ? "sinhala_script" : "english_script";
         setActiveScriptKey(scriptId);
@@ -249,7 +273,10 @@ export default function StoryboardPage() {
 
         setShots(newShots);
       } catch (e) {
-        console.error(e);
+        console.error("Storyboard initial setup error:", e);
+        setShots([]);
+        setSceneList([]);
+        setActiveScriptKey("");
       }
     }
   }, [artStyle]);
@@ -269,7 +296,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization (Manual Trigger Mode)[cite: 25].
+            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization (Manual Trigger Mode).
           </p>
         </div>
 
@@ -278,7 +305,7 @@ export default function StoryboardPage() {
             href="/breakdown"
             className="px-4 py-2.5 rounded-xl bg-[#09130e] hover:bg-[#0e1d15] border border-emerald-950 text-slate-300 text-xs font-semibold transition-all flex items-center gap-2"
           >
-            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script[cite: 25]
+            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script
           </Link>
           {shots.length > 0 && (
             <button
@@ -303,7 +330,7 @@ export default function StoryboardPage() {
             href="/breakdown"
             className="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 text-xs font-bold transition-all"
           >
-            Go to Breakdown Studio[cite: 25]
+            Go to Breakdown Studio
           </Link>
         </div>
       ) : (
@@ -312,7 +339,7 @@ export default function StoryboardPage() {
           <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
             <div className="flex flex-wrap items-center gap-2">
               <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
-                <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:[cite: 27]
+                <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:
               </span>
               <button
                 onClick={() => setFilterScene("ALL")}
@@ -321,7 +348,7 @@ export default function StoryboardPage() {
                     : "bg-[#0e1d15] text-slate-300 hover:text-white"
                   }`}
               >
-                All Sequences ({shots.length})[cite: 27]
+                All Sequences ({shots.length})
               </button>
               {sceneList.map((scn) => (
                 <button
@@ -332,7 +359,7 @@ export default function StoryboardPage() {
                       : "bg-[#0e1d15] text-slate-300 hover:text-white"
                     }`}
                 >
-                  {scn.id}[cite: 27]
+                  {scn.id}
                 </button>
               ))}
             </div>
@@ -340,7 +367,7 @@ export default function StoryboardPage() {
             {/* Style Selector */}
             <div className="flex items-center gap-2 bg-[#050607] p-1 rounded-xl border border-emerald-950">
               <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
-                <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:[cite: 28]
+                <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
               </span>
               <button
                 onClick={() => setArtStyle("sketch_bw")}
@@ -349,7 +376,7 @@ export default function StoryboardPage() {
                     : "text-slate-400 hover:text-white"
                   }`}
               >
-                StudioBinder (B&W Sketch)[cite: 28]
+                StudioBinder (B&W Sketch)
               </button>
               <button
                 onClick={() => setArtStyle("graphic_novel")}
@@ -358,7 +385,7 @@ export default function StoryboardPage() {
                     : "text-slate-400 hover:text-white"
                   }`}
               >
-                Graphic Novel (Color)[cite: 28]
+                Graphic Novel (Color)
               </button>
             </div>
           </div>
@@ -395,13 +422,13 @@ export default function StoryboardPage() {
                           download={`${shot.shotNumber}.jpg`}
                           className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-white hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-white/20"
                         >
-                          <Download className="w-3 h-3" /> Download[cite: 30]
+                          <Download className="w-3 h-3" /> Download
                         </a>
                         <button
                           onClick={() => handleGenerateFrame(shot)}
                           className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                         >
-                          <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 30]
+                          <RefreshCw className="w-3 h-3" /> Re-render Frame
                         </button>
                       </div>
                     </>
@@ -421,18 +448,18 @@ export default function StoryboardPage() {
 
                   <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                     <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
-                      {shot.shotNumber}[cite: 30]
+                      {shot.shotNumber}
                     </span>
                   </div>
 
                   <div className="absolute bottom-2 right-2 pointer-events-none flex items-center gap-1.5">
                     {shot.imageUrl && (
                       <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-[10px] text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                        <CheckCircle2 className="w-3 h-3" /> Studio Ready[cite: 31]
+                        <CheckCircle2 className="w-3 h-3" /> Studio Ready
                       </span>
                     )}
                     <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-800">
-                      {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}[cite: 31]
+                      {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}
                     </span>
                   </div>
                 </div>
@@ -440,13 +467,13 @@ export default function StoryboardPage() {
                 <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
                   <div>
                     <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                      {shot.displayTitle}[cite: 31]
+                      {shot.displayTitle}
                     </p>
                     <h3 className="text-sm font-bold text-white mb-1.5">
-                      {shot.shotType}[cite: 31]
+                      {shot.shotType}
                     </h3>
                     <p className="text-xs text-slate-300 leading-relaxed font-light line-clamp-2">
-                      "{shot.sceneSlug}"[cite: 32]
+                      "{shot.sceneSlug}"
                     </p>
                   </div>
 
@@ -463,15 +490,15 @@ export default function StoryboardPage() {
 
                   <div className="pt-2.5 border-t border-emerald-950/60 grid grid-cols-2 gap-2 text-[11px]">
                     <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                      <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>[cite: 32]
+                      <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>
                       <span className="text-slate-200 font-medium truncate block mt-0.5">
-                        {shot.lens}[cite: 32]
+                        {shot.lens}
                       </span>
                     </div>
                     <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                      <span className="text-slate-500 block text-[10px] uppercase">Movement</span>[cite: 32]
+                      <span className="text-slate-500 block text-[10px] uppercase">Movement</span>
                       <span className="text-slate-200 font-medium truncate block mt-0.5">
-                        {shot.cameraMovement}[cite: 32]
+                        {shot.cameraMovement}
                       </span>
                     </div>
                   </div>

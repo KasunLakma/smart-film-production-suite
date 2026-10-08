@@ -3,14 +3,22 @@ import { NextResponse } from "next/server";
 export const maxDuration = 60;
 
 function translateFullSinhalaScene(text: string, sceneNumber: number): string {
-    if (sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර/i.test(text)) {
-        return "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical flashlight";
-    } else if (sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න/i.test(text)) {
-        return "industrial sea harbor container docks, pouring rain, wet asphalt ground, black sedan parked, operative holding binoculars";
-    } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER/i.test(text)) {
-        return "underground high security bank archive vault, metallic locker deposit boxes, glowing holographic projection device displaying transfer complete";
-    } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග/i.test(text)) {
-        return "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and storm";
+    if (sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර|පර්යේෂණාගාර/i.test(text)) {
+        return "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
+    } else if (sceneNumber === 2 || /වරාය|තොටුපළ|දුරදක්න|කන්ටේනර්/i.test(text)) {
+        return "industrial sea harbor container docks, pouring heavy rain on wet asphalt, black sedan idling, operative holding military binoculars";
+    } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER|ලෝහමය/i.test(text)) {
+        return "underground high security bank archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
+    } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන|මාර්ග|අධිවේගී/i.test(text)) {
+        return "tactical armored transport vehicle speeding along wet highway road at night, headlights cutting mist and heavy rain";
+    } else if (/කාමර|නිවස|ගෙදර/i.test(text)) {
+        return "cinematic interior house room with warm dramatic moody lighting";
+    } else if (/පාර|වීදිය|නගර/i.test(text)) {
+        return "cinematic urban city street at dusk, wet pavement and ambient lighting";
+    } else if (/කැලෑ|වනය|ගස්/i.test(text)) {
+        return "atmospheric dense forest scene, mist hanging between trees, cinematic lighting";
+    } else if (/මුහුද|වෙරළ|වරාය/i.test(text)) {
+        return "coastal ocean shore, dramatic sky and moody atmosphere";
     }
 
     return "cinematic interior moody scene, atmospheric lighting, high contrast dramatic setup";
@@ -45,8 +53,10 @@ export async function POST(req: Request) {
                 visualSubject = "interior of black sedan moving at night, briefcase open with stacks of Euro currency, glowing encrypted tablet radar display";
             } else {
                 const cleanSlug = slugline.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
-                const cleanSynopsis = synopsis.slice(0, 160).replace(/\s+/g, " ");
-                visualSubject = `${cleanSlug}, ${cleanSynopsis}`;
+                const cleanSynopsis = synopsis.slice(0, 200).replace(/\s+/g, " ");
+                const propsInfo = props.length > 0 ? `, key props: ${props.join(", ")}` : "";
+                const charInfo = characters.length > 0 ? `, featuring ${characters.join(", ")}` : "";
+                visualSubject = `${cleanSlug}, ${cleanSynopsis}${propsInfo}${charInfo}`;
             }
         }
 
@@ -61,10 +71,8 @@ export async function POST(req: Request) {
 
         const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
-        const scriptMultiplier = isSinhala ? 777 : 333;
-        const seed = (sceneNumber * 999331 + (isWide ? 101 : 202) + scriptMultiplier) % 9999999;
-
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
+        const uniqueSeed = Math.floor(Math.random() * 9000000) + 1000000;
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${uniqueSeed}&nologo=true`;
 
         return NextResponse.json({
             success: true,
@@ -75,4 +83,4 @@ export async function POST(req: Request) {
         console.error("Storyboard API Error:", error);
         return NextResponse.json({ error: error.message || "Failed" }, { status: 500 });
     }
-}
+}
