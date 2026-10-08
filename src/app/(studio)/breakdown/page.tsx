@@ -108,7 +108,7 @@ export default function ScriptBreakdownPage() {
         const pageLines = textContent.items
           .map((item: any) => item.str || "")
           .filter((str: string) => str.trim().length > 0)
-          .join(" ");
+          .join(" \n");
         if (pageLines.trim()) {
           fullText += pageLines + "\n\n";
         }
@@ -118,7 +118,7 @@ export default function ScriptBreakdownPage() {
         return fullText;
       }
     } catch (err) {
-      console.warn("PDF extraction fallback triggered:", err);
+      console.warn("PDF extraction fallback:", err);
     }
 
     const buffer = await file.arrayBuffer();
@@ -126,59 +126,84 @@ export default function ScriptBreakdownPage() {
     return decoder.decode(buffer);
   };
 
-  // Pure clean parser matching thesis screenshot layout
+  // Robust Sequential Scene Parser (මුල සිට අග දක්වා සියලු Scenes වෙන් කිරීම)
   const parseScriptContent = (rawText: string): SceneEntity[] => {
     let cleanScript = rawText.replace(/\r\n/g, "\n").replace(/[ \t]+/g, " ").trim();
     const isSinhala = /[\u0D80-\u0DFF]/.test(cleanScript);
 
-    // 1. Strip cover metadata / title page noise
-    const firstSceneIdx = cleanScript.search(/(?:^|\n)\s*(?:SCENE\s*0?1\b|දර්ශනය\s*0?1\b|INT[\.\s\-]|EXT[\.\s\-]|අභ්‍යන්තර|බාහිර)/i);
-    if (firstSceneIdx !== -1) {
-      cleanScript = cleanScript.slice(firstSceneIdx).trim();
+    // 1. Cover metadata ඉවත් කිරීම
+    const coverKeywords = ["TITLE:", "WRITTEN BY:", "GENRE:"];
+    coverKeywords.forEach((kw) => {
+      const idx = cleanScript.indexOf(kw);
+      if (idx !== -1 && idx < 400) {
+        const endOfLine = cleanScript.indexOf("\n", idx);
+        if (endOfLine !== -1) {
+          cleanScript = cleanScript.slice(endOfLine).trim();
+        }
+      }
+    });
+
+    // 2. Scene Boundaries හඳුනාගැනීමේ Global Pattern (Line break නොමැති වුවද ක්‍රියාත්මක වේ)
+    const markerPattern = /(SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|\bINT[\.\s\-]+|\bEXT[\.\s\-]+|\bINT\/EXT[\.\s\-]+|\bඅභ්‍යන්තර[\.\s\-]+|\bබාහිර[\.\s\-]+)/gi;
+
+    // සියලු Scene ආරම්භ වන ස්ථාන සෙවීම
+    const matches: { index: number; text: string }[] = [];
+    let match;
+    while ((match = markerPattern.exec(cleanScript)) !== null) {
+      matches.push({ index: match.index, text: match[0] });
     }
 
-    // 2. Segment scenes by Slugline markers
-    const splitRegex = /(?=(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර))/gi;
-    let chunks: string[] = cleanScript.split(splitRegex).map((c) => c.trim()).filter((c) => c.length > 20);
+    let rawScenes: string[] = [];
 
-    if (chunks.length === 0) {
-      chunks = cleanScript.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 30);
+    if (matches.length > 0) {
+      for (let i = 0; i < matches.length; i++) {
+        const start = matches[i].index;
+        const end = i + 1 < matches.length ? matches[i + 1].index : cleanScript.length;
+        const sceneText = cleanScript.slice(start, end).trim();
+        if (sceneText.length > 25) {
+          rawScenes.push(sceneText);
+        }
+      }
+    } else {
+      // Markers හමු නොවූයේ නම් ඡේද අනුව වෙන් කිරීම
+      rawScenes = cleanScript.split(/\n\s*\n/).map((c) => c.trim()).filter((c) => c.length > 30);
+    }
+
+    if (rawScenes.length === 0) {
+      rawScenes = [cleanScript];
     }
 
     const propTokens = [
-      "GUN", "KNIFE", "PHONE", "CAR", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE", "GLASS", "MONEY", "KEY", "WATER", "COAT", "FAN", "BINOCULARS",
-      "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "ලිපිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය", "වීදුරුව", "මුදල්", "යතුර", "විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "හොලෝග්‍රැෆික් උපකරණය"
+      "GUN", "KNIFE", "PHONE", "CAR", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE", "GLASS", "MONEY", "KEY", "WATER", "COAT", "FAN", "BINOCULARS", "SCANNER", "COMPASS", "BRIEFCASE", "SEDAN",
+      "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "ලිපිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය", "වීදුරුව", "මුදල්", "යතුර", "විදුලි පන්දම", "ඩිජිටල් ස්කෑනරය", "හොලෝග්‍රැෆික් උපකරණය", "කණ්ණාඩිය"
     ];
 
-    return chunks.map((chunk, index) => {
+    return rawScenes.map((sceneBlock, index) => {
       const sceneNum = index + 1;
-      const lines = chunk.split("\n").map(l => l.trim()).filter(Boolean);
-      const firstLine = lines[0] || "";
 
-      const isExt = /EXT|බාහිර/i.test(firstLine) || /EXT|බාහිර/i.test(chunk);
-      const isNight = /NIGHT|රාත්‍රී|DARK|සන්ධ්‍යා|DAWN/i.test(firstLine) || /NIGHT|රාත්‍රී/i.test(chunk);
+      // Location & Time Type Detection
+      const isExt = /EXT|බාහිර/i.test(sceneBlock);
+      const isNight = /NIGHT|රාත්‍රී|DARK|සන්ධ්‍යා|DAWN/i.test(sceneBlock);
 
-      // Clean Heading
-      let heading = firstLine;
-      const match = firstLine.match(/(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|INT\.|EXT\.|අභ්‍යන්තර|බාහිර)[^\n]*/i);
-      if (match) {
-        heading = match[0].trim();
+      // Extract Proper Slugline
+      let slugline = "";
+      const slugMatch = sceneBlock.match(/(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|INT[\.\s\-]|EXT[\.\s\-]|අභ්‍යන්තර|බාහිර)(.*?)(?=(?:\.|\n|[A-Z]{3,}\s*\(|Dim|Cold|The|Elena|Marcus|කසුන්|නිමල්|$))/i);
+      if (slugMatch && slugMatch[0].length > 4) {
+        slugline = slugMatch[0].trim().replace(/^[:.\-\s]+/, "").toUpperCase();
+        if (!slugline.startsWith("SCENE") && !slugline.startsWith("දර්ශනය")) {
+          slugline = isSinhala
+            ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${slugline}`
+            : `SCENE ${String(sceneNum).padStart(2, "0")}: ${slugline}`;
+        }
       } else {
-        heading = isSinhala
+        slugline = isSinhala
           ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. බාහිර පසුතලය" : "INT. අභ්‍යන්තර පසුතලය"} - ${isNight ? "NIGHT / DAWN" : "DAY"}`
           : `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. LOCATION SEQUENCE" : "INT. LOCATION SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`;
       }
 
-      let slugline = heading.replace(/^TITLE:[^\n]*/gi, "").trim();
-      if (!slugline.toUpperCase().includes("SCENE") && !slugline.includes("දර්ශනය")) {
-        slugline = isSinhala
-          ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${slugline}`
-          : `SCENE ${String(sceneNum).padStart(2, "0")}: ${slugline}`;
-      }
-
-      // Characters
+      // Characters Extraction
       const characters: string[] = [];
-      const charMatches = chunk.match(/([A-Z\u0D80-\u0DFF]{2,20})(?=\s*[:\-])/g);
+      const charMatches = sceneBlock.match(/([A-Z\u0D80-\u0DFF]{2,20})(?=\s*[:\-\(])/g);
       if (charMatches) {
         charMatches.forEach((c) => {
           const name = c.trim();
@@ -190,27 +215,39 @@ export default function ScriptBreakdownPage() {
             !name.includes("INT") &&
             !name.includes("EXT") &&
             !name.includes("TITLE") &&
-            !name.includes("WRITTEN")
+            !name.includes("WRITTEN") &&
+            !name.includes("GENRE")
           ) {
             characters.push(name);
           }
         });
       }
       if (characters.length === 0) {
-        characters.push(isSinhala ? "කසුන්" : "ELENA");
-        if (chunk.includes("MARCUS") || chunk.includes("නිමල්")) {
-          characters.push(isSinhala ? "නිමල්" : "MARCUS");
-        }
+        if (/ELENA/i.test(sceneBlock)) characters.push("ELENA");
+        if (/MARCUS/i.test(sceneBlock)) characters.push("MARCUS");
+        if (/කසුන්/i.test(sceneBlock)) characters.push("කසුන්");
+        if (/නිමල්/i.test(sceneBlock)) characters.push("නිමල්");
+      }
+      if (characters.length === 0) {
+        characters.push(isSinhala ? "ප්‍රධාන චරිතය" : "LEAD ROLE");
       }
 
-      // Dialogues
+      // Dialogues Extraction
       const dialogues: DialogueItem[] = [];
+      const lines = sceneBlock.split(/\n|\.(?=[A-Z\u0D80-\u0DFF]{2,}\s*[:\-])/);
       lines.forEach((l) => {
         if (l.includes(":") || l.includes("-")) {
           const parts = l.split(/[:\-]/);
           const spk = parts[0].trim();
           const lineTxt = parts.slice(1).join(":").trim();
-          if (spk.length > 1 && spk.length < 20 && lineTxt.length > 2 && dialogues.length < 3 && !spk.includes("SCENE") && !spk.includes("TITLE")) {
+          if (
+            spk.length > 1 &&
+            spk.length < 25 &&
+            lineTxt.length > 2 &&
+            dialogues.length < 3 &&
+            !spk.toUpperCase().includes("SCENE") &&
+            !spk.toUpperCase().includes("TITLE")
+          ) {
             dialogues.push({
               speaker: spk,
               line: lineTxt.replace(/^["“”]|["“”]$/g, "")
@@ -219,34 +256,31 @@ export default function ScriptBreakdownPage() {
         }
       });
 
-      // Props
+      // Props Extraction
       const props: string[] = [];
       propTokens.forEach((p) => {
-        if (chunk.toUpperCase().includes(p.toUpperCase()) && !props.includes(p) && props.length < 4) {
+        if (sceneBlock.toUpperCase().includes(p.toUpperCase()) && !props.includes(p) && props.length < 4) {
           props.push(p);
         }
       });
       if (props.length === 0) {
-        props.push(isSinhala ? "විදුලි පන්දම" : "MASTER KEY");
-        props.push(isSinhala ? "ඩිජිටල් ස්කෑනරය" : "BRIEFCASE");
+        props.push(isSinhala ? "ප්‍රධාන පසුතල උපකරණ" : "KEY SCENE PROP");
       }
 
-      // Clean Synopsis Body
-      let bodyLines = lines.slice(1);
-      let synopsis = bodyLines
-        .filter(l => !l.startsWith("TITLE:") && !l.startsWith("WRITTEN BY:") && !l.startsWith("GENRE:"))
-        .join(" ")
+      // Clean Synopsis (Slugline සහ අනවශ්‍ය heading ඉවත් කළ පිරිසිදු විස්තරය)
+      let cleanSynopsis = sceneBlock
+        .replace(slugline, "")
+        .replace(/^(?:SCENE|දර්ශනය|INT\.|EXT\.)[^\n\.]*[\.\n]?/gi, "")
         .replace(/\s+/g, " ")
         .trim();
 
-      if (!synopsis || synopsis.length < 20) {
-        synopsis = chunk.replace(heading, "").replace(/\s+/g, " ").trim();
+      if (!cleanSynopsis || cleanSynopsis.length < 20) {
+        cleanSynopsis = sceneBlock.replace(/\s+/g, " ").slice(0, 240);
       }
-      if (synopsis.length > 260) {
-        synopsis = synopsis.slice(0, 260) + "...";
-      }
+      const synopsis = cleanSynopsis.length > 240 ? cleanSynopsis.slice(0, 240) + "..." : cleanSynopsis;
 
-      const visualPrompt = `Cinematic 16:9 movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic moody lighting" : "natural daylight"}, 35mm anamorphic, 8k resolution: ${slugline.replace(/[\u0D80-\u0DFF]/g, "film set")}.`;
+      // 100% English Visual Prompt for Storyboard
+      const visualPrompt = `Cinematic 16:9 movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic moody lighting, atmospheric shadows" : "bright natural day illumination"}, 35mm anamorphic frame, photorealistic 8k: ${slugline.replace(/[\u0D80-\u0DFF]/g, "film location")}.`;
 
       return {
         id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
@@ -472,7 +506,6 @@ export default function ScriptBreakdownPage() {
                   <p className="text-xs text-slate-400 max-w-xs mb-2">
                     Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and <strong className="text-slate-200">.TXT</strong>
                   </p>
-                  {/* .pdf, application/pdf සහ .txt නිවැරදිව ලබා දීමෙන් File Picker එකේදී නිවැරදිව filter වේ */}
                   <input
                     id="file-input-upload"
                     type="file"
