@@ -12,8 +12,7 @@ import {
   Palette,
   CheckCircle2,
   Trash2,
-  Download,
-  Camera
+  Download
 } from "lucide-react";
 
 interface StoryboardShot {
@@ -40,7 +39,7 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const STORAGE_KEY = `cine_storyboard_live_${artStyle}`;
+  const STORAGE_KEY = `cine_storyboard_api_${artStyle}`;
 
   const getSavedCache = (): Record<string, string> => {
     if (typeof window === "undefined") return {};
@@ -68,81 +67,53 @@ export default function StoryboardPage() {
     }
   };
 
-  // 100% English Cinematic Prompt Generator
-  const buildEnglishPrompt = (shot: StoryboardShot, isWide: boolean): string => {
-    const raw = `${shot.sceneSlug} ${shot.synopsis}`;
-    const isSinhala = /[\u0D80-\u0DFF]/.test(raw);
-    const isExt = /බාහිර|EXT/i.test(raw);
-    const isNight = /රාත්‍රී|NIGHT|DARK|DAWN/i.test(raw);
-
-    const loc = isSinhala
-      ? (isExt ? "exterior film set" : "interior moody room")
-      : shot.sceneSlug.replace(/SCENE\s*\d+[:.\-\s]*/i, "").trim();
-
-    const lighting = isNight ? "dramatic night shadows" : "cinematic day lighting";
-    const framing = isWide ? "wide establishing master, 35mm" : "medium close-up action, 50mm";
-    const style = artStyle === "sketch_bw" ? "StudioBinder charcoal sketch, monochrome line art" : "graphic novel comic illustration, dynamic ink colors";
-
-    return `${loc}, ${framing}, ${lighting}, ${style}, 16:9 cinematic storyboard`;
-  };
-
-  // High-Speed Guaranteed Frame Renderer
-  const renderFrameNow = async (shot: StoryboardShot) => {
+  // Dedicated Backend API Call හරහා Image එක Fetch කිරීම
+  const generateFrameViaApi = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
-    const prompt = buildEnglishPrompt(shot, isWide);
 
     setShots((prev) =>
-      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true, visualPrompt: prompt } : s))
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
     );
 
-    const seed = Math.floor(Math.random() * 900000) + 1000;
-    const aiUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true`;
+    try {
+      const res = await fetch("/api/storyboard/generate", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          slugline: shot.sceneSlug,
+          isWide,
+          artStyle,
+          synopsis: shot.synopsis
+        })
+      });
 
-    // High-Resolution Cinematic SVG Fallback (Network Failures වලදී පවා 100% ක් පෙනේ)
-    const isBw = artStyle === "sketch_bw";
-    const bgGrad = isBw ? "#18181b" : "#0f172a";
-    const strokeCol = isBw ? "#e4e4e7" : "#38bdf8";
-
-    const svgFallback = `data:image/svg+xml;utf8,<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
-      <rect width="1280" height="720" fill="${bgGrad}"/>
-      <line x1="100" y1="580" x2="1180" y2="580" stroke="${strokeCol}" stroke-width="2" stroke-dasharray="10 5"/>
-      <rect x="240" y="220" width="800" height="340" rx="16" fill="none" stroke="${strokeCol}" stroke-width="3"/>
-      <circle cx="640" cy="340" r="60" fill="none" stroke="${strokeCol}" stroke-width="3"/>
-      <path d="M580 500 C580 430, 700 430, 700 500" fill="none" stroke="${strokeCol}" stroke-width="3"/>
-      <text x="640" y="640" font-family="monospace" font-size="24" fill="${strokeCol}" text-anchor="middle" font-weight="bold">${shot.shotNumber} • ${shot.shotType}</text>
-    </svg>`;
-
-    const img = new Image();
-    img.src = aiUrl;
-
-    const timer = setTimeout(() => {
-      saveToCache(shot.id, svgFallback);
+      const data = await res.json();
+      if (data.success && data.imageUrl) {
+        saveToCache(shot.id, data.imageUrl);
+        setShots((prev) =>
+          prev.map((s) =>
+            s.id === shot.id
+              ? {
+                ...s,
+                imageUrl: data.imageUrl,
+                visualPrompt: data.prompt,
+                isGenerating: false
+              }
+              : s
+          )
+        );
+        return;
+      } else {
+        throw new Error(data.error || "Generation returned empty response");
+      }
+    } catch (err: any) {
+      console.error("Frame generation failed:", err);
+      alert(`Image Generation Failed: ${err.message}`);
+    } finally {
       setShots((prev) =>
-        prev.map((s) =>
-          s.id === shot.id ? { ...s, imageUrl: svgFallback, isGenerating: false, visualPrompt: prompt } : s
-        )
+        prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: false } : s))
       );
-    }, 4500);
-
-    img.onload = () => {
-      clearTimeout(timer);
-      saveToCache(shot.id, aiUrl);
-      setShots((prev) =>
-        prev.map((s) =>
-          s.id === shot.id ? { ...s, imageUrl: aiUrl, isGenerating: false, visualPrompt: prompt } : s
-        )
-      );
-    };
-
-    img.onerror = () => {
-      clearTimeout(timer);
-      saveToCache(shot.id, svgFallback);
-      setShots((prev) =>
-        prev.map((s) =>
-          s.id === shot.id ? { ...s, imageUrl: svgFallback, isGenerating: false, visualPrompt: prompt } : s
-        )
-      );
-    };
+    }
   };
 
   useEffect(() => {
@@ -212,15 +183,16 @@ export default function StoryboardPage() {
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     clearAllCache();
-    const targetShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
+    const targetShots =
+      filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      renderFrameNow(shot);
-      await new Promise((r) => setTimeout(r, 300));
+      await generateFrameViaApi(shot);
     }
     setIsGeneratingAll(false);
   };
 
-  const filteredShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
+  const filteredShots =
+    filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
 
   return (
     <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 font-sans">
@@ -325,7 +297,7 @@ export default function StoryboardPage() {
         </div>
       </div>
 
-      {/* Grid */}
+      {/* Storyboard Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
         {filteredShots.map((shot) => (
           <div
@@ -336,7 +308,8 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...[cite: 33]</span>
+                  <span className="text-xs font-medium tracking-wide">AI Processing via Dedicated API...</span>
+                  <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
@@ -354,7 +327,7 @@ export default function StoryboardPage() {
                       <Download className="w-3 h-3" /> Download
                     </a>
                     <button
-                      onClick={() => renderFrameNow(shot)}
+                      onClick={() => generateFrameViaApi(shot)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
                       <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 34]
@@ -364,7 +337,7 @@ export default function StoryboardPage() {
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
                   <button
-                    onClick={() => renderFrameNow(shot)}
+                    onClick={() => generateFrameViaApi(shot)}
                     className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Generate Frame
@@ -407,7 +380,7 @@ export default function StoryboardPage() {
               {shot.visualPrompt && (
                 <div className="p-2.5 rounded-xl bg-[#030704] border border-emerald-950/80 space-y-1">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
-                    <Sparkles className="w-3 h-3" /> 100% English Cinematic Prompt
+                    <Sparkles className="w-3 h-3" /> 100% English Visual Prompt
                   </div>
                   <p className="text-[11px] text-slate-300 font-mono leading-relaxed line-clamp-2">
                     {shot.visualPrompt}

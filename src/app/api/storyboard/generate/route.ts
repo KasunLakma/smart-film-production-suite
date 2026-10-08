@@ -5,34 +5,50 @@ export const maxDuration = 60;
 export async function POST(req: Request) {
     try {
         const body = await req.json();
-        const { slugline = "", isWide = true, artStyle = "sketch_bw" } = body;
+        const { slugline = "", isWide = true, artStyle = "sketch_bw", synopsis = "" } = body;
 
-        // සිංහල අකුරු ඉවත් කර පිරිසිදු cinematic prompt එකක් සෑදීම
-        let cleanLocation = slugline.replace(/[\u0D80-\u0DFF]/g, "film location scene").trim();
-        if (!cleanLocation || cleanLocation.length < 5) {
-            cleanLocation = "dramatic cinematic interior sequence, moody lighting";
+        // 1. භාෂාව හඳුනාගෙන 100% Cinematic English Visual Prompt එකක් සෑදීම
+        const fullText = `${slugline} ${synopsis}`;
+        const isSinhala = /[\u0D80-\u0DFF]/.test(fullText);
+
+        let locationEnglish = "";
+        let lightingEnglish = "";
+
+        if (isSinhala) {
+            const isExt = /බාහිර|EXT/i.test(fullText);
+            const isNight = /රාත්‍රී|NIGHT|අඳුරු|සන්ධ්‍යා|DARK/i.test(fullText);
+
+            locationEnglish = isExt ? "exterior film set cinematic sequence" : "interior moody room scene";
+            lightingEnglish = isNight ? "dramatic night lighting, deep shadows" : "bright cinematic day illumination";
+        } else {
+            locationEnglish = slugline.replace(/SCENE\s*\d+[:.\-\s]*/i, "").trim();
+            lightingEnglish = /NIGHT/i.test(slugline) ? "dramatic night shadows" : "cinematic day lighting";
         }
 
-        const stylePrompt =
+        const framingEnglish = isWide
+            ? "wide establishing cinematic master shot, 35mm anamorphic frame"
+            : "medium close-up dramatic action framing, character focus, 50mm lens";
+
+        const styleEnglish =
             artStyle === "sketch_bw"
-                ? "StudioBinder storyboard sketch, pencil line drawing, black and white charcoal shading, detailed storyboard panel, dynamic angle, high contrast, monochrome artwork"
-                : "graphic novel storyboard panel, rich ink outline, comic book color palette, dramatic cinematic lighting, 35mm film illustration";
+                ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome drawing, high contrast storyboard panel"
+                : "graphic novel storyboard panel, bold ink outlines, comic book color palette, vivid cinematic lighting, 35mm film illustration";
 
-        const framing = isWide
-            ? "wide establishing master shot, cinematic composition, 16:9 widescreen aspect ratio"
-            : "medium close-up dramatic action framing, character focus, 16:9 widescreen aspect ratio";
+        const prompt = `${locationEnglish}, ${framingEnglish}, ${lightingEnglish}, ${styleEnglish}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
-        const fullPrompt = `${cleanLocation}, ${framing}, ${stylePrompt}, highly detailed, cinematic masterpiece`;
-        const encoded = encodeURIComponent(fullPrompt);
-        const seed = Math.floor(Math.random() * 9999999);
+        // 2. Real Dedicated AI Image Generator Endpoint Call
+        const seed = Math.floor(Math.random() * 9000000) + 100000;
+        const directApiUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
 
-        const targetUrl = `https://image.pollinations.ai/prompt/${encoded}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
+        // Server-side fetch image buffer
+        const imgRes = await fetch(directApiUrl, {
+            headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+            }
+        });
 
-        // Backend එක හරහා image එක download කර base64 දත්තයක් ලෙස frontend එකට යැවීම (CORS / Adblock bypass)
-        const imgRes = await fetch(targetUrl);
         if (!imgRes.ok) {
-            // Fallback direct url
-            return NextResponse.json({ success: true, imageUrl: targetUrl });
+            throw new Error(`AI Image Generation failed with status: ${imgRes.status}`);
         }
 
         const arrayBuffer = await imgRes.arrayBuffer();
@@ -42,17 +58,14 @@ export async function POST(req: Request) {
 
         return NextResponse.json({
             success: true,
-            imageUrl: dataUri
+            imageUrl: dataUri,
+            prompt
         });
     } catch (error: any) {
-        console.error("Storyboard API Error:", error);
-        // Failure fallback
+        console.error("Storyboard Dedicated API Error:", error);
         return NextResponse.json(
-            {
-                success: true,
-                imageUrl: `https://picsum.photos/seed/${Math.floor(Math.random() * 1000)}/1280/720`
-            },
-            { status: 200 }
+            { error: error.message || "Image Generation Error" },
+            { status: 500 }
         );
     }
 }
