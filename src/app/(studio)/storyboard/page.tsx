@@ -36,7 +36,7 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const STORAGE_KEY = `cine_storyboard_v4_${artStyle}`;
+  const STORAGE_KEY = `cine_storyboard_v5_${artStyle}`;
 
   const getSavedCache = (): Record<string, string> => {
     if (typeof window === "undefined") return {};
@@ -64,13 +64,11 @@ export default function StoryboardPage() {
     }
   };
 
-  // ක්ෂණිකව නව Cinematic Frame එකක් සාදන function එක
-  const fetchAiFrame = async (shot: StoryboardShot, forceRefresh: boolean = false) => {
+  const fetchAiFrame = async (shot: StoryboardShot, force: boolean = false) => {
     const isWide = shot.id.endsWith("-A");
     const cached = getSavedCache()[shot.id];
 
-    // Force refresh නොවන විට පමණක් cache එකෙන් ලබා ගැනීම
-    if (cached && !forceRefresh) {
+    if (cached && !force) {
       setShots((prev) =>
         prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s))
       );
@@ -82,7 +80,6 @@ export default function StoryboardPage() {
     );
 
     try {
-      // 1. API route එක විමසීම
       const res = await fetch("/api/storyboard/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -90,7 +87,7 @@ export default function StoryboardPage() {
       });
 
       const data = await res.json();
-      if (data.success && data.imageUrl) {
+      if (data.imageUrl) {
         saveToCache(shot.id, data.imageUrl);
         setShots((prev) =>
           prev.map((s) =>
@@ -99,27 +96,19 @@ export default function StoryboardPage() {
         );
         return;
       }
-    } catch (e) {
-      console.warn("Backend API route failed, using client direct generation:", e);
+    } catch (err) {
+      console.error("Frame generation failed:", err);
     }
 
-    // 2. Fallback: Client-side Direct High-Res Cinematic URL Generation
-    const cleanLocation = shot.sceneSlug.replace(/[\u0D80-\u0DFF]/g, "film set").trim();
-    const stylePrompt =
-      artStyle === "sketch_bw"
-        ? "StudioBinder storyboard sketch, black and white pencil drawing, detailed line art, charcoal shading, 16:9 anamorphic frame, cinematic storyboard panel"
-        : "graphic novel storyboard, comic book color palette, ink outline illustration, dramatic lighting, 16:9 movie still";
-    const framing = isWide ? "wide establishing master shot" : "medium close-up dramatic angle";
+    // Direct Client fallback image
+    const fallbackSeed = Math.floor(Math.random() * 999999);
+    const directUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(
+      shot.sceneSlug + ", cinematic film storyboard"
+    )}?width=1280&height=720&seed=${fallbackSeed}&nologo=true`;
 
-    const promptText = encodeURIComponent(`${cleanLocation}, ${framing}, ${stylePrompt}, 8k resolution, cinematic composition`);
-    const seed = Math.floor(Math.random() * 9999999);
-    const directImageUrl = `https://image.pollinations.ai/prompt/${promptText}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
-
-    saveToCache(shot.id, directImageUrl);
+    saveToCache(shot.id, directUrl);
     setShots((prev) =>
-      prev.map((s) =>
-        s.id === shot.id ? { ...s, imageUrl: directImageUrl, isGenerating: false } : s
-      )
+      prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: directUrl, isGenerating: false } : s))
     );
   };
 
@@ -321,13 +310,10 @@ export default function StoryboardPage() {
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
-                    loading="lazy"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
                     <a
                       href={shot.imageUrl}
-                      target="_blank"
-                      rel="noreferrer"
                       download={`${shot.shotNumber}.jpg`}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-white hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-white/20"
                     >
@@ -350,7 +336,7 @@ export default function StoryboardPage() {
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
                   <button
                     onClick={() => fetchAiFrame(shot, true)}
-                    className="px-4 py-2 rounded-xl bg-emerald-500/20 hover:bg-emerald-500/30 border border-emerald-500/30 text-emerald-400 text-xs font-semibold flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
                   >
                     <Wand2 className="w-3.5 h-3.5" /> Generate Frame
                   </button>
