@@ -25,7 +25,7 @@ STRICT RULES:
 1. Detect whether the script is written in Sinhala or English.
 2. If Sinhala: Output sluglines, synopsis, characters, and dialogues purely in authentic Sinhala.
 3. If English: Output sluglines, synopsis, characters, and dialogues purely in authentic English.
-4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g., "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
+4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g. "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
 5. Parse all genuine sequential scenes found in the text.
 
 Return ONLY a valid JSON array conforming to this schema (no markdown, no backticks, only pure JSON):
@@ -49,31 +49,9 @@ Screenplay Text:
 ${scriptSlice}
 `;
 
-        // 1. ඔබගේ API Key එකට අදාළව Google හි සක්‍රීයව ඇති model එක ස්වයංක්‍රීයව හඳුනා ගැනීම (Auto Model Discovery)
-        let selectedModel = "gemini-2.5-flash";
-        try {
-            const modelsListRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
-            if (modelsListRes.ok) {
-                const modelsData = await modelsListRes.json();
-                const available = (modelsData.models || [])
-                    .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
-                    .map((m: any) => m.name.replace("models/", ""));
+        // Google විසින් නිර්දේශ කරන නිල gemini-3.0-flash endpoint එක
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${apiKey}`;
 
-                // GenerateContent සහය දක්වන ප්‍රශස්ත flash model එකක් තෝරා ගැනීම
-                const preferred = available.find((m: string) => m.includes("2.5-flash") || m.includes("2.0-flash") || m.includes("flash"));
-                if (preferred) {
-                    selectedModel = preferred;
-                } else if (available.length > 0) {
-                    selectedModel = available[0];
-                }
-            }
-        } catch {
-            // Fallback default
-            selectedModel = "gemini-2.5-flash";
-        }
-
-        // 2. තෝරාගත් සක්‍රීය model එකට prompt එක යැවීම
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
         const apiRes = await fetch(apiUrl, {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -90,9 +68,9 @@ ${scriptSlice}
         });
 
         if (!apiRes.ok) {
-            const errText = await apiRes.text();
-            console.error(`Gemini API Error with model ${selectedModel}:`, errText);
-            throw new Error(`Google API Error (${selectedModel}): ${errText}`);
+            const errDetail = await apiRes.text();
+            console.error("Gemini 3.0 Flash Error:", errDetail);
+            throw new Error(`Google API Error: ${apiRes.status} - ${errDetail}`);
         }
 
         const resJson = await apiRes.json();
