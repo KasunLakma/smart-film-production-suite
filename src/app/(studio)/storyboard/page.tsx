@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal,
@@ -41,10 +41,10 @@ export default function StoryboardPage() {
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
   const [activeScriptId, setActiveScriptId] = useState("default");
 
-  const STORAGE_KEY = `cine_sb_${activeScriptId}_${artStyle}`;
-  const isQueueRunning = useRef(false);
+  // Script එක සහ Art Style එක අනුව Persistent Cache එක
+  const STORAGE_KEY = `cine_sb_manual_${activeScriptId}_${artStyle}`;
 
-  const getSavedCache = (key = STORAGE_KEY): Record<string, string> => {
+  const getSavedCache = (key = STORAGE_KEY): Record<string, { url: string; prompt: string }> => {
     if (typeof window === "undefined") return {};
     try {
       const saved = localStorage.getItem(key);
@@ -54,11 +54,11 @@ export default function StoryboardPage() {
     }
   };
 
-  const saveToCache = (shotId: string, url: string) => {
+  const saveToCache = (shotId: string, url: string, prompt: string) => {
     if (typeof window === "undefined") return;
     try {
       const current = getSavedCache();
-      current[shotId] = url;
+      current[shotId] = { url, prompt };
       localStorage.setItem(STORAGE_KEY, JSON.stringify(current));
     } catch { }
   };
@@ -70,16 +70,9 @@ export default function StoryboardPage() {
     }
   };
 
-  const fetchSceneSpecificFrame = async (shot: StoryboardShot) => {
+  // පරිශීලකයා Generate Frame බටන් එක ක්ලික් කළ විට පමණක් ක්‍රියාත්මක වේ (Manual Only)
+  const handleGenerateFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
-    const cached = getSavedCache()[shot.id];
-
-    if (cached) {
-      setShots((prev) =>
-        prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: cached, isGenerating: false } : s))
-      );
-      return;
-    }
 
     setShots((prev) =>
       prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s))
@@ -102,7 +95,7 @@ export default function StoryboardPage() {
 
       const data = await res.json();
       if (data.success && data.imageUrl) {
-        saveToCache(shot.id, data.imageUrl);
+        saveToCache(shot.id, data.imageUrl, data.prompt);
         setShots((prev) =>
           prev.map((s) =>
             s.id === shot.id
@@ -118,7 +111,7 @@ export default function StoryboardPage() {
         return;
       }
     } catch (e) {
-      console.error("Frame generation request failed:", e);
+      console.error("Manual frame generation failed:", e);
     }
 
     setShots((prev) =>
@@ -126,22 +119,7 @@ export default function StoryboardPage() {
     );
   };
 
-  // පින්තූරය load වීම fail වුවහොත් ක්ෂණිකව retry කරන handler එක
-  const handleImageError = (shot: StoryboardShot) => {
-    const isWide = shot.id.endsWith("-A");
-    const newSeed = Math.floor(Math.random() * 899999) + 100000;
-    const fallbackUrl = shot.visualPrompt
-      ? `https://image.pollinations.ai/prompt/${encodeURIComponent(shot.visualPrompt)}?width=1280&height=720&seed=${newSeed}&nologo=true`
-      : "";
-
-    if (fallbackUrl) {
-      saveToCache(shot.id, fallbackUrl);
-      setShots((prev) =>
-        prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: fallbackUrl } : s))
-      );
-    }
-  };
-
+  // Initial Load - දර්ශන කියවා ගැනීම සහ තමන් අතින් Generate කර ඇති පින්තූර පමණක් පෙන්වීම
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
@@ -153,12 +131,13 @@ export default function StoryboardPage() {
         try {
           const parsed = JSON.parse(storedScenes);
           if (Array.isArray(parsed) && parsed.length > 0) {
+            // සිංහලද ඉංග්‍රීසිද අනුව Script එක තීරණය කිරීම
             const allText = parsed.map((s: any) => `${s.slugline} ${s.synopsis}`).join(" ");
             const isSinhala = /[\u0D80-\u0DFF]/.test(allText);
             const scriptId = isSinhala ? "sinhala_script" : "english_script";
             setActiveScriptId(scriptId);
 
-            const dynamicKey = `cine_sb_${scriptId}_${artStyle}`;
+            const dynamicKey = `cine_sb_manual_${scriptId}_${artStyle}`;
             const cached = getSavedCache(dynamicKey);
 
             setSceneList(parsed.map((s: any) => ({ id: s.id, slugline: s.slugline })));
@@ -184,7 +163,8 @@ export default function StoryboardPage() {
                 characters: scene.characters || [],
                 props: scene.props || [],
                 isGenerating: false,
-                imageUrl: cached[idA] || ""
+                imageUrl: cached[idA]?.url || "",
+                visualPrompt: cached[idA]?.prompt || ""
               });
 
               newShots.push({
@@ -201,49 +181,37 @@ export default function StoryboardPage() {
                 characters: scene.characters || [],
                 props: scene.props || [],
                 isGenerating: false,
-                imageUrl: cached[idB] || ""
+                imageUrl: cached[idB]?.url || "",
+                visualPrompt: cached[idB]?.prompt || ""
               });
             });
 
             setShots(newShots);
             setFilterScene(activeFilter);
+          } else {
+            setShots([]);
+            setSceneList([]);
           }
         } catch (e) {
           console.error(e);
         }
+      } else {
+        setShots([]);
+        setSceneList([]);
       }
     }
   }, [artStyle]);
 
-  useEffect(() => {
-    if (shots.length === 0 || isQueueRunning.current) return;
-
-    const currentShots =
-      filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
-    const pending = currentShots.filter((s) => !s.imageUrl && !s.isGenerating);
-    if (pending.length === 0) return;
-
-    isQueueRunning.current = true;
-
-    const runQueue = async () => {
-      for (const item of pending) {
-        await fetchSceneSpecificFrame(item);
-        await new Promise((r) => setTimeout(r, 700));
-      }
-      isQueueRunning.current = false;
-    };
-
-    runQueue();
-  }, [shots, filterScene]);
-
+  // සියලුම Frames එකවර generate කිරීමට අවශ්‍ය වූ විට පමණක්
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
-    clearAllCache();
     const targetShots =
       filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      await fetchSceneSpecificFrame(shot);
-      await new Promise((r) => setTimeout(r, 800));
+      if (!shot.imageUrl) {
+        await handleGenerateFrame(shot);
+        await new Promise((r) => setTimeout(r, 600));
+      }
     }
     setIsGeneratingAll(false);
   };
@@ -263,7 +231,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots එකින් එක Render වේ[cite: 27].
+            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization (Manual Trigger Mode)[cite: 25].
           </p>
         </div>
 
@@ -272,7 +240,7 @@ export default function StoryboardPage() {
             href="/breakdown"
             className="px-4 py-2.5 rounded-xl bg-[#09130e] hover:bg-[#0e1d15] border border-emerald-950 text-slate-300 text-xs font-semibold transition-all flex items-center gap-2"
           >
-            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script[cite: 27]
+            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script[cite: 25]
           </Link>
           <button
             onClick={clearAllCache}
@@ -288,11 +256,11 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Rendering All Panels...[cite: 28]
+                <Loader2 className="w-4 h-4 animate-spin" /> Rendering Panels...[cite: 26]
               </>
             ) : (
               <>
-                <Wand2 className="w-4 h-4" /> Synthesize All Frames[cite: 28]
+                <Wand2 className="w-4 h-4" /> Synthesize All Frames[cite: 26]
               </>
             )}
           </button>
@@ -303,7 +271,7 @@ export default function StoryboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:[cite: 28, 29]
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:[cite: 27]
           </span>
           <button
             onClick={() => setFilterScene("ALL")}
@@ -312,7 +280,7 @@ export default function StoryboardPage() {
                 : "bg-[#0e1d15] text-slate-300 hover:text-white"
               }`}
           >
-            All Sequences ({shots.length})[cite: 29]
+            All Sequences ({shots.length})[cite: 27]
           </button>
           {sceneList.map((scn) => (
             <button
@@ -323,7 +291,7 @@ export default function StoryboardPage() {
                   : "bg-[#0e1d15] text-slate-300 hover:text-white"
                 }`}
             >
-              {scn.id}[cite: 29]
+              {scn.id}[cite: 27]
             </button>
           ))}
         </div>
@@ -331,7 +299,7 @@ export default function StoryboardPage() {
         {/* Style Selector */}
         <div className="flex items-center gap-2 bg-[#050607] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
-            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:[cite: 29]
+            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:[cite: 28]
           </span>
           <button
             onClick={() => setArtStyle("sketch_bw")}
@@ -340,7 +308,7 @@ export default function StoryboardPage() {
                 : "text-slate-400 hover:text-white"
               }`}
           >
-            StudioBinder (B&W Sketch)[cite: 29]
+            StudioBinder (B&W Sketch)[cite: 28]
           </button>
           <button
             onClick={() => setArtStyle("graphic_novel")}
@@ -349,7 +317,7 @@ export default function StoryboardPage() {
                 : "text-slate-400 hover:text-white"
               }`}
           >
-            Graphic Novel (Color)[cite: 30]
+            Graphic Novel (Color)[cite: 28]
           </button>
         </div>
       </div>
@@ -366,10 +334,10 @@ export default function StoryboardPage() {
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
                   <span className="text-xs font-medium tracking-wide">
-                    Synthesizing Scene-Specific Frame...[cite: 31]
+                    Synthesizing Scene-Specific Frame...[cite: 29]
                   </span>
                   <span className="text-[11px] text-slate-400 max-w-xs truncate">
-                    {shot.sceneSlug}[cite: 31]
+                    {shot.sceneSlug}[cite: 29]
                   </span>
                 </div>
               ) : shot.imageUrl ? (
@@ -379,7 +347,6 @@ export default function StoryboardPage() {
                     alt={shot.shotNumber}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                     loading="lazy"
-                    onError={() => handleImageError(shot)}
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-between p-3">
                     <a
@@ -387,42 +354,42 @@ export default function StoryboardPage() {
                       download={`${shot.shotNumber}.jpg`}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-white hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-white/20"
                     >
-                      <Download className="w-3 h-3" /> Download[cite: 31]
+                      <Download className="w-3 h-3" /> Download[cite: 30]
                     </a>
                     <button
-                      onClick={() => {
-                        const cache = getSavedCache();
-                        delete cache[shot.id];
-                        localStorage.setItem(STORAGE_KEY, JSON.stringify(cache));
-                        fetchSceneSpecificFrame(shot);
-                      }}
+                      onClick={() => handleGenerateFrame(shot)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 32]
+                      <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 30]
                     </button>
                   </div>
                 </>
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
-                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500/40 mb-2" />
-                  <span className="text-xs text-slate-400">Queueing Panel Render...[cite: 32]</span>
+                  <button
+                    onClick={() => handleGenerateFrame(shot)}
+                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
+                  >
+                    <Wand2 className="w-3.5 h-3.5" /> Generate Frame
+                  </button>
+                  <span className="text-[11px] text-slate-500 mt-2">Click to render this 16:9 shot</span>
                 </div>
               )}
 
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
-                  {shot.shotNumber}[cite: 32]
+                  {shot.shotNumber}[cite: 30]
                 </span>
               </div>
 
               <div className="absolute bottom-2 right-2 pointer-events-none flex items-center gap-1.5">
                 {shot.imageUrl && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-[10px] text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Studio Ready[cite: 33]
+                    <CheckCircle2 className="w-3 h-3" /> Studio Ready
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-800">
-                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}[cite: 33]
+                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}[cite: 31]
                 </span>
               </div>
             </div>
@@ -430,13 +397,13 @@ export default function StoryboardPage() {
             <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                  {shot.displayTitle}[cite: 33]
+                  {shot.displayTitle}[cite: 31]
                 </p>
                 <h3 className="text-sm font-bold text-white mb-1.5">
-                  {shot.shotType}[cite: 33]
+                  {shot.shotType}[cite: 31]
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed font-light line-clamp-2">
-                  "{shot.sceneSlug}"[cite: 33]
+                  "{shot.sceneSlug}"[cite: 32]
                 </p>
               </div>
 
@@ -453,15 +420,15 @@ export default function StoryboardPage() {
 
               <div className="pt-2.5 border-t border-emerald-950/60 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>[cite: 34]
+                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>[cite: 32]
                   <span className="text-slate-200 font-medium truncate block mt-0.5">
-                    {shot.lens}[cite: 34]
+                    {shot.lens}[cite: 32]
                   </span>
                 </div>
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>[cite: 34]
+                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>[cite: 32]
                   <span className="text-slate-200 font-medium truncate block mt-0.5">
-                    {shot.cameraMovement}[cite: 34]
+                    {shot.cameraMovement}[cite: 32]
                   </span>
                 </div>
               </div>
