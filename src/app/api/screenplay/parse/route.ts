@@ -16,7 +16,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය." }, { status: 400 });
         }
 
-        const scriptSlice = rawText.slice(0, 35000);
+        const scriptSlice = rawText.slice(0, 30000);
 
         const prompt = `
 You are an expert film pre-production assistant. Analyze the following screenplay text and break it down into sequential scenes.
@@ -49,32 +49,49 @@ Screenplay Text:
 ${scriptSlice}
 `;
 
-        // Direct Google REST API (v1 / v1beta endpoints bypass all SDK lookup bugs)
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
+        // Google Generative Language v1 සහ v1beta endpoints සඳහා වලංගු models waterfall
+        const endpointsToTry = [
+            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
+            `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`
+        ];
 
-        const apiRes = await fetch(apiUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-                contents: [
-                    {
-                        parts: [{ text: prompt }]
-                    }
-                ],
-                generationConfig: {
-                    responseMimeType: "application/json"
+        let responseJson: any = null;
+        let lastErrorMsg = "";
+
+        for (const endpoint of endpointsToTry) {
+            try {
+                const res = await fetch(endpoint, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({
+                        contents: [
+                            {
+                                parts: [{ text: prompt }]
+                            }
+                        ]
+                    })
+                });
+
+                if (res.ok) {
+                    responseJson = await res.json();
+                    break;
+                } else {
+                    const errDetail = await res.text();
+                    lastErrorMsg = errDetail;
+                    console.warn(`Endpoint failed (${endpoint}):`, errDetail);
                 }
-            })
-        });
-
-        if (!apiRes.ok) {
-            const errText = await apiRes.text();
-            console.error("Gemini REST API Error:", errText);
-            throw new Error(`Google API Error: ${apiRes.status} - ${errText}`);
+            } catch (err: any) {
+                lastErrorMsg = err.message;
+            }
         }
 
-        const resJson = await apiRes.json();
-        const rawCandidate = resJson.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        if (!responseJson) {
+            throw new Error(`Google API සමඟ සම්බන්ධ විය නොහැකි විය: ${lastErrorMsg}`);
+        }
+
+        const rawCandidate = responseJson.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
         const cleanedJson = rawCandidate.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
         const parsedScenes = JSON.parse(cleanedJson);
 
