@@ -16,7 +16,7 @@ export async function POST(req: Request) {
             return NextResponse.json({ error: "පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය." }, { status: 400 });
         }
 
-        const scriptSlice = rawText.slice(0, 30000);
+        const scriptSlice = rawText.slice(0, 35000);
 
         const prompt = `
 You are an expert film pre-production assistant. Analyze the following screenplay text and break it down into sequential scenes.
@@ -49,49 +49,54 @@ Screenplay Text:
 ${scriptSlice}
 `;
 
-        // Google Generative Language v1 සහ v1beta endpoints සඳහා වලංගු models waterfall
-        const endpointsToTry = [
-            `https://generativelanguage.googleapis.com/v1/models/gemini-1.5-flash:generateContent?key=${apiKey}`,
-            `https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key=${apiKey}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-pro:generateContent?key=${apiKey}`,
-            `https://generativelanguage.googleapis.com/v1beta/models/gemini-pro:generateContent?key=${apiKey}`
-        ];
+        // 1. ඔබගේ API Key එකට අදාළව Google හි සක්‍රීයව ඇති model එක ස්වයංක්‍රීයව හඳුනා ගැනීම (Auto Model Discovery)
+        let selectedModel = "gemini-2.5-flash";
+        try {
+            const modelsListRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+            if (modelsListRes.ok) {
+                const modelsData = await modelsListRes.json();
+                const available = (modelsData.models || [])
+                    .filter((m: any) => m.supportedGenerationMethods?.includes("generateContent"))
+                    .map((m: any) => m.name.replace("models/", ""));
 
-        let responseJson: any = null;
-        let lastErrorMsg = "";
-
-        for (const endpoint of endpointsToTry) {
-            try {
-                const res = await fetch(endpoint, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        contents: [
-                            {
-                                parts: [{ text: prompt }]
-                            }
-                        ]
-                    })
-                });
-
-                if (res.ok) {
-                    responseJson = await res.json();
-                    break;
-                } else {
-                    const errDetail = await res.text();
-                    lastErrorMsg = errDetail;
-                    console.warn(`Endpoint failed (${endpoint}):`, errDetail);
+                // GenerateContent සහය දක්වන ප්‍රශස්ත flash model එකක් තෝරා ගැනීම
+                const preferred = available.find((m: string) => m.includes("2.5-flash") || m.includes("2.0-flash") || m.includes("flash"));
+                if (preferred) {
+                    selectedModel = preferred;
+                } else if (available.length > 0) {
+                    selectedModel = available[0];
                 }
-            } catch (err: any) {
-                lastErrorMsg = err.message;
             }
+        } catch {
+            // Fallback default
+            selectedModel = "gemini-2.5-flash";
         }
 
-        if (!responseJson) {
-            throw new Error(`Google API සමඟ සම්බන්ධ විය නොහැකි විය: ${lastErrorMsg}`);
+        // 2. තෝරාගත් සක්‍රීය model එකට prompt එක යැවීම
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/${selectedModel}:generateContent?key=${apiKey}`;
+        const apiRes = await fetch(apiUrl, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                contents: [
+                    {
+                        parts: [{ text: prompt }]
+                    }
+                ],
+                generationConfig: {
+                    responseMimeType: "application/json"
+                }
+            })
+        });
+
+        if (!apiRes.ok) {
+            const errText = await apiRes.text();
+            console.error(`Gemini API Error with model ${selectedModel}:`, errText);
+            throw new Error(`Google API Error (${selectedModel}): ${errText}`);
         }
 
-        const rawCandidate = responseJson.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
+        const resJson = await apiRes.json();
+        const rawCandidate = resJson.candidates?.[0]?.content?.parts?.[0]?.text || "[]";
         const cleanedJson = rawCandidate.replace(/^```json\s*/, "").replace(/\s*```$/, "").trim();
         const parsedScenes = JSON.parse(cleanedJson);
 
