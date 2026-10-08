@@ -9,10 +9,10 @@ export async function POST(req: Request) {
 
         let sceneSubject = "";
 
-        // Scene 01 (Screenshot 2373 හි තිබූ මුල් Lab / Conference Room Setup එක)
+        // Scene 01: Screenshot (2365 / 2373) හි තිබූ මුල් Lab / Meeting Room Setup එක
         if (/lab|research|tech|විද්‍යාගාර|තාක්ෂණ/i.test(text) || /scene[\s_-]*0?1/i.test(text)) {
             sceneSubject = isWide
-                ? "high tech cybernetics research laboratory interior, large dark metallic conference table in center, ceiling linear strip lights glowing, illuminated server racks in background, wide architectural perspective"
+                ? "high tech cybernetics research laboratory interior, illuminated computer server arrays, large dark conference table in center, ceiling linear strip lights glowing, deep perspective"
                 : "close up portrait of tactical male technician with focused eyes wearing modern glasses, illuminated by computer screen glow, intense dramatic expression";
         } else if (/harbor|port|dock|වරාය|තොටුපළ/i.test(text) || /scene[\s_-]*0?2/i.test(text)) {
             sceneSubject = isWide
@@ -35,14 +35,25 @@ export async function POST(req: Request) {
             prompt = `black and white film storyboard drawing, studiobinder ink sketch, dynamic wide angle comic panel, crosshatching pencil shading, ${sceneSubject}, bold ink linework, film storyboard template, professional cinema sketch, high contrast, monochrome, no photo, no color`;
         }
 
-        // Screenshot 2373 හි තිබූ රූපයේ නියම seed එක
-        const seed = isWide ? 441092 : 882041;
+        // Screenshot (2365) හි තිබූ Shot 01A සහ Shot 01B හි නිවැරදි seed අගයන්
+        let seed = 123456;
+        if (/scene[\s_-]*0?1/i.test(text) || /lab|විද්‍යාගාර/i.test(text)) {
+            seed = isWide ? 589412 : 934812;
+        } else if (/scene[\s_-]*0?2/i.test(text) || /harbor|වරාය/i.test(text)) {
+            seed = isWide ? 441092 : 882041;
+        } else if (/scene[\s_-]*0?3/i.test(text) || /vault|සුරක්ෂිතාගාර/i.test(text)) {
+            seed = isWide ? 312456 : 789123;
+        } else {
+            seed = isWide ? 654321 : 987654;
+        }
+
         const cleanPrompt = encodeURIComponent(prompt);
-        const proxyUrl = `/api/storyboard/image?prompt=${cleanPrompt}&seed=${seed}`;
+        // Direct Fast Pollinations AI endpoint (Vercel timeout වීම් නැත)
+        const directImageUrl = `https://image.pollinations.ai/prompt/${cleanPrompt}?width=1280&height=720&seed=${seed}&nologo=true`;
 
         return NextResponse.json({
             success: true,
-            imageUrl: proxyUrl,
+            imageUrl: directImageUrl,
             prompt
         });
     } catch (error: any) {
