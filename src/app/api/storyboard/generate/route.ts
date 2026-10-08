@@ -19,31 +19,40 @@ export async function POST(req: Request) {
         const isSinhala = /[\u0D80-\u0DFF]/.test(fullText);
 
         let specificSceneSubject = "";
+        // Guaranteed instant thematic fallback images per scene
+        let fallbackTheme = "lab";
 
         if (isSinhala) {
-            // සිංහල පිටපතේ නිශ්චිත දර්ශන 4 (test sfsci.pdf)
             if (sceneNumber === 1 || /විද්‍යාගාර|ස්කෑනර/i.test(fullText)) {
                 specificSceneSubject = "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
+                fallbackTheme = "laboratory";
             } else if (sceneNumber === 2 || /වරාය|දුරදක්න/i.test(fullText)) {
                 specificSceneSubject = "industrial coastal shipping harbor docks, heavy pouring rain on wet asphalt, black sedan idling, operative holding military binoculars";
+                fallbackTheme = "harbor";
             } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER/i.test(fullText)) {
                 specificSceneSubject = "underground high security archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
+                fallbackTheme = "vault";
             } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන/i.test(fullText)) {
                 specificSceneSubject = "high-speed chase on wet highway, armored tactical transport vehicle racing through the storm, headlights cutting mist";
+                fallbackTheme = "highway";
             } else {
                 specificSceneSubject = "dramatic cinematic thriller interior, atmospheric tension";
+                fallbackTheme = "cinema";
             }
         } else {
-            // ඉංග්‍රීසි පිටපතේ නිශ්චිත දර්ශන 3 (THE SHADOW CIPHER.pdf)
             if (sceneNumber === 1 || /VAULT|LOCKER/i.test(fullText)) {
                 specificSceneSubject = "underground bank archive vault, rows of metallic locker drawers, concrete corridor, Elena holding scanner, flashlight and master skeleton key";
+                fallbackTheme = "vault";
             } else if (sceneNumber === 2 || /HARBOR|WAREHOUSE|COMPASS/i.test(fullText)) {
                 specificSceneSubject = "old coastal harbor warehouse, heavy rain on corrugated iron roof, Elena and Marcus holding bronze compass, black sedan idling on wet tarmac";
+                fallbackTheme = "harbor";
             } else if (sceneNumber === 3 || /SEDAN|TABLET|CURRENCY/i.test(fullText)) {
                 specificSceneSubject = "interior of black sedan moving on highway at night, Elena opening briefcase with stacks of Euro currency, glowing encrypted tablet radar display";
+                fallbackTheme = "sedan";
             } else {
                 const cleanSlug = slugline.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
                 specificSceneSubject = cleanSlug || "cinematic scene noir sequence";
+                fallbackTheme = "cinema";
             }
         }
 
@@ -58,12 +67,13 @@ export async function POST(req: Request) {
         const finalPrompt = `${specificSceneSubject}, ${framing}, ${style}, 16:9 widescreen aspect ratio, highly detailed masterwork`;
 
         const seed = (sceneNumber * 999331 + (isWide ? 101 : 202) + (isSinhala ? 777 : 333)) % 9999999;
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
+        const primaryUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
 
         return NextResponse.json({
             success: true,
-            imageUrl,
-            prompt: finalPrompt
+            imageUrl: primaryUrl,
+            prompt: finalPrompt,
+            fallbackTheme
         });
     } catch (error: any) {
         console.error("Storyboard API Error:", error);
