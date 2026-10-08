@@ -2,7 +2,6 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-// සිංහල පිටපතේ සියලු වචන සහ වාක්‍ය 100% Cinematic English බවට පෙරළීම
 function translateFullSinhalaScene(text: string, sceneNumber: number): string {
     if (sceneNumber === 1 || /විද්‍යාගාර|තාක්ෂණ|ස්කෑනර/i.test(text)) {
         return "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical flashlight";
@@ -62,7 +61,6 @@ export async function POST(req: Request) {
 
         const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
 
-        // Script එක (Sinhala vs English) සහ Scene Number එක අනුව වෙනස් වන Unique Seed
         const scriptMultiplier = isSinhala ? 777 : 333;
         const seed = (sceneNumber * 999331 + (isWide ? 101 : 202) + scriptMultiplier) % 9999999;
 
