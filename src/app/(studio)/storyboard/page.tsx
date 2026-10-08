@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal,
@@ -39,7 +39,8 @@ export default function StoryboardPage() {
   const [shots, setShots] = useState<StoryboardShot[]>([]);
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
 
-  const STORAGE_KEY = `cine_sb_guaranteed_${artStyle}`;
+  const STORAGE_KEY = `cine_sb_auto_v6_${artStyle}`;
+  const isQueueRunning = useRef(false);
 
   const getSavedCache = (): Record<string, string> => {
     if (typeof window === "undefined") return {};
@@ -67,8 +68,8 @@ export default function StoryboardPage() {
     }
   };
 
-  // 1. භාෂාව හඳුනාගෙන 100% ක් නිවැරදි සිනමානුරූපී ඉංග්‍රීසි Prompt එකක් සාදන Function එක
-  const build100PercentEnglishPrompt = (shot: StoryboardShot, isWide: boolean): string => {
+  // 1. භාෂාව හඳුනාගෙන 100% ක් නිවැරදි ඉංග්‍රීසි Prompt එකක් සෑදීම
+  const buildEnglishPrompt = (shot: StoryboardShot, isWide: boolean): string => {
     const rawContent = `${shot.sceneSlug} ${shot.synopsis} ${shot.props.join(" ")}`;
     const isSinhala = /[\u0D80-\u0DFF]/.test(rawContent);
 
@@ -77,183 +78,117 @@ export default function StoryboardPage() {
     let actionEnglish = "";
 
     if (isSinhala) {
-      // සිංහල පිටපතක් නම් -> නියම ඉංග්‍රීසි සිනමාත්මක විස්තරයක් තැනීම
       const isExt = /බාහිර|EXT/i.test(rawContent);
       const isNight = /රාත්‍රී|NIGHT|අඳුරු|සන්ධ්‍යා|DARK/i.test(rawContent);
 
       locationEnglish = isExt
-        ? "exterior film location setting, open environment"
-        : "interior film set, architectural moody room";
+        ? "exterior film location setting, open cinematic space"
+        : "interior cinematic film room, moody architectural set";
 
       lightingEnglish = isNight
-        ? "dramatic night shadows, low-key chiaroscuro illumination"
-        : "bright natural daylight, high contrast cinematic rays";
+        ? "dramatic night atmospheric shadows, chiaroscuro low-key illumination"
+        : "natural daylight illumination, 35mm film aesthetic";
 
       const validProps = shot.props.filter((p) => p !== "ප්‍රධාන පසුතල උපකරණ");
-      const propText = validProps.length > 0 ? `visible props (${validProps.join(", ")})` : "detailed prop interaction";
-      const charText = shot.characters.length > 0 ? `characters (${shot.characters.join(" & ")}) in scene` : "lead protagonist staging";
+      const propText = validProps.length > 0 ? `visible props (${validProps.join(", ")})` : "detailed prop setup";
+      const charText = shot.characters.length > 0 ? `characters (${shot.characters.join(" & ")}) in scene` : "lead actor staging";
 
       actionEnglish = `${charText}, ${propText}`;
     } else {
-      // ඉංග්‍රීසි පිටපතක් නම්
-      locationEnglish = shot.sceneSlug.replace(/SCENE\s*\d+[:.\-\s]*/i, "").trim() || "cinematic scene location";
-      lightingEnglish = /NIGHT/i.test(shot.sceneSlug) ? "dark atmospheric night shadows" : "natural daylight composition";
-      actionEnglish = shot.synopsis.slice(0, 150).replace(/\s+/g, " ") || "actors engaged in intense moment";
+      locationEnglish = shot.sceneSlug.replace(/SCENE\s*\d+[:.\-\s]*/i, "").trim() || "cinematic location sequence";
+      lightingEnglish = /NIGHT/i.test(shot.sceneSlug) ? "dark atmospheric night shadows" : "natural cinematic daylight";
+      actionEnglish = shot.synopsis.slice(0, 150).replace(/\s+/g, " ") || "actors in dynamic composition";
     }
 
     const framingEnglish = isWide
-      ? "wide establishing master shot, environmental depth, 35mm anamorphic wide framing"
-      : "medium close-up dramatic action framing, character focus, shallow depth of field, 50mm prime lens";
+      ? "wide establishing master shot, environmental depth, 35mm anamorphic wide lens"
+      : "medium close-up dramatic action framing, character focus, shallow depth of field, 50mm prime";
 
     const styleEnglish = artStyle === "sketch_bw"
-      ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome drawing, high contrast storyboard panel"
-      : "graphic novel storyboard panel, bold ink outlines, comic book color palette, vivid cinematic lighting, 35mm film illustration";
+      ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome drawing"
+      : "graphic novel storyboard panel, bold ink outlines, comic book color palette, vivid cinematic lighting";
 
     return `${locationEnglish}, ${actionEnglish}, ${lightingEnglish}, ${framingEnglish}, ${styleEnglish}, 16:9 widescreen composition, 8k resolution`;
   };
 
-  // 2. සැබෑ 16:9 Storyboard Image එක Client-Side Render කිරීම (Failures වලින් තොරයි)
-  const renderTrueStoryboardFrame = (
-    shot: StoryboardShot,
-    isWide: boolean,
-    englishPrompt: string
-  ): string => {
-    const canvas = document.createElement("canvas");
-    canvas.width = 1280;
-    canvas.height = 720;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return "";
-
+  // 2. ක්ෂණිකව 16:9 Frame එකක් සාදන Generator එක (Timeout හෝ Fail නොවී 100% ක් පෙනේ)
+  const generateFrameDataUri = (shot: StoryboardShot, isWide: boolean, englishPrompt: string): string => {
     const isBw = artStyle === "sketch_bw";
+    const bg1 = isBw ? "#18181b" : "#0c1f38";
+    const bg2 = isBw ? "#09090b" : "#040d1a";
+    const stroke = isBw ? "#e4e4e7" : "#38bdf8";
+    const fill = isBw ? "#71717a" : "#0284c7";
+    const accent = isBw ? "#f43f5e" : "#10b981";
 
-    // පසුබිම (Background)
-    const bgGrad = ctx.createLinearGradient(0, 0, 1280, 720);
-    if (isBw) {
-      bgGrad.addColorStop(0, "#18181b");
-      bgGrad.addColorStop(0.5, "#27272a");
-      bgGrad.addColorStop(1, "#09090b");
-    } else {
-      bgGrad.addColorStop(0, "#091e3a");
-      bgGrad.addColorStop(0.5, "#1e3a8a");
-      bgGrad.addColorStop(1, "#050b14");
-    }
-    ctx.fillStyle = bgGrad;
-    ctx.fillRect(0, 0, 1280, 720);
+    const svg = `
+      <svg xmlns="http://www.w3.org/2000/svg" width="1280" height="720" viewBox="0 0 1280 720">
+        <defs>
+          <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" stop-color="${bg1}" />
+            <stop offset="100%" stop-color="${bg2}" />
+          </linearGradient>
+        </defs>
+        <rect width="1280" height="720" fill="url(#bg)" />
+        <rect x="30" y="30" width="1220" height="660" fill="none" stroke="${stroke}" stroke-width="2" stroke-opacity="0.3" />
+        <line x1="436" y1="30" x2="436" y2="690" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
+        <line x1="844" y1="30" x2="844" y2="690" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
+        <line x1="30" y1="250" x2="1250" y2="250" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
+        <line x1="30" y1="470" x2="1250" y2="470" stroke="${stroke}" stroke-width="1" stroke-opacity="0.1" />
 
-    // 16:9 Film Guides / Grid
-    ctx.strokeStyle = isBw ? "rgba(255, 255, 255, 0.15)" : "rgba(16, 185, 129, 0.3)";
-    ctx.lineWidth = 2;
-    ctx.strokeRect(30, 30, 1220, 660);
+        ${isWide ? `
+          <line x1="60" y1="520" x2="1220" y2="520" stroke="${stroke}" stroke-width="3" />
+          <line x1="60" y1="690" x2="560" y2="520" stroke="${stroke}" stroke-width="3" />
+          <line x1="1220" y1="690" x2="720" y2="520" stroke="${stroke}" stroke-width="3" />
+          <circle cx="640" cy="430" r="26" fill="${fill}" />
+          <polygon points="615,520 628,460 652,460 665,520" fill="${fill}" />
+          <rect x="200" y="280" width="200" height="240" fill="none" stroke="${stroke}" stroke-width="2" />
+          <rect x="880" y="280" width="200" height="240" fill="none" stroke="${stroke}" stroke-width="2" />
+        ` : `
+          <circle cx="640" cy="300" r="95" fill="${fill}" />
+          <path d="M410 690 Q510 420 640 410 Q770 420 870 690 Z" fill="${fill}" />
+          <rect x="720" y="460" width="55" height="110" fill="${accent}" rx="8" />
+        `}
 
-    // Thirds Guidelines
-    ctx.strokeStyle = isBw ? "rgba(255, 255, 255, 0.05)" : "rgba(16, 185, 129, 0.08)";
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-    ctx.moveTo(436, 30); ctx.lineTo(436, 690);
-    ctx.moveTo(844, 30); ctx.lineTo(844, 690);
-    ctx.moveTo(30, 250); ctx.lineTo(1250, 250);
-    ctx.moveTo(30, 470); ctx.lineTo(1250, 470);
-    ctx.stroke();
+        <text x="60" y="85" font-family="monospace" font-size="28" font-weight="bold" fill="#ffffff">${shot.shotNumber} • ${shot.shotType}</text>
+        <text x="60" y="120" font-family="monospace" font-size="18" fill="${isBw ? "#a1a1aa" : "#34d399"}">LENS: ${shot.lens} | MOVEMENT: ${shot.cameraMovement}</text>
+        <rect x="990" y="55" width="230" height="36" fill="${isBw ? "#3f3f46" : "#065f46"}" rx="6" />
+        <text x="1005" y="78" font-family="sans-serif" font-size="13" font-weight="bold" fill="#ffffff">${isBw ? "STUDIOBINDER INK SKETCH" : "GRAPHIC NOVEL COLOR"}</text>
+        <text x="60" y="655" font-family="monospace" font-size="14" fill="#a1a1aa">PROMPT: ${englishPrompt.slice(0, 110)}...</text>
+      </svg>
+    `;
 
-    // Scene Silhouette Artwork
-    ctx.save();
-    ctx.strokeStyle = isBw ? "#e4e4e7" : "#38bdf8";
-    ctx.fillStyle = isBw ? "#a1a1aa" : "#0284c7";
-    ctx.lineWidth = 3;
-
-    if (isWide) {
-      // Perspective Lines
-      ctx.beginPath();
-      ctx.moveTo(60, 520); ctx.lineTo(1220, 520);
-      ctx.moveTo(60, 690); ctx.lineTo(560, 520);
-      ctx.moveTo(1220, 690); ctx.lineTo(720, 520);
-      ctx.stroke();
-
-      // Characters Silhouettes
-      ctx.beginPath();
-      ctx.arc(640, 430, 26, 0, Math.PI * 2);
-      ctx.fill();
-      ctx.beginPath();
-      ctx.moveTo(615, 520); ctx.lineTo(628, 460); ctx.lineTo(652, 460); ctx.lineTo(665, 520);
-      ctx.fill();
-
-      // Architecture Box
-      ctx.strokeRect(200, 280, 200, 240);
-      ctx.strokeRect(880, 280, 200, 240);
-    } else {
-      // Close-Up Action Framing
-      ctx.beginPath();
-      ctx.arc(640, 300, 95, 0, Math.PI * 2);
-      ctx.fill();
-
-      ctx.beginPath();
-      ctx.moveTo(410, 690);
-      ctx.quadraticCurveTo(510, 420, 640, 410);
-      ctx.quadraticCurveTo(770, 420, 870, 690);
-      ctx.fill();
-
-      // Prop Highlight
-      ctx.fillStyle = isBw ? "#f43f5e" : "#10b981";
-      ctx.fillRect(720, 460, 55, 110);
-    }
-    ctx.restore();
-
-    // Technical Typography Overlays
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 28px monospace";
-    ctx.fillText(`${shot.shotNumber} • ${shot.shotType}`, 60, 85);
-
-    ctx.fillStyle = isBw ? "#a1a1aa" : "#34d399";
-    ctx.font = "18px monospace";
-    ctx.fillText(`LENS: ${shot.lens} | MOVEMENT: ${shot.cameraMovement}`, 60, 120);
-
-    // Style Badge
-    ctx.fillStyle = isBw ? "#3f3f46" : "#065f46";
-    ctx.fillRect(990, 55, 230, 36);
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "bold 13px sans-serif";
-    ctx.fillText(isBw ? "STUDIOBINDER INK SKETCH" : "GRAPHIC NOVEL COLOR", 1005, 78);
-
-    // English Prompt Preview
-    ctx.fillStyle = "rgba(255, 255, 255, 0.55)";
-    ctx.font = "14px monospace";
-    ctx.fillText(`PROMPT: ${englishPrompt.slice(0, 110)}...`, 60, 655);
-
-    return canvas.toDataURL("image/jpeg", 0.92);
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg)}`;
   };
 
-  // Generate Button Click Logic
-  const handleGenerateClick = (shot: StoryboardShot) => {
+  // තනි Shot එකක් Render කිරීම
+  const renderSingleShot = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
-    const englishPrompt = build100PercentEnglishPrompt(shot, isWide);
+    const englishPrompt = buildEnglishPrompt(shot, isWide);
+
+    setShots((prev) =>
+      prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true, visualPrompt: englishPrompt } : s))
+    );
+
+    await new Promise((r) => setTimeout(r, 250));
+
+    const finalImageUri = generateFrameDataUri(shot, isWide, englishPrompt);
+    saveToCache(shot.id, finalImageUri);
 
     setShots((prev) =>
       prev.map((s) =>
         s.id === shot.id
-          ? { ...s, isGenerating: true, visualPrompt: englishPrompt }
+          ? {
+            ...s,
+            imageUrl: finalImageUri,
+            visualPrompt: englishPrompt,
+            isGenerating: false
+          }
           : s
       )
     );
-
-    setTimeout(() => {
-      const generatedImageUrl = renderTrueStoryboardFrame(shot, isWide, englishPrompt);
-      saveToCache(shot.id, generatedImageUrl);
-
-      setShots((prev) =>
-        prev.map((s) =>
-          s.id === shot.id
-            ? {
-              ...s,
-              imageUrl: generatedImageUrl,
-              visualPrompt: englishPrompt,
-              isGenerating: false
-            }
-            : s
-        )
-      );
-    }, 350);
   };
 
+  // 3. Page එක Load වූ වහාම දර්ශන කියවා ගැනීම
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
@@ -318,13 +253,31 @@ export default function StoryboardPage() {
     }
   }, [artStyle]);
 
+  // 4. ස්වයංක්‍රීය පින්තූර Generation Queue එක (Auto Loader)
+  useEffect(() => {
+    if (shots.length === 0 || isQueueRunning.current) return;
+
+    const pending = shots.filter((s) => !s.imageUrl && !s.isGenerating);
+    if (pending.length === 0) return;
+
+    isQueueRunning.current = true;
+
+    const runAutoQueue = async () => {
+      for (const item of pending) {
+        await renderSingleShot(item);
+      }
+      isQueueRunning.current = false;
+    };
+
+    runAutoQueue();
+  }, [shots]);
+
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     clearAllCache();
     const targetShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
     for (const shot of targetShots) {
-      handleGenerateClick(shot);
-      await new Promise((r) => setTimeout(r, 200));
+      await renderSingleShot(shot);
     }
     setIsGeneratingAll(false);
   };
@@ -343,7 +296,7 @@ export default function StoryboardPage() {
             Cinematic Storyboard Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots එකින් එක Render වේ.
+            StudioBinder Hand-Drawn Ink & Comic Storyboard Visualization සියලුම Shots ස්වයංක්‍රීයව Render වේ[cite: 16].
           </p>
         </div>
 
@@ -352,7 +305,7 @@ export default function StoryboardPage() {
             href="/breakdown"
             className="px-4 py-2.5 rounded-xl bg-[#09130e] hover:bg-[#0e1d15] border border-emerald-950 text-slate-300 text-xs font-semibold transition-all flex items-center gap-2"
           >
-            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script
+            <FileText className="w-4 h-4 text-emerald-400" /> Back to Script[cite: 17]
           </Link>
           <button
             onClick={clearAllCache}
@@ -368,11 +321,11 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Rendering All Panels...
+                <Loader2 className="w-4 h-4 animate-spin" /> Rendering All Panels...[cite: 17]
               </>
             ) : (
               <>
-                <Wand2 className="w-4 h-4" /> Synthesize All Frames
+                <Wand2 className="w-4 h-4" /> Synthesize All Frames[cite: 17]
               </>
             )}
           </button>
@@ -383,7 +336,7 @@ export default function StoryboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:[cite: 17, 18]
           </span>
           <button
             onClick={() => setFilterScene("ALL")}
@@ -392,7 +345,7 @@ export default function StoryboardPage() {
                 : "bg-[#0e1d15] text-slate-300 hover:text-white"
               }`}
           >
-            All Sequences ({shots.length})
+            All Sequences ({shots.length})[cite: 18]
           </button>
           {sceneList.map((scn) => (
             <button
@@ -403,7 +356,7 @@ export default function StoryboardPage() {
                   : "bg-[#0e1d15] text-slate-300 hover:text-white"
                 }`}
             >
-              {scn.id}
+              {scn.id}[cite: 18]
             </button>
           ))}
         </div>
@@ -411,7 +364,7 @@ export default function StoryboardPage() {
         {/* Style Selector */}
         <div className="flex items-center gap-2 bg-[#050607] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
-            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
+            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:[cite: 18]
           </span>
           <button
             onClick={() => setArtStyle("sketch_bw")}
@@ -420,7 +373,7 @@ export default function StoryboardPage() {
                 : "text-slate-400 hover:text-white"
               }`}
           >
-            StudioBinder (B&W Sketch)
+            StudioBinder (B&W Sketch)[cite: 18]
           </button>
           <button
             onClick={() => setArtStyle("graphic_novel")}
@@ -429,7 +382,7 @@ export default function StoryboardPage() {
                 : "text-slate-400 hover:text-white"
               }`}
           >
-            Graphic Novel (Color)
+            Graphic Novel (Color)[cite: 19]
           </button>
         </div>
       </div>
@@ -445,7 +398,7 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...</span>
+                  <span className="text-xs font-medium tracking-wide">Synthesizing Storyboard Frame...[cite: 19]</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
@@ -463,39 +416,34 @@ export default function StoryboardPage() {
                       <Download className="w-3 h-3" /> Download
                     </a>
                     <button
-                      onClick={() => handleGenerateClick(shot)}
+                      onClick={() => renderSingleShot(shot)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Re-render Frame
+                      <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 20]
                     </button>
                   </div>
                 </>
               ) : (
                 <div className="w-full h-full p-4 flex flex-col items-center justify-center text-center bg-[#060c08]">
-                  <button
-                    onClick={() => handleGenerateClick(shot)}
-                    className="px-4 py-2 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105"
-                  >
-                    <Wand2 className="w-3.5 h-3.5" /> Generate Frame
-                  </button>
-                  <span className="text-[11px] text-slate-500 mt-2">Click to render this 16:9 shot</span>
+                  <Loader2 className="w-6 h-6 animate-spin text-emerald-500/40 mb-2" />
+                  <span className="text-xs text-slate-400">Loading Storyboard Frame...</span>
                 </div>
               )}
 
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
-                  {shot.shotNumber}
+                  {shot.shotNumber}[cite: 20]
                 </span>
               </div>
 
               <div className="absolute bottom-2 right-2 pointer-events-none flex items-center gap-1.5">
                 {shot.imageUrl && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-[10px] text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Studio Ready
+                    <CheckCircle2 className="w-3 h-3" /> Studio Ready[cite: 20]
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-800">
-                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}
+                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}[cite: 20, 21]
                 </span>
               </div>
             </div>
@@ -503,17 +451,16 @@ export default function StoryboardPage() {
             <div className="p-5 flex-1 flex flex-col justify-between space-y-3">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                  {shot.displayTitle}
+                  {shot.displayTitle}[cite: 21]
                 </p>
                 <h3 className="text-sm font-bold text-white mb-1.5">
-                  {shot.shotType}
+                  {shot.shotType}[cite: 21]
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed font-light line-clamp-2">
-                  "{shot.sceneSlug}"
+                  "{shot.sceneSlug}"[cite: 21]
                 </p>
               </div>
 
-              {/* 100% English Visual Prompt එක Display වීම */}
               {shot.visualPrompt && (
                 <div className="p-2.5 rounded-xl bg-[#030704] border border-emerald-950/80 space-y-1">
                   <div className="text-[10px] font-bold uppercase tracking-wider text-emerald-400 flex items-center gap-1">
@@ -527,12 +474,12 @@ export default function StoryboardPage() {
 
               <div className="pt-2.5 border-t border-emerald-950/60 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>
-                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.lens}</span>
+                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>[cite: 21]
+                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.lens}</span>[cite: 21]
                 </div>
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>
-                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.cameraMovement}</span>
+                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>[cite: 21]
+                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.cameraMovement}</span>[cite: 21]
                 </div>
               </div>
             </div>
