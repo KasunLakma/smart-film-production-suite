@@ -41,7 +41,7 @@ export default function StoryboardPage() {
   const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
   const [activeScriptId, setActiveScriptId] = useState("default");
 
-  // පිටපත අනුව වෙනම Cache Storage Key එකක් (සිංහල / ඉංග්‍රීසි මිශ්‍ර වීම වැළැක්වීමට)[cite: 1]
+  // පිටපත සහ Style එක අනුව වෙන් වූ Persistent Storage Key එක[cite: 1]
   const STORAGE_KEY = `cine_storyboard_${activeScriptId}_${artStyle}`;
 
   const getSavedCache = (key = STORAGE_KEY): Record<string, { url: string; prompt: string }> => {
@@ -70,7 +70,7 @@ export default function StoryboardPage() {
     }
   };
 
-  // බොත්තම එබූ විට පමණක් එම Shot එක Generate වීම (Manual Action)[cite: 2]
+  // User විසින් Generate Button එක ක්ලික් කළ විට පමණක් Frame එකක් සෑදීම (Manual Trigger)[cite: 2]
   const handleGenerateFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
 
@@ -119,7 +119,7 @@ export default function StoryboardPage() {
     );
   };
 
-  // පිටුවට පිවිසෙන විට දර්ශන සහ කලින් Save වූ ඡායාරූප කියවා ගැනීම (Persistence)[cite: 3]
+  // Breakdown එකෙන් Save වූ Scenes කියවා ගෙන පැරණි Images පෙන්වීම (State Persistence)[cite: 3]
   useEffect(() => {
     if (typeof window !== "undefined") {
       const storedScenes =
@@ -131,6 +131,7 @@ export default function StoryboardPage() {
         try {
           const parsed = JSON.parse(storedScenes);
           if (Array.isArray(parsed) && parsed.length > 0) {
+            // සිංහලද ඉංග්‍රීසිද අනුව Script ID එක වෙන් කිරීම (Script Isolation)
             const sampleText = parsed.map((s: any) => s.slugline || "").join("").slice(0, 30);
             const isSinhala = /[\u0D80-\u0DFF]/.test(sampleText);
             const scriptId = isSinhala ? "sinhala_script" : "english_script";
@@ -254,7 +255,7 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Rendering Selected Panels...[cite: 6]
+                <Loader2 className="w-4 h-4 animate-spin" /> Rendering Panels...[cite: 6]
               </>
             ) : (
               <>

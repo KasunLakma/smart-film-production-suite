@@ -21,29 +21,29 @@ export async function POST(req: Request) {
         let specificSceneSubject = "";
 
         if (isSinhala) {
-            // සිංහල පිටපතේ දර්ශන 4ට අදාළ නිශ්චිත සිනමානුරූපී විස්තරය
+            // සිංහල පිටපතේ නිශ්චිත දර්ශන 4 (test sfsci.pdf)
             if (sceneNumber === 1 || /විද්‍යාගාර|ස්කෑනර/i.test(fullText)) {
                 specificSceneSubject = "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
             } else if (sceneNumber === 2 || /වරාය|දුරදක්න/i.test(fullText)) {
-                specificSceneSubject = "industrial coastal shipping harbor docks, heavy pouring rain on wet asphalt, black sedan idling, operative with military binoculars";
+                specificSceneSubject = "industrial coastal shipping harbor docks, heavy pouring rain on wet asphalt, black sedan idling, operative holding military binoculars";
             } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER/i.test(fullText)) {
                 specificSceneSubject = "underground high security archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
             } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන/i.test(fullText)) {
                 specificSceneSubject = "high-speed chase on wet highway, armored tactical transport vehicle racing through the storm, headlights cutting mist";
             } else {
-                specificSceneSubject = "cinematic thriller interior scene, dramatic tension";
+                specificSceneSubject = "dramatic cinematic thriller interior, atmospheric tension";
             }
         } else {
-            // ඉංග්‍රීසි පිටපතේ (THE SHADOW CIPHER) දර්ශන 3ට අදාළ නිශ්චිත විස්තරය
+            // ඉංග්‍රීසි පිටපතේ නිශ්චිත දර්ශන 3 (THE SHADOW CIPHER.pdf)
             if (sceneNumber === 1 || /VAULT|LOCKER/i.test(fullText)) {
-                specificSceneSubject = "underground bank archive vault, rows of metallic locker drawers, concrete floor, Elena holding scanner, flashlight and master skeleton key";
+                specificSceneSubject = "underground bank archive vault, rows of metallic locker drawers, concrete corridor, Elena holding scanner, flashlight and master skeleton key";
             } else if (sceneNumber === 2 || /HARBOR|WAREHOUSE|COMPASS/i.test(fullText)) {
                 specificSceneSubject = "old coastal harbor warehouse, heavy rain on corrugated iron roof, Elena and Marcus holding bronze compass, black sedan idling on wet tarmac";
             } else if (sceneNumber === 3 || /SEDAN|TABLET|CURRENCY/i.test(fullText)) {
                 specificSceneSubject = "interior of black sedan moving on highway at night, Elena opening briefcase with stacks of Euro currency, glowing encrypted tablet radar display";
             } else {
-                const clean = slugline.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
-                specificSceneSubject = clean || "cinematic scene noir sequence";
+                const cleanSlug = slugline.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
+                specificSceneSubject = cleanSlug || "cinematic scene noir sequence";
             }
         }
 

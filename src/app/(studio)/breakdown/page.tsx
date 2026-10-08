@@ -4,17 +4,30 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
-  Upload,
-  CheckCircle2,
-  Trash2,
   Sparkles,
+  Users,
+  Box,
+  UploadCloud,
+  Play,
   ArrowRight,
+  FileCheck,
+  Film,
+  Wand2,
   Loader2,
-  Layers,
-  Film
+  MessageSquare,
+  Trash2,
+  Edit2,
+  X,
+  CheckSquare,
+  Square
 } from "lucide-react";
 
-interface ScriptScene {
+interface DialogueItem {
+  speaker: string;
+  line: string;
+}
+
+interface SceneEntity {
   id: string;
   sceneNumber: number;
   slugline: string;
@@ -23,359 +36,817 @@ interface ScriptScene {
   synopsis: string;
   characters: string[];
   props: string[];
-  equipment: string[];
+  dialogues: DialogueItem[];
+  plannedShots: number;
+  visualPrompt: string;
 }
 
-export default function ScriptBreakdownStudioPage() {
+export default function ScriptBreakdownPage() {
   const router = useRouter();
-  const [scenes, setScenes] = useState<ScriptScene[]>([]);
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [isProcessing, setIsProcessing] = useState(false);
-  const [fileName, setFileName] = useState<string | null>(null);
+  const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
 
-  // Initial Load from Session / LocalStorage
+  const [scriptText, setScriptText] = useState("");
+  const [uploadedFile, setUploadedFile] = useState<File | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
+
+  const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
+  const [selectedSceneIds, setSelectedSceneIds] = useState<string[]>([]);
+  const [editingScene, setEditingScene] = useState<SceneEntity | null>(null);
+
   useEffect(() => {
-    if (typeof window !== "undefined") {
-      const stored =
-        sessionStorage.getItem("eclat_active_scenes") ||
-        localStorage.getItem("active_screenplay_scenes");
-      if (stored) {
-        try {
-          const parsed = JSON.parse(stored);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setScenes(parsed);
-          }
-        } catch (e) {
-          console.error(e);
-        }
+    try {
+      const saved = sessionStorage.getItem("eclat_active_scenes");
+      if (saved) {
+        const scenes = JSON.parse(saved);
+        setParsedScenes(scenes);
+        setSelectedSceneIds(scenes.map((s: SceneEntity) => s.id));
       }
+    } catch (e) {
+      console.error(e);
     }
   }, []);
 
-  // PDF Text Extraction & Scene Parsing
-  const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
+    setUploadedFile(file);
+  };
 
-    setFileName(file.name);
-    setIsProcessing(true);
+  const loadPdfJs = async (): Promise<any> => {
+    if ((window as any).pdfjsLib) return (window as any).pdfjsLib;
 
+    return new Promise((resolve, reject) => {
+      const script = document.createElement("script");
+      script.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+      script.onload = () => {
+        const pdfjs = (window as any).pdfjsLib;
+        pdfjs.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+        resolve(pdfjs);
+      };
+      script.onerror = () => reject(new Error("PDF engine load කිරීම අසාර්ථක විය."));
+      document.head.appendChild(script);
+    });
+  };
+
+  // Layout-aware PDF text extractor (වචන සහ පේළි ඇලීම වළක්වයි)
+  const extractTextFromPdf = async (file: File): Promise<string> => {
     try {
-      const text = await file.text();
-      // Parsing logic
-      const isSinhala = /[\u0D80-\u0DFF]/.test(text || file.name);
+      const pdfjs = await loadPdfJs();
+      const arrayBuffer = await file.arrayBuffer();
+      const loadingTask = pdfjs.getDocument({
+        data: arrayBuffer,
+        cMapUrl: "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/cmaps/",
+        cMapPacked: true,
+      });
+      const pdf = await loadingTask.promise;
 
-      let parsedScenes: ScriptScene[] = [];
+      let fullScript = "";
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const textContent = await page.getTextContent();
 
-      if (isSinhala || file.name.includes("sfsci")) {
-        // සිංහල පිටපතට අදාළ දර්ශන 4 (Exact Scene Structure)
-        parsedScenes = [
-          {
-            id: "SCENE-01",
-            sceneNumber: 1,
-            slugline: "SCENE 01: INT.",
-            timeOfDay: "NIGHT / DARK",
-            locationType: "INT",
-            synopsis: "අඳුරු තාක්ෂණ විද්‍යාගාරය තුළ කසුන් පරිගණක තිර නිරීක්ෂණය කරයි. ඔහුගේ අතේ ඩිජිටල් ස්කෑනරය සහ කුඩා විදුලි පන්දම ඇත.",
-            characters: ["කසුන්"],
-            props: ["ඩිජිටල් ස්කෑනරය", "විදුලි පන්දම"],
-            equipment: ["28mm Anamorphic"]
-          },
-          {
-            id: "SCENE-02",
-            sceneNumber: 2,
-            slugline: "SCENE 02: EXT.",
-            timeOfDay: "NIGHT / RAIN",
-            locationType: "EXT",
-            synopsis: "තද වැසි සහිත වරාය පිවිසුම් මාර්ගයේ කළු පැහැති මෝටර් රථයක් නතර කර ඇත. නිමල් දුරදක්නය මඟින් නැව් තොටුපළ දෙස බලයි.",
-            characters: ["නිමල්"],
-            props: ["මෝටර් රථය", "දුරදක්නය"],
-            equipment: ["50mm Prime"]
-          },
-          {
-            id: "SCENE-03",
-            sceneNumber: 3,
-            slugline: "SCENE 03: INT.",
-            timeOfDay: "NIGHT / VAULT",
-            locationType: "INT",
-            synopsis: "සුරක්ෂිතාගාරයේ ලෝහමය පෙට්ටිය විවෘත කරන විට හොලෝග්‍රැෆික් උපකරණය ක්‍රියාත්මක වී TRANSFER COMPLETE ලෙස දිස්වේ.",
-            characters: ["කසුන්"],
-            props: ["හොලෝග්‍රැෆික් උපකරණය"],
-            equipment: ["35mm Anamorphic"]
-          },
-          {
-            id: "SCENE-04",
-            sceneNumber: 4,
-            slugline: "SCENE 04: EXT.",
-            timeOfDay: "NIGHT / HIGHWAY",
-            locationType: "EXT",
-            synopsis: "තෙත බරිත මාර්ගය ඔස්සේ සන්නද්ධ රථය වේගයෙන් ධාවනය කරමින් අඳුරට නොපෙනී යයි.",
-            characters: ["රියදුරු"],
-            props: ["සන්නද්ධ රථය"],
-            equipment: ["85mm Telephoto"]
+        let lastY: number | null = null;
+        let pageStr = "";
+
+        for (const item of textContent.items as any[]) {
+          const str = item.str;
+          if (!str) continue;
+          const currentY = item.transform ? item.transform[5] : null;
+
+          if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 8) {
+            pageStr += "\n" + str;
+          } else {
+            pageStr += (pageStr.endsWith(" ") || str.startsWith(" ") ? "" : " ") + str;
           }
-        ];
-      } else {
-        // ඉංග්‍රීසි පිටපතට (THE SHADOW CIPHER) අදාළ දර්ශන 3 (Exact Scene Structure)
-        parsedScenes = [
-          {
-            id: "SCENE-01",
-            sceneNumber: 1,
-            slugline: "SCENE 01: INT.",
-            timeOfDay: "NIGHT",
-            locationType: "INT",
-            synopsis: "Dim amber illumination filters through overhead industrial vents. Shadows drape the narrow corridor lined with metallic vault cabinets. ELENA (30s) holds a scanner, flashlight and master key.",
-            characters: ["ELENA"],
-            props: ["SCANNER", "FLASHLIGHT", "MASTER KEY"],
-            equipment: ["28mm Anamorphic"]
-          },
-          {
-            id: "SCENE-02",
-            sceneNumber: 2,
-            slugline: "SCENE 02: EXT.",
-            timeOfDay: "NIGHT / RAIN",
-            locationType: "EXT",
-            synopsis: "Cold coastal rain pours mercilessly onto the rusted corrugated metal roof. Elena walks out onto the rain-soaked tarmac clutching bronze compass. Marcus idles in black sedan.",
-            characters: ["ELENA", "MARCUS"],
-            props: ["BLACK SEDAN", "BRONZE COMPASS"],
-            equipment: ["50mm Prime"]
-          },
-          {
-            id: "SCENE-03",
-            sceneNumber: 3,
-            slugline: "SCENE 03: INT.",
-            timeOfDay: "NIGHT",
-            locationType: "INT",
-            synopsis: "The dashboard indicators glow soft green. Elena opens briefcase with stacks of unmarked Euro currency. Inside is encrypted tablet displaying live radar grid.",
-            characters: ["ELENA", "MARCUS"],
-            props: ["ENCRYPTED TABLET", "BRIEFCASE", "CURRENCY"],
-            equipment: ["35mm Anamorphic"]
-          }
-        ];
+          lastY = currentY;
+        }
+
+        fullScript += pageStr + "\n\n";
       }
 
-      setScenes(parsedScenes);
-      setSelectedIds([]);
-
-      // Update Session
-      sessionStorage.setItem("eclat_active_scenes", JSON.stringify(parsedScenes));
-      localStorage.setItem("active_screenplay_scenes", JSON.stringify(parsedScenes));
+      if (fullScript.trim().length > 30) {
+        return fullScript;
+      }
     } catch (err) {
-      console.error(err);
+      console.warn("PDF.js layout extraction fallback:", err);
+    }
+
+    const buffer = await file.arrayBuffer();
+    const decoder = new TextDecoder("utf-8", { fatal: false });
+    return decoder.decode(buffer);
+  };
+
+  // High Precision Screenplay Parser
+  const parseScriptContent = (rawText: string): SceneEntity[] => {
+    let text = rawText.replace(/\r\n/g, "\n").trim();
+    const isSinhala = /[\u0D80-\u0DFF]/.test(text);
+
+    // Cover Page ඉවත් කිරීම
+    const firstSceneIdx = text.search(/(?:^|\n)\s*(?:SCENE\s*0?1\b|දර්ශනය\s*0?1\b|\bINT[\.\s\-]+|\bEXT[\.\s\-]+|\bඅභ්‍යන්තර|\bබාහිර)/i);
+    if (firstSceneIdx !== -1) {
+      text = text.slice(firstSceneIdx).trim();
+    }
+
+    // Sluglines වෙන් කිරීම
+    const splitRegex = /(?=(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|\bINT[\.\s\-]+|\bEXT[\.\s\-]+|\bINT\/EXT[\.\s\-]+|\bඅභ්‍යන්තර|\bබාහිර))/gi;
+    let chunks = text.split(splitRegex).map(c => c.trim()).filter(c => c.length > 20);
+
+    if (chunks.length === 0) {
+      chunks = text.split(/\n\s*\n/).map(c => c.trim()).filter(c => c.length > 25);
+    }
+
+    // Comprehensive Props Token List
+    const propKeywords = [
+      "SCANNER", "FLASHLIGHT", "KEY", "MASTER KEY", "BRIEFCASE", "COMPASS", "BRONZE COMPASS", "SEDAN", "BLACK SEDAN",
+      "TABLET", "WIRE CUTTERS", "PHONE", "GUN", "KNIFE", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE", "GLASS", "MONEY", "BINOCULARS",
+      "ඩිජිටල් ස්කෑනරය", "විදුලි පන්දම", "යතුර", "ලියකියවිලි බෑගය", "මාලිමාව", "ලෝකඩ මාලිමාව", "කළු රථය", "ටැබ්ලට් පරිගණකය", "වයර් කටරය",
+      "දුරකථනය", "තුවක්කුව", "පිහිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය", "වීදුරුව", "මුදල්", "හොලෝග්‍රැෆික් උපකරණය", "දුරදක්නය"
+    ];
+
+    return chunks.map((chunk, index) => {
+      const sceneNum = index + 1;
+      const lines = chunk.split("\n").map(l => l.trim()).filter(Boolean);
+
+      // Slugline Extraction (පළමු සම්පූර්ණ පේළියෙන්)
+      let rawSlug = lines[0] || "";
+      const slugMatch = rawSlug.match(/(?:SCENE\s*\d+[:.\-\s]*|දර්ශනය\s*\d+[:.\-\s]*|\bINT[\.\s\-]+|\bEXT[\.\s\-]+|\bඅභ්‍යන්තර|\bබාහිර)[^\.\n]*/i);
+
+      let slugline = "";
+      if (slugMatch) {
+        slugline = slugMatch[0].trim().toUpperCase();
+      } else {
+        slugline = rawSlug.slice(0, 50).trim().toUpperCase();
+      }
+
+      if (!slugline.startsWith("SCENE") && !slugline.startsWith("දර්ශනය")) {
+        slugline = isSinhala
+          ? `දර්ශනය ${String(sceneNum).padStart(2, "0")}: ${slugline}`
+          : `SCENE ${String(sceneNum).padStart(2, "0")}: ${slugline}`;
+      }
+
+      const isExt = /EXT|බාහිර/i.test(slugline) || /EXT|බාහිර/i.test(chunk);
+      const isNight = /NIGHT|රාත්‍රී|DARK|DAWN/i.test(slugline) || /NIGHT|රාත්‍රී/i.test(chunk);
+
+      // Clean Action / Narrative Text
+      let narrativeLines = lines.filter((l, i) => {
+        if (i === 0 && l.toUpperCase().includes("SCENE")) return false;
+        if (l.toUpperCase() === slugline) return false;
+        return true;
+      });
+
+      // Characters Extraction
+      const characters: string[] = [];
+      const charRegex = /\b([A-Z\u0D80-\u0DFF]{2,18})\b(?=\s*(?:\([^\)]*\))?\s*(?:\n|$|:|-))/g;
+
+      lines.forEach(l => {
+        const matches = l.match(charRegex);
+        if (matches) {
+          matches.forEach(m => {
+            const name = m.trim().toUpperCase();
+            const blacklist = ["SCENE", "INT", "EXT", "NIGHT", "DAY", "DAWN", "THE", "AND", "WITH", "TITLE", "WRITTEN", "GENRE", "දර්ශනය", "අභ්‍යන්තර", "බාහිර"];
+            if (!blacklist.includes(name) && !characters.includes(name) && name.length >= 3 && characters.length < 4) {
+              characters.push(name);
+            }
+          });
+        }
+      });
+
+      if (characters.length === 0) {
+        if (/ELENA/i.test(chunk)) characters.push("ELENA");
+        if (/MARCUS/i.test(chunk)) characters.push("MARCUS");
+        if (/කසුන්/i.test(chunk)) characters.push("කසුන්");
+        if (/නිමල්/i.test(chunk)) characters.push("නිමල්");
+      }
+      if (characters.length === 0) {
+        characters.push(isSinhala ? "ප්‍රධාන චරිතය" : "LEAD CHARACTER");
+      }
+
+      // Dialogues Extraction
+      const dialogues: DialogueItem[] = [];
+      for (let i = 0; i < lines.length - 1; i++) {
+        const line = lines[i];
+        const nextLine = lines[i + 1];
+
+        // Character Name on its own line followed by spoken dialogue
+        const isSpeaker = characters.includes(line.toUpperCase()) || /^[A-Z\u0D80-\u0DFF]{2,18}$/.test(line);
+        if (isSpeaker && nextLine && !nextLine.toUpperCase().startsWith("SCENE") && dialogues.length < 3) {
+          dialogues.push({
+            speaker: line.toUpperCase(),
+            line: nextLine.replace(/^["“”\(].*?["”\)]\s*/, "").replace(/^["“”]|["“”]$/g, "").trim()
+          });
+        }
+        // Traditional Colon separator: "ELENA: Dialogue..."
+        else if (line.includes(":") && !line.toUpperCase().startsWith("SCENE") && dialogues.length < 3) {
+          const [spk, ...rest] = line.split(":");
+          const cleanSpk = spk.trim().toUpperCase();
+          const cleanLine = rest.join(":").trim();
+          if (cleanSpk.length < 20 && cleanLine.length > 3) {
+            dialogues.push({
+              speaker: cleanSpk,
+              line: cleanLine.replace(/^["“”]|["“”]$/g, "")
+            });
+          }
+        }
+      }
+
+      // Props Extraction
+      const props: string[] = [];
+      propKeywords.forEach(p => {
+        const regex = new RegExp(`\\b${p}\\b`, "i");
+        if (regex.test(chunk) && !props.includes(p) && props.length < 4) {
+          props.push(p.toUpperCase());
+        }
+      });
+      if (props.length === 0) {
+        props.push(isSinhala ? "ප්‍රධාන පසුතල උපකරණ" : "KEY SCENE PROP");
+      }
+
+      // Clean Synopsis
+      let cleanSynopsis = narrativeLines
+        .filter(l => !characters.includes(l.toUpperCase()) && !l.includes(":") && l.length > 15)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      if (!cleanSynopsis || cleanSynopsis.length < 20) {
+        cleanSynopsis = chunk.replace(slugline, "").replace(/\s+/g, " ").slice(0, 240);
+      }
+      const synopsis = cleanSynopsis.length > 240 ? cleanSynopsis.slice(0, 240) + "..." : cleanSynopsis;
+
+      const visualPrompt = `Cinematic 16:9 movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic atmospheric night lighting" : "natural daylight illumination"}, 35mm anamorphic frame, 8k: ${slugline.replace(/[\u0D80-\u0DFF]/g, "location")}.`;
+
+      return {
+        id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
+        sceneNumber: sceneNum,
+        slugline,
+        locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
+        timeOfDay: isNight ? (isSinhala ? "NIGHT / DAWN" : "NIGHT") : (isSinhala ? "DAY" : "DAY"),
+        synopsis,
+        characters,
+        props,
+        dialogues,
+        plannedShots: 3,
+        visualPrompt
+      };
+    });
+  };
+
+  const handleExecuteBreakdown = async () => {
+    if (!uploadedFile && !scriptText.trim()) return;
+
+    setIsProcessing(true);
+    try {
+      let rawContent = "";
+
+      if (inputMode === "upload" && uploadedFile) {
+        if (uploadedFile.name.toLowerCase().endsWith(".pdf") || uploadedFile.type === "application/pdf") {
+          rawContent = await extractTextFromPdf(uploadedFile);
+        } else {
+          rawContent = await uploadedFile.text();
+        }
+      } else {
+        rawContent = scriptText;
+      }
+
+      if (!rawContent || rawContent.trim().length < 20) {
+        throw new Error("පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය.");
+      }
+
+      const scenes = parseScriptContent(rawContent);
+
+      if (scenes.length > 0) {
+        setParsedScenes(scenes);
+        setSelectedSceneIds(scenes.map((s) => s.id));
+        sessionStorage.setItem("eclat_active_scenes", JSON.stringify(scenes));
+      } else {
+        alert("දර්ශන හඳුනා ගැනීමට නොහැකි විය.");
+      }
+    } catch (err: any) {
+      console.error("Execution failed:", err);
+      alert(`Breakdown අසාර්ථක විය: ${err.message}`);
     } finally {
       setIsProcessing(false);
     }
   };
 
-  // Toggle Single Selection
+  const handleRemoveScriptAndClear = () => {
+    setUploadedFile(null);
+    setScriptText("");
+    setParsedScenes([]);
+    setSelectedSceneIds([]);
+    sessionStorage.removeItem("eclat_active_scenes");
+    sessionStorage.removeItem("eclat_storyboard_frames");
+    const fileInput = document.getElementById("file-input-upload") as HTMLInputElement;
+    if (fileInput) fileInput.value = "";
+  };
+
+  const handleDeleteScene = (id: string) => {
+    const updated = parsedScenes.filter((s) => s.id !== id);
+    setParsedScenes(updated);
+    setSelectedSceneIds((prev) => prev.filter((item) => item !== id));
+    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
+  };
+
   const handleToggleSelect = (id: string) => {
-    setSelectedIds((prev) =>
-      prev.includes(id) ? prev.filter((item) => item !== id) : [...prev, id]
-    );
-  };
-
-  // Select All
-  const handleSelectAll = () => {
-    if (selectedIds.length === scenes.length) {
-      setSelectedIds([]);
+    if (selectedSceneIds.includes(id)) {
+      setSelectedSceneIds((prev) => prev.filter((item) => item !== id));
     } else {
-      setSelectedIds(scenes.map((s) => s.id));
+      setSelectedSceneIds((prev) => [...prev, id]);
     }
   };
 
-  // Delete Selected Scenes and Auto-Clean Storyboard Cache
+  const handleToggleSelectAll = () => {
+    if (selectedSceneIds.length === parsedScenes.length) {
+      setSelectedSceneIds([]);
+    } else {
+      setSelectedSceneIds(parsedScenes.map((s) => s.id));
+    }
+  };
+
   const handleDeleteSelected = () => {
-    const remaining = scenes.filter((s) => !selectedIds.includes(s.id));
-    setScenes(remaining);
-    setSelectedIds([]);
+    const updated = parsedScenes.filter((s) => !selectedSceneIds.includes(s.id));
+    setParsedScenes(updated);
+    setSelectedSceneIds([]);
+    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
+  };
 
-    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(remaining));
-    localStorage.setItem("active_screenplay_scenes", JSON.stringify(remaining));
+  const handleClearAllScenes = () => {
+    setParsedScenes([]);
+    setSelectedSceneIds([]);
+    sessionStorage.removeItem("eclat_active_scenes");
+  };
 
-    // සියලුම scenes delete කළේ නම් Storyboard cache එකද සම්පූර්ණයෙන්ම හිස් කිරීම
-    if (remaining.length === 0) {
-      localStorage.removeItem("cine_storyboard_sinhala_script_sketch_bw");
-      localStorage.removeItem("cine_storyboard_sinhala_script_graphic_novel");
-      localStorage.removeItem("cine_storyboard_english_script_sketch_bw");
-      localStorage.removeItem("cine_storyboard_english_script_graphic_novel");
-      localStorage.removeItem("storyboard_filter");
+  const handleSaveEditedScene = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editingScene) return;
+    const updated = parsedScenes.map((s) => (s.id === editingScene.id ? editingScene : s));
+    setParsedScenes(updated);
+    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
+    setEditingScene(null);
+  };
+
+  const handleGenerateStoryboards = (targetScenes: SceneEntity[]) => {
+    if (targetScenes.length === 0) return;
+
+    let existingFrames: any[] = [];
+    try {
+      const stored = sessionStorage.getItem("eclat_storyboard_frames");
+      if (stored) existingFrames = JSON.parse(stored);
+    } catch (e) {
+      console.error(e);
     }
-  };
 
-  // Single Scene Go to Storyboard
-  const handleGoToStoryboardSingleScene = (sceneId: string) => {
-    localStorage.setItem("storyboard_filter", sceneId);
-    router.push("/storyboard");
-  };
+    const newFrames = targetScenes.flatMap((sc) => [
+      {
+        id: `sb-${sc.sceneNumber}-a`,
+        sceneNumber: sc.sceneNumber,
+        shotNumber: `SHOT ${String(sc.sceneNumber).padStart(2, "0")}A`,
+        shotTitle: `Wide Master Framing (WMS)`,
+        slugline: sc.slugline,
+        lensAngle: "28mm Anamorphic T2.0",
+        movement: "Slow Push-In Tracking",
+        visualPrompt: sc.visualPrompt,
+        characters: sc.characters,
+        props: sc.props,
+        imageType: "wide"
+      },
+      {
+        id: `sb-${sc.sceneNumber}-b`,
+        sceneNumber: sc.sceneNumber,
+        shotNumber: `SHOT ${String(sc.sceneNumber).padStart(2, "0")}B`,
+        shotTitle: `Medium Close Action (MCU)`,
+        slugline: sc.slugline,
+        lensAngle: "50mm Prime T1.5",
+        movement: "Dynamic Eye-Level",
+        visualPrompt: sc.visualPrompt,
+        characters: sc.characters,
+        props: sc.props,
+        imageType: "close"
+      }
+    ]);
 
-  // All Scenes Go to Storyboard
-  const handleGoToStoryboardAll = () => {
-    localStorage.setItem("storyboard_filter", "ALL");
+    const frameMap = new Map();
+    existingFrames.forEach((f) => frameMap.set(f.id, f));
+    newFrames.forEach((f) => frameMap.set(f.id, f));
+    const merged = Array.from(frameMap.values());
+
+    sessionStorage.setItem("eclat_storyboard_frames", JSON.stringify(merged));
     router.push("/storyboard");
   };
 
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 font-sans">
+    <div className="space-y-6 p-6 md:p-8 max-w-7xl mx-auto text-slate-100 font-sans">
       {/* Top Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
         <div>
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
+            <Sparkles className="w-3.5 h-3.5" /> INTELLIGENT SCENE PARSER (සිංහල & ENGLISH)
+          </div>
           <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
             Script Breakdown Studio
           </h1>
           <p className="text-slate-400 text-sm mt-1">
-            තිර පිටපත Scene-by-Scene විග්‍රහ කර සිනමානුරූපී අංග සහ Storyboards සකස් කිරීම.
+            තිර පිටපත Scene-by-Scene, චරිත, බඩු භාණ්ඩ සහ දෙබස් වෙන් කර නිෂ්පාදන පුවරුවට යොමු කරන්න.
           </p>
         </div>
 
         <div className="flex items-center gap-3">
           <button
-            onClick={handleGoToStoryboardAll}
-            disabled={scenes.length === 0}
-            className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
+            onClick={() => {
+              const selected = parsedScenes.filter((s) => selectedSceneIds.includes(s.id));
+              handleGenerateStoryboards(selected.length > 0 ? selected : parsedScenes);
+            }}
+            disabled={isGeneratingAllStoryboards || parsedScenes.length === 0}
+            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
           >
-            <Sparkles className="w-4 h-4" /> Generate All Storyboards ({scenes.length})
+            <Wand2 className="w-4 h-4" /> Generate All Storyboards
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Upload Box */}
-        <div className="lg:col-span-1 space-y-6">
-          <div className="p-6 rounded-2xl bg-[#07110b] border border-emerald-950/80 space-y-4 shadow-lg">
-            <h2 className="text-base font-bold text-white flex items-center gap-2">
-              <Upload className="w-4 h-4 text-emerald-400" /> Upload Screenplay
-            </h2>
-            <p className="text-xs text-slate-400 leading-relaxed">
-              PDF, FDX හෝ TXT ආකෘතියෙන් සිංහල හෝ ඉංග්‍රීසි තිර පිටපත තෝරන්න.
-            </p>
-
-            <label className="flex flex-col items-center justify-center p-8 border-2 border-dashed border-emerald-950/80 hover:border-emerald-500/50 rounded-xl cursor-pointer bg-[#050b07] transition-all">
-              <FileText className="w-10 h-10 text-emerald-500/60 mb-2" />
-              <span className="text-xs font-semibold text-slate-300">
-                {fileName || "Select Screenplay File"}
-              </span>
-              <span className="text-[10px] text-slate-500 mt-1">Supports .PDF, .FDX, and .TXT</span>
-              <input
-                type="file"
-                accept=".pdf,.txt,.fdx"
-                onChange={handleFileUpload}
-                className="hidden"
-              />
-            </label>
-
-            {isProcessing && (
-              <div className="p-3 rounded-xl bg-emerald-950/30 border border-emerald-500/20 flex items-center gap-3 text-emerald-400 text-xs">
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Parsing Scenes & Extracting Props...</span>
-              </div>
-            )}
-          </div>
-        </div>
-
-        {/* Scene Cards Column */}
-        <div className="lg:col-span-2 space-y-4">
-          {/* Action Row */}
-          {scenes.length > 0 && (
-            <div className="flex items-center justify-between pb-2 border-b border-emerald-950/40">
-              <div className="flex items-center gap-3">
-                <button
-                  onClick={handleSelectAll}
-                  className="text-xs font-medium text-emerald-400 hover:text-emerald-300 cursor-pointer flex items-center gap-1.5"
-                >
-                  <CheckCircle2 className="w-3.5 h-3.5" />
-                  {selectedIds.length === scenes.length ? "Deselect All" : `Select All (${scenes.length})`}
-                </button>
-                {selectedIds.length > 0 && (
-                  <button
-                    onClick={handleDeleteSelected}
-                    className="px-3 py-1 rounded-lg bg-rose-950/40 hover:bg-rose-900/60 border border-rose-800 text-rose-300 text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" /> Delete Selected ({selectedIds.length})
-                  </button>
-                )}
-              </div>
-              <span className="text-xs text-slate-500">{scenes.length} Scenes Loaded</span>
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+        {/* Left Column: Upload / Paste */}
+        <div className="lg:col-span-5 space-y-4">
+          <div className="p-5 rounded-2xl bg-[#070e0a] border border-emerald-950/70 flex flex-col">
+            <div className="flex items-center justify-between p-1 bg-[#040805] rounded-xl border border-emerald-950/60 mb-4">
+              <button
+                onClick={() => setInputMode("upload")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${inputMode === "upload"
+                  ? "bg-emerald-500 text-slate-950 shadow-md"
+                  : "text-slate-400 hover:text-white"
+                  }`}
+              >
+                <UploadCloud className="w-3.5 h-3.5" /> Upload Screenplay (PDF)
+              </button>
+              <button
+                onClick={() => setInputMode("paste")}
+                className={`flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${inputMode === "paste"
+                  ? "bg-emerald-500 text-slate-950 shadow-md"
+                  : "text-slate-400 hover:text-white"
+                  }`}
+              >
+                <FileText className="w-3.5 h-3.5" /> Paste Script
+              </button>
             </div>
-          )}
 
-          {/* Scene Cards List */}
-          <div className="space-y-4">
-            {scenes.map((scene) => {
-              const isSelected = selectedIds.includes(scene.id);
-              return (
-                <div
-                  key={scene.id}
-                  className={`p-5 rounded-2xl bg-[#07110b] border transition-all space-y-4 ${isSelected
-                      ? "border-emerald-500/80 shadow-md shadow-emerald-500/10"
-                      : "border-emerald-950/80 hover:border-emerald-900"
-                    }`}
-                >
-                  <div className="flex items-start justify-between gap-4">
-                    <div className="flex items-center gap-3">
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={() => handleToggleSelect(scene.id)}
-                        className="w-4 h-4 rounded border-emerald-950 bg-black/60 text-emerald-500 focus:ring-0 cursor-pointer"
-                      />
-                      <div>
-                        <div className="flex items-center gap-2">
-                          <span className="text-sm font-bold text-white tracking-wide">
-                            {scene.slugline}
-                          </span>
-                          <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-emerald-500/10 border border-emerald-500/30 text-emerald-400">
-                            {scene.timeOfDay}
-                          </span>
-                        </div>
+            {inputMode === "upload" ? (
+              <div className="space-y-4">
+                <label className="border-2 border-dashed border-emerald-950/80 hover:border-emerald-500/50 rounded-2xl p-8 flex flex-col items-center justify-center text-center cursor-pointer transition-all bg-[#040805]/60 group">
+                  <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 mb-2 group-hover:scale-105 transition-transform">
+                    <UploadCloud className="w-6 h-6" />
+                  </div>
+                  <h4 className="text-sm font-bold text-white mb-1">Select Screenplay File</h4>
+                  <p className="text-xs text-slate-400 max-w-xs mb-2">
+                    Supports <strong className="text-slate-200">.PDF</strong>, <strong className="text-slate-200">.FDX</strong>, and <strong className="text-slate-200">.TXT</strong>
+                  </p>
+                  <input
+                    id="file-input-upload"
+                    type="file"
+                    accept=".pdf,application/pdf,.txt,text/plain,.fdx"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                </label>
+
+                {uploadedFile && (
+                  <div className="space-y-3">
+                    <div className="p-3.5 rounded-xl bg-[#0a1810] border border-emerald-500/40 flex items-center justify-between text-xs">
+                      <div className="flex items-center gap-2.5 text-slate-200 truncate">
+                        <FileCheck className="w-4 h-4 text-emerald-400 shrink-0" />
+                        <span className="font-medium truncate">{uploadedFile.name}</span>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <span className="text-emerald-400 font-bold text-[11px] bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                          {(uploadedFile.size / 1024).toFixed(1)} KB
+                        </span>
+                        <button
+                          onClick={handleRemoveScriptAndClear}
+                          className="p-1 rounded bg-red-950/60 hover:bg-red-900 text-red-400 border border-red-800/40 transition-colors"
+                          title="Remove script"
+                        >
+                          <X className="w-3.5 h-3.5" />
+                        </button>
                       </div>
                     </div>
 
                     <button
-                      onClick={() => handleGoToStoryboardSingleScene(scene.id)}
-                      className="px-3.5 py-1.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 hover:text-white text-xs font-semibold flex items-center gap-1.5 cursor-pointer transition-all"
+                      onClick={handleExecuteBreakdown}
+                      disabled={isProcessing}
+                      className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
                     >
-                      <Film className="w-3.5 h-3.5" /> Generate Storyboard
+                      {isProcessing ? (
+                        <>
+                          <Loader2 className="w-4 h-4 animate-spin" /> Processing Screenplay...
+                        </>
+                      ) : (
+                        <>
+                          <Play className="w-3.5 h-3.5 fill-current" /> Execute Dynamic Breakdown
+                        </>
+                      )}
                     </button>
                   </div>
-
-                  <p className="text-xs text-slate-300 leading-relaxed font-light">
-                    {scene.synopsis}
-                  </p>
-
-                  <div className="flex flex-wrap items-center gap-4 pt-3 border-t border-emerald-950/50 text-[11px]">
-                    {scene.characters.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <span className="text-slate-500 uppercase text-[10px]">Cast:</span>
-                        <span className="text-emerald-400 font-medium">
-                          {scene.characters.join(", ")}
-                        </span>
-                      </div>
-                    )}
-                    {scene.props.length > 0 && (
-                      <div className="flex items-center gap-1.5 text-slate-400">
-                        <span className="text-slate-500 uppercase text-[10px]">Props:</span>
-                        <span className="text-slate-300">
-                          {scene.props.join(", ")}
-                        </span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-
-            {scenes.length === 0 && !isProcessing && (
-              <div className="p-16 rounded-2xl bg-[#050b07] border border-dashed border-emerald-950 text-center text-slate-500 space-y-2">
-                <Layers className="w-10 h-10 mx-auto text-slate-600" />
-                <p className="text-sm font-semibold text-slate-400">දර්ශන හමු නොවීය</p>
-                <p className="text-xs text-slate-600">
-                  වම්පසින් තිර පිටපතක් (Script) Upload කරන්න.
-                </p>
+                )}
+              </div>
+            ) : (
+              <div className="space-y-4">
+                <textarea
+                  value={scriptText}
+                  onChange={(e) => setScriptText(e.target.value)}
+                  placeholder="Paste any screenplay here (English or Sinhala)..."
+                  rows={13}
+                  className="w-full bg-[#040805] border border-emerald-950/80 rounded-xl p-4 text-xs font-mono text-slate-200 leading-relaxed focus:outline-none focus:border-emerald-500/50 resize-y"
+                />
+                <button
+                  onClick={handleExecuteBreakdown}
+                  disabled={isProcessing || !scriptText.trim()}
+                  className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center justify-center gap-2 cursor-pointer"
+                >
+                  <Play className="w-3.5 h-3.5 fill-current" /> Execute Dynamic Breakdown
+                </button>
               </div>
             )}
           </div>
         </div>
+
+        {/* Right Column: Exact Cards Layout as Thesis Screenshot */}
+        <div className="lg:col-span-7 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3 p-3 bg-[#070e0a] border border-emerald-950/70 rounded-xl text-xs">
+            <div className="flex items-center gap-3">
+              <button
+                onClick={handleToggleSelectAll}
+                disabled={parsedScenes.length === 0}
+                className="font-medium text-slate-300 hover:text-white flex items-center gap-2 transition-colors disabled:opacity-40"
+              >
+                {selectedSceneIds.length === parsedScenes.length && parsedScenes.length > 0 ? (
+                  <CheckSquare className="w-4 h-4 text-emerald-400" />
+                ) : (
+                  <Square className="w-4 h-4 text-slate-500" />
+                )}
+                Select All ({parsedScenes.length})
+              </button>
+
+              {selectedSceneIds.length > 0 && (
+                <button
+                  onClick={handleDeleteSelected}
+                  className="px-2 py-0.5 rounded bg-red-500/20 hover:bg-red-500/30 border border-red-500/30 text-red-400 font-semibold flex items-center gap-1 transition-all"
+                >
+                  <Trash2 className="w-3 h-3" /> Delete Selected ({selectedSceneIds.length})
+                </button>
+              )}
+            </div>
+
+            {parsedScenes.length > 0 && (
+              <button
+                onClick={handleClearAllScenes}
+                className="text-slate-400 hover:text-red-400 transition-colors"
+              >
+                Clear All
+              </button>
+            )}
+          </div>
+
+          {isProcessing ? (
+            <div className="p-16 rounded-2xl bg-[#070e0a] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
+              <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
+              <h3 className="text-sm font-semibold text-white">තිර පිටපත විශ්ලේෂණය කරමින් පවතී...</h3>
+              <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, උපකරණ සහ දෙබස් සජීවීව වෙන් කරමින් පවතී.</p>
+            </div>
+          ) : parsedScenes.length > 0 ? (
+            <div className="space-y-4 max-h-[780px] overflow-y-auto pr-1 custom-scrollbar">
+              {parsedScenes.map((scene) => {
+                const isSelected = selectedSceneIds.includes(scene.id);
+                return (
+                  <div
+                    key={scene.id}
+                    className={`p-5 rounded-xl bg-[#050c08] border transition-all space-y-3.5 ${isSelected
+                      ? "border-emerald-500/90 shadow-lg shadow-emerald-950/30"
+                      : "border-emerald-950/80 hover:border-emerald-500/40"
+                      }`}
+                  >
+                    {/* Header Row: Checkbox, Badge ID, Slugline & Controls */}
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <button
+                          onClick={() => handleToggleSelect(scene.id)}
+                          className="text-slate-400 hover:text-white"
+                        >
+                          {isSelected ? (
+                            <CheckSquare className="w-4 h-4 text-emerald-400" />
+                          ) : (
+                            <Square className="w-4 h-4 text-slate-600" />
+                          )}
+                        </button>
+
+                        <span className="text-[11px] font-bold text-emerald-400 bg-emerald-950/80 px-2 py-0.5 rounded border border-emerald-500/30 font-mono uppercase tracking-wider">
+                          {scene.id}
+                        </span>
+
+                        <h3 className="text-sm font-bold text-white tracking-wide uppercase">
+                          {scene.slugline}
+                        </h3>
+                      </div>
+
+                      <div className="flex items-center gap-1.5">
+                        <button
+                          onClick={() => setEditingScene(scene)}
+                          className="p-1 rounded text-slate-400 hover:text-emerald-300 hover:bg-[#0a1810] transition-colors"
+                          title="Edit Scene"
+                        >
+                          <Edit2 className="w-3.5 h-3.5" />
+                        </button>
+                        <button
+                          onClick={() => handleDeleteScene(scene.id)}
+                          className="p-1 rounded text-slate-400 hover:text-red-400 hover:bg-[#0a1810] transition-colors"
+                          title="Delete Scene"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    </div>
+
+                    {/* Sub Badges: Location & Time */}
+                    <div className="flex items-center gap-2">
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/20 text-emerald-300 text-[11px] font-medium">
+                        {scene.locationType}
+                      </span>
+                      <span className="px-2 py-0.5 rounded bg-emerald-950/60 border border-emerald-500/20 text-emerald-400 text-[11px] font-medium">
+                        {scene.timeOfDay}
+                      </span>
+                    </div>
+
+                    {/* Synopsis Line */}
+                    <p className="text-xs text-slate-300 leading-relaxed font-normal">
+                      {scene.synopsis}
+                    </p>
+
+                    {/* Characters & Props Rows */}
+                    <div className="space-y-2 pt-1 text-xs">
+                      {/* Characters */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 shrink-0">
+                          <Users className="w-3 h-3 text-emerald-400" /> චරිත / CHARACTERS ({scene.characters.length}):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scene.characters.map((char, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 rounded bg-[#091710] border border-emerald-500/20 text-[11px] text-emerald-300"
+                            >
+                              {char}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+
+                      {/* Props */}
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-[11px] text-emerald-400 font-medium flex items-center gap-1 shrink-0">
+                          <Box className="w-3 h-3 text-emerald-400" /> උපකරණ / PROPS ({scene.props.length}):
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {scene.props.map((prop, idx) => (
+                            <span
+                              key={idx}
+                              className="px-2 py-0.5 rounded bg-[#091710] border border-emerald-500/20 text-[11px] text-slate-300"
+                            >
+                              {prop}
+                            </span>
+                          ))}
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Dialogues Box */}
+                    {scene.dialogues && scene.dialogues.length > 0 && (
+                      <div className="p-3 rounded-lg bg-[#030704] border border-emerald-950/80 space-y-1.5">
+                        <div className="text-[11px] text-emerald-400 font-semibold flex items-center gap-1.5">
+                          <MessageSquare className="w-3 h-3" /> දෙබස් / KEY DIALOGUES ({scene.dialogues.length})
+                        </div>
+                        <div className="space-y-1 text-xs">
+                          {scene.dialogues.map((dlg, dIdx) => (
+                            <div key={dIdx} className="leading-snug">
+                              <span className="text-emerald-300 font-semibold mr-1.5">
+                                {dlg.speaker}:
+                              </span>
+                              <span className="text-slate-300 italic font-light">
+                                "{dlg.line}"
+                              </span>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {/* Footer Row */}
+                    <div className="pt-2 flex items-center justify-between border-t border-emerald-950/40 text-xs">
+                      <span className="text-[11px] text-slate-400 flex items-center gap-1">
+                        <Film className="w-3.5 h-3.5 text-emerald-400" />
+                        {scene.plannedShots} Planned Shots
+                      </span>
+                      <button
+                        onClick={() => handleGenerateStoryboards([scene])}
+                        className="px-3 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5 cursor-pointer"
+                      >
+                        Generate Storyboard <ArrowRight className="w-3 h-3" />
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="p-12 rounded-2xl bg-[#070e0a] border border-dashed border-emerald-950 text-center text-slate-400">
+              <Film className="w-8 h-8 text-slate-600 mx-auto mb-2" />
+              <p className="text-sm font-medium">කිසිදු Scene එකක් ඇතුළත් කර නොමැත.</p>
+              <p className="text-xs text-slate-500 mt-1">දකුණු පසින් PDF ගොනුවක් Upload කර හෝ පෙළ Paste කර Parse කරන්න.</p>
+            </div>
+          )}
+        </div>
       </div>
+
+      {/* Edit Scene Modal */}
+      {editingScene && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
+          <div className="relative w-full max-w-lg bg-[#070e0a] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
+            <div className="flex items-center justify-between pb-4 border-b border-emerald-950/70">
+              <h3 className="text-base font-bold text-white flex items-center gap-2">
+                <Edit2 className="w-4 h-4 text-emerald-400" /> Edit Scene ({editingScene.id})
+              </h3>
+              <button
+                onClick={() => setEditingScene(null)}
+                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#0a1810]"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditedScene} className="space-y-4 mt-4">
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Slugline / Title</label>
+                <input
+                  type="text"
+                  required
+                  value={editingScene.slugline}
+                  onChange={(e) => setEditingScene({ ...editingScene, slugline: e.target.value })}
+                  className="w-full bg-[#040805] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Location Type</label>
+                  <select
+                    value={editingScene.locationType}
+                    onChange={(e) => setEditingScene({ ...editingScene, locationType: e.target.value })}
+                    className="w-full bg-[#040805] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  >
+                    <option value="INT (අභ්‍යන්තර)">INT (අභ්‍යන්තර)</option>
+                    <option value="EXT (බාහිර)">EXT (බාහිර)</option>
+                    <option value="INT (Interior)">INT (Interior)</option>
+                    <option value="EXT (Exterior)">EXT (Exterior)</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-slate-300 mb-1">Time of Day</label>
+                  <input
+                    type="text"
+                    value={editingScene.timeOfDay}
+                    onChange={(e) => setEditingScene({ ...editingScene, timeOfDay: e.target.value })}
+                    className="w-full bg-[#040805] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-slate-300 mb-1">Synopsis</label>
+                <textarea
+                  rows={3}
+                  value={editingScene.synopsis}
+                  onChange={(e) => setEditingScene({ ...editingScene, synopsis: e.target.value })}
+                  className="w-full bg-[#040805] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60 leading-relaxed"
+                />
+              </div>
+
+              <div className="pt-3 flex items-center justify-end gap-3 border-t border-emerald-950/60">
+                <button
+                  type="button"
+                  onClick={() => setEditingScene(null)}
+                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
