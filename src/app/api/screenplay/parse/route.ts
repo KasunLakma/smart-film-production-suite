@@ -25,7 +25,7 @@ STRICT RULES:
 1. Detect whether the script is written in Sinhala or English.
 2. If Sinhala: Output sluglines, synopsis, characters, and dialogues purely in authentic Sinhala.
 3. If English: Output sluglines, synopsis, characters, and dialogues purely in authentic English.
-4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g. "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
+4. For EVERY scene, output an English "visualPrompt" optimized for 16:9 cinematic storyboard frame generation (e.g., "Cinematic 16:9 movie still of [location], [lighting], [character action], 35mm anamorphic frame, 8k resolution"). Even for Sinhala scripts, this "visualPrompt" MUST BE IN ENGLISH.
 5. Parse all genuine sequential scenes found in the text.
 
 Return ONLY a valid JSON array conforming to this schema (no markdown, no backticks, only pure JSON):
@@ -49,8 +49,27 @@ Screenplay Text:
 ${scriptSlice}
 `;
 
-        // Google විසින් නිර්දේශ කරන නිල gemini-3.0-flash endpoint එක
-        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/models/gemini-3.0-flash:generateContent?key=${apiKey}`;
+        // 1. ඔබගේ නිශ්චිත API Key එකට සහය දක්වන Active Models ලැයිස්තුව Google එකෙන්ම විමසා ගැනීම
+        const listRes = await fetch(`https://generativelanguage.googleapis.com/v1beta/models?key=${apiKey}`);
+        if (!listRes.ok) {
+            const listErr = await listRes.text();
+            throw new Error(`Google Models Query Failed: ${listRes.status} - ${listErr}`);
+        }
+
+        const listData = await listRes.json();
+        const availableModels: string[] = (listData.models || [])
+            .filter((m: any) => m.supportedGenerationMethods && m.supportedGenerationMethods.includes("generateContent"))
+            .map((m: any) => m.name); // උදා: "models/gemini-1.5-flash-8b", "models/gemini-2.0-flash" ආදිය
+
+        if (availableModels.length === 0) {
+            throw new Error("ඔබගේ Gemini API Key එකට generateContent සහය දක්වන models කිසිවක් හමු නොවීය.");
+        }
+
+        // වේගවත් flash model එකක් ප්‍රමුඛතාවය අනුව තෝරා ගැනීම
+        let targetModelPath = availableModels.find((m) => m.includes("flash") && !m.includes("exp")) || availableModels[0];
+
+        // 2. Google විසින් ලබාදුන් නිල model path එක කෙළින්ම generateContent සඳහා යෙදීම
+        const apiUrl = `https://generativelanguage.googleapis.com/v1beta/${targetModelPath}:generateContent?key=${apiKey}`;
 
         const apiRes = await fetch(apiUrl, {
             method: "POST",
@@ -69,8 +88,7 @@ ${scriptSlice}
 
         if (!apiRes.ok) {
             const errDetail = await apiRes.text();
-            console.error("Gemini 3.0 Flash Error:", errDetail);
-            throw new Error(`Google API Error: ${apiRes.status} - ${errDetail}`);
+            throw new Error(`Google API Error (${targetModelPath}): ${errDetail}`);
         }
 
         const resJson = await apiRes.json();
