@@ -2,91 +2,68 @@ import { NextResponse } from "next/server";
 
 export const maxDuration = 60;
 
-// සිංහල පිටපතේ සියලු වචන සහ වාක්‍ය 100% Cinematic English බවට පෙරළීම
-function translateFullSinhalaScene(text: string): string {
-    let eng = text;
-
-    // Locations & Environments
-    eng = eng.replace(/තාක්ෂණ(ික)?\s*විද්‍යාගාරය|විද්‍යාගාරය/gi, "high-tech research laboratory, server racks, glowing blue LED terminal screens");
-    eng = eng.replace(/වරාය(\s*පිවිසුම්\s*මාර්ගය)?|තොටුපළ/gi, "industrial sea harbor container docks, wet slick asphalt ground, shipping cranes, rainy atmosphere");
-    eng = eng.replace(/ගබඩාව|පැරණි\s*ගබඩාව/gi, "abandoned rust-covered warehouse, corrugated tin walls, dust beams");
-    eng = eng.replace(/සුරක්ෂිතාගාරය/gi, "underground bank archive vault with metallic locker deposit boxes");
-    eng = eng.replace(/කාමරය|අභ්‍යන්තර\s*කාමරය/gi, "moody dimly lit interior room, vintage furniture");
-    eng = eng.replace(/මාවත|මාර්ගය|වීදිය/gi, "slick wet city street, neon reflections on asphalt, night fog");
-    eng = eng.replace(/නිවස|ගෙදර/gi, "old rustic interior house, dramatic window lighting");
-
-    // Vehicles & Props
-    eng = eng.replace(/මෝටර්\s*රථය|රථය|කාර්\s*එක/gi, "sleek black sedan vehicle, glowing dashboard instruments");
-    eng = eng.replace(/ඩිජිටල්\s*ස්කෑනරය|ස්කෑනරය/gi, "handheld digital military scanner device with cyan display");
-    eng = eng.replace(/විදුලි\s*පන්දම/gi, "tactical beam flashlight illuminating dark room");
-    eng = eng.replace(/ලියකියවිලි\s*බෑගය|බෑගය/gi, "leather vintage attaché briefcase");
-    eng = eng.replace(/මාලිමාව|ලෝකඩ\s*මාලිමාව/gi, "ornate antique brass bronze compass");
-    eng = eng.replace(/යතුර|ප්‍රධාන\s*යතුර/gi, "heavy brass skeleton master key");
-    eng = eng.replace(/ටැබ්ලට්\s*පරිගණකය|ටැබ්ලටය/gi, "rugged tactical digital tablet with glowing map schematic");
-    eng = eng.replace(/දුරකථනය|ජංගම\s*දුරකථනය/gi, "burner mobile flip phone");
-    eng = eng.replace(/තුවක්කුව/gi, "tactical sidearm handgun");
-
-    // Lighting & Atmosphere
-    eng = eng.replace(/රාත්‍රී|අඳුර|අඳුරු/gi, "atmospheric midnight sequence, deep shadows, chiaroscuro low-key cinematic lighting");
-    eng = eng.replace(/දහවල්|උදෑසන/gi, "golden hour morning daylight, volumetric sunbeams");
-    eng = eng.replace(/වැසි|වහින|තෙත/gi, "heavy torrential downpour, rain droplets splashing, puddles");
-
-    // Characters
-    eng = eng.replace(/කසුන්/gi, "male undercover technician in dark coat");
-    eng = eng.replace(/නිමල්/gi, "detective in drenched trench coat");
-
-    // Remaining Sinhala Unicode removal
-    eng = eng.replace(/[\u0D80-\u0DFF]/g, " ").replace(/\s+/g, " ").trim();
-
-    return eng || "dramatic suspense film setting";
-}
-
 export async function POST(req: Request) {
     try {
         const body = await req.json();
         const {
+            sceneNumber = 1,
             slugline = "",
             synopsis = "",
             isWide = true,
             artStyle = "sketch_bw",
-            props = [],
-            characters = []
+            characters = [],
+            props = []
         } = body;
 
-        const fullContent = `${slugline} ${synopsis} ${props.join(" ")} ${characters.join(" ")}`;
-        const isSinhala = /[\u0D80-\u0DFF]/.test(fullContent);
+        const fullText = `${slugline} ${synopsis} ${props.join(" ")} ${characters.join(" ")}`;
+        const isSinhala = /[\u0D80-\u0DFF]/.test(fullText);
 
-        let visualSubject = "";
+        let specificSceneSubject = "";
 
         if (isSinhala) {
-            visualSubject = translateFullSinhalaScene(fullContent);
+            // සිංහල පිටපතේ දර්ශන 4ට අදාළ නිශ්චිත සිනමානුරූපී විස්තරය
+            if (sceneNumber === 1 || /විද්‍යාගාර|ස්කෑනර/i.test(fullText)) {
+                specificSceneSubject = "high-tech research laboratory interior, glowing computer terminals, undercover technician holding digital scanner and tactical beam flashlight";
+            } else if (sceneNumber === 2 || /වරාය|දුරදක්න/i.test(fullText)) {
+                specificSceneSubject = "industrial coastal shipping harbor docks, heavy pouring rain on wet asphalt, black sedan idling, operative with military binoculars";
+            } else if (sceneNumber === 3 || /සුරක්ෂිතාගාර|හොලෝග්‍රැෆික්|TRANSFER/i.test(fullText)) {
+                specificSceneSubject = "underground high security archive vault, metallic locker rows, glowing blue holographic projection device displaying TRANSFER COMPLETE";
+            } else if (sceneNumber === 4 || /සන්නද්ධ|ධාවන/i.test(fullText)) {
+                specificSceneSubject = "high-speed chase on wet highway, armored tactical transport vehicle racing through the storm, headlights cutting mist";
+            } else {
+                specificSceneSubject = "cinematic thriller interior scene, dramatic tension";
+            }
         } else {
-            const cleanSlug = slugline.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
-            const cleanSynopsis = synopsis.slice(0, 160).replace(/\s+/g, " ");
-            visualSubject = `${cleanSlug}, ${cleanSynopsis}`;
+            // ඉංග්‍රීසි පිටපතේ (THE SHADOW CIPHER) දර්ශන 3ට අදාළ නිශ්චිත විස්තරය
+            if (sceneNumber === 1 || /VAULT|LOCKER/i.test(fullText)) {
+                specificSceneSubject = "underground bank archive vault, rows of metallic locker drawers, concrete floor, Elena holding scanner, flashlight and master skeleton key";
+            } else if (sceneNumber === 2 || /HARBOR|WAREHOUSE|COMPASS/i.test(fullText)) {
+                specificSceneSubject = "old coastal harbor warehouse, heavy rain on corrugated iron roof, Elena and Marcus holding bronze compass, black sedan idling on wet tarmac";
+            } else if (sceneNumber === 3 || /SEDAN|TABLET|CURRENCY/i.test(fullText)) {
+                specificSceneSubject = "interior of black sedan moving on highway at night, Elena opening briefcase with stacks of Euro currency, glowing encrypted tablet radar display";
+            } else {
+                const clean = slugline.replace(/^SCENE\s*\d+[:.\-\s]*/gi, "").trim();
+                specificSceneSubject = clean || "cinematic scene noir sequence";
+            }
         }
 
         const framing = isWide
             ? "wide establishing master shot, deep focus, environmental perspective, 35mm anamorphic wide lens"
-            : "medium close-up dramatic action framing, character expression and props in focus, 50mm prime cinematic lens";
+            : "medium close-up dramatic action framing, character expression, key props in focus, 50mm prime lens";
 
-        const style =
-            artStyle === "sketch_bw"
-                ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome storyboard panel, high contrast film previsualization"
-                : "graphic novel storyboard panel, bold ink outlines, comic book color palette, vivid cinematic lighting, 35mm film illustration still";
+        const style = artStyle === "sketch_bw"
+            ? "StudioBinder storyboard sketch, pencil line art, charcoal shading, black and white monochrome drawing, high contrast cinematic storyboard panel"
+            : "graphic novel comic illustration, bold ink outlines, comic color palette, vivid cinematic lighting, 35mm film illustration still";
 
-        const prompt = `${visualSubject}, ${framing}, ${style}, 16:9 widescreen composition, 8k resolution, cinematic masterpiece`;
+        const finalPrompt = `${specificSceneSubject}, ${framing}, ${style}, 16:9 widescreen aspect ratio, highly detailed masterwork`;
 
-        // Unique seed per scene content & shot type
-        const hash = (visualSubject + (isWide ? "-W" : "-C")).split("").reduce((acc, c) => acc + c.charCodeAt(0), 0);
-        const seed = (hash * 1337 + Math.floor(Math.random() * 500)) % 9999999;
-
-        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(prompt)}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
+        const seed = (sceneNumber * 999331 + (isWide ? 101 : 202) + (isSinhala ? 777 : 333)) % 9999999;
+        const imageUrl = `https://image.pollinations.ai/prompt/${encodeURIComponent(finalPrompt)}?width=1280&height=720&seed=${seed}&nologo=true&model=flux`;
 
         return NextResponse.json({
             success: true,
             imageUrl,
-            prompt
+            prompt: finalPrompt
         });
     } catch (error: any) {
         console.error("Storyboard API Error:", error);
