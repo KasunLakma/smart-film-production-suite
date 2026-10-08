@@ -34,10 +34,9 @@ export async function POST(req: Request) {
 
         if (slugRegex.test(rawText)) {
             const splitRegex = /(?=(?:^|\n)\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT\.|EXT\.|INT\/EXT|I\/E|අභ්‍යන්තර|බාහිර))/gi;
-            chunks = rawText.split(splitRegex).map(c => c.trim()).filter(c => c.length > 20);
+            chunks = rawText.split(splitRegex).map((c: string) => c.trim()).filter((c: string) => c.length > 20);
         } else {
-            // Sluglines නොමැති නම් ස්වභාවික ඡේද අනුව scenes වෙන් කිරීම
-            chunks = rawText.split(/\n\s*\n|\.\s{2,}/).map(c => c.trim()).filter(c => c.length > 30);
+            chunks = rawText.split(/\n\s*\n|\.\s{2,}/).map((c: string) => c.trim()).filter((c: string) => c.length > 30);
             if (chunks.length > 25) {
                 const grouped: string[] = [];
                 for (let i = 0; i < chunks.length; i += 3) {
@@ -52,7 +51,7 @@ export async function POST(req: Request) {
         }
 
         // 3. Scene Objects Dynamic Extraction
-        const scenes: ExtractedScene[] = chunks.map((chunk, index) => {
+        const scenes: ExtractedScene[] = chunks.map((chunk: string, index: number) => {
             const sceneNum = index + 1;
             const firstLine = chunk.split("\n")[0].trim();
 
@@ -69,11 +68,11 @@ export async function POST(req: Request) {
                     : `SCENE ${String(sceneNum).padStart(2, "0")}: ${isExt ? "EXT. LOCATION SEQUENCE" : "INT. LOCATION SEQUENCE"} - ${isNight ? "NIGHT" : "DAY"}`;
             }
 
-            // Characters Extraction (දෙබස් පේළි හෝ කැපිටල් නම් වලින්)
+            // Characters Extraction
             const characters: string[] = [];
             const charMatches = chunk.match(/([A-Z\u0D80-\u0DFF]{2,25})(?=\s*[:\-])/g);
             if (charMatches) {
-                charMatches.forEach(c => {
+                charMatches.forEach((c: string) => {
                     const cleanName = c.trim();
                     if (
                         !characters.includes(cleanName) &&
@@ -94,7 +93,7 @@ export async function POST(req: Request) {
             // Dialogues Extraction
             const dialogues: { speaker: string; line: string }[] = [];
             const lines = chunk.split("\n");
-            lines.forEach(l => {
+            lines.forEach((l: string) => {
                 if (l.includes(":") || l.includes("-")) {
                     const [spk, ...rest] = l.split(/[:\-]/);
                     const lineTxt = rest.join(":").trim();
@@ -107,13 +106,13 @@ export async function POST(req: Request) {
                 }
             });
 
-            // Props Extraction (පිටපතේ සඳහන් වන නාමපද හඳුනා ගැනීම)
-            const propTokens = [
+            // Props Extraction
+            const propTokens: string[] = [
                 "GUN", "KNIFE", "PHONE", "CAR", "BOTTLE", "BAG", "LETTER", "DOOR", "CLOCK", "CHAIR", "TABLE",
                 "තුවක්කුව", "පිහිය", "දුරකථනය", "රථය", "ලිපිය", "බෝතලය", "දොර", "ඔරලෝසුව", "පුටුව", "මේසය"
             ];
             const props: string[] = [];
-            propTokens.forEach(p => {
+            propTokens.forEach((p: string) => {
                 if (chunk.toUpperCase().includes(p.toUpperCase()) && !props.includes(p) && props.length < 4) {
                     props.push(p);
                 }
@@ -127,7 +126,7 @@ export async function POST(req: Request) {
                 ? cleanSynopsis.slice(0, 260) + "..."
                 : chunk.slice(0, 260) + "...";
 
-            // Storyboard සඳහා 100% English Visual Prompt එක සැකසීම
+            // 100% English Visual Prompt for Storyboard
             const visualPrompt = `Cinematic 16:9 widescreen movie still, ${isExt ? "exterior shot" : "interior shot"}, ${isNight ? "dramatic moody night lighting" : "natural cinematic day illumination"}, 35mm anamorphic frame, photorealistic 8k, setting: ${slugline.replace(/[\u0D80-\u0DFF]/g, "film location")}.`;
 
             return {
