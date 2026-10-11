@@ -38,3 +38,10 @@ body {
 }
 
 
+
+/* Printing the call sheet: show only the white paper */
+@page { margin: 10mm; }
+@media print {
+  html, body { background: #ffffff !important; color: #000000 !important; }
+  .print-paper { box-shadow: none !important; border-radius: 0 !important; padding: 0 !important; }
+}

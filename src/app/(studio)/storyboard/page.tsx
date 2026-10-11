@@ -166,7 +166,8 @@ export default function StoryboardPage() {
     if (typeof window !== "undefined") {
       const storedScenes =
         localStorage.getItem("active_screenplay_scenes") ||
-        sessionStorage.getItem("eclat_active_scenes");
+        sessionStorage.getItem("eclat_active_scenes") ||
+        localStorage.getItem("eclat_scenes_v1");
       const cached = getSavedCache();
 
       if (storedScenes) {

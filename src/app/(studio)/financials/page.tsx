@@ -1,356 +1,501 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import {
-  DollarSign,
-  Sparkles,
-  TrendingUp,
+  Wallet,
+  Calculator,
   Plus,
-  Layers,
-  ArrowRight,
+  Trash2,
+  ChevronDown,
+  Download,
+  AlertTriangle,
+  FileText,
+  Settings2,
+  Pencil,
   CheckCircle2,
-  FileSpreadsheet,
-  X
 } from "lucide-react";
+import { KEYS, usePersistentState, loadScenes, loadMeta, money, uid, downloadCsv, SceneLite } from "@/lib/store";
+import {
+  DEFAULT_RATES,
+  DEFAULT_SETTINGS,
+  DEPARTMENTS,
+  DEPT_HELP,
+  RATE_LABELS,
+  estimateBudget,
+  lineAmount,
+  PlanLine,
+  RateCard,
+  EstimateSettings,
+  EstimateSummary,
+} from "@/lib/estimate";
+import { PageHeader, HelpBox, Card, Field, Modal, EmptyState, Pill, inputCls, btnPrimary, btnGhost, btnDanger } from "@/components/ui";
 
-interface ExpenseItem {
+interface Expense {
   id: string;
-  item: string;
+  date: string;
   department: string;
-  allocated: number;
-  spent: number;
-  status: "Approved" | "Pending" | "Over Budget";
+  description: string;
+  amount: number;
+  paidTo: string;
+  note: string;
 }
 
+interface BudgetState {
+  settings: EstimateSettings;
+  rates: RateCard;
+  lines: PlanLine[];
+  expenses: Expense[];
+  summary: EstimateSummary | null;
+  estimatedAt: number | null;
+}
+
+const DEFAULT_BUDGET: BudgetState = {
+  settings: DEFAULT_SETTINGS,
+  rates: DEFAULT_RATES,
+  lines: [],
+  expenses: [],
+  summary: null,
+  estimatedAt: null,
+};
+
+const today = () => new Date().toISOString().slice(0, 10);
+
 export default function FinancialsPage() {
-  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [budget, setBudget, ready] = usePersistentState<BudgetState>(KEYS.budget, DEFAULT_BUDGET);
+  const [scenes, setScenes] = useState<SceneLite[]>([]);
+  const [chars, setChars] = useState<number | null>(null);
+  const [open, setOpen] = useState<Record<string, boolean>>({});
+  const [showSettings, setShowSettings] = useState(false);
+  const [filterDept, setFilterDept] = useState("ALL");
+  const [form, setForm] = useState<Expense | null>(null);
 
-  const [expenses, setExpenses] = useState<ExpenseItem[]>([
-    {
-      id: "EXP-101",
-      item: "ARRI Alexa Mini LF & Anamorphic Lenses",
-      department: "Camera & Optics",
-      allocated: 35000,
-      spent: 32000,
-      status: "Approved"
-    },
-    {
-      id: "EXP-102",
-      item: "Soundstage Stage B (3 Shooting Days)",
-      department: "Locations",
-      allocated: 20000,
-      spent: 18500,
-      status: "Approved"
-    },
-    {
-      id: "EXP-103",
-      item: "Cybernetic Obsidian Catwalk Set Construction",
-      department: "Art & Props",
-      allocated: 25000,
-      spent: 24000,
-      status: "Approved"
-    },
-    {
-      id: "EXP-104",
-      item: "Boom Mic & Wireless Transmitter Kits",
-      department: "Sound & Audio",
-      allocated: 8000,
-      spent: 6000,
-      status: "Approved"
-    },
-    {
-      id: "EXP-105",
-      item: "Stunt Safety Coordination & Wire Rigs",
-      department: "Cast & Stunts",
-      allocated: 12000,
-      spent: 4000,
-      status: "Pending"
-    }
-  ]);
+  useEffect(() => {
+    setScenes(loadScenes());
+    setChars(loadMeta()?.chars ?? null);
+  }, []);
 
-  // Form State
-  const [formData, setFormData] = useState({
-    item: "",
-    department: "Camera & Optics",
-    allocated: "",
-    spent: "",
-    status: "Approved" as "Approved" | "Pending"
-  });
+  const { lines, expenses, settings, rates } = budget;
 
-  const totalBudget = 150000;
-  const totalSpent = expenses.reduce((sum, item) => sum + item.spent, 0);
-  const remaining = totalBudget - totalSpent;
+  const plannedTotal = useMemo(() => lines.reduce((t, l) => t + lineAmount(l), 0), [lines]);
+  const spentTotal = useMemo(() => expenses.reduce((t, e) => t + (Number(e.amount) || 0), 0), [expenses]);
+  const left = plannedTotal - spentTotal;
+  const pct = plannedTotal > 0 ? (spentTotal / plannedTotal) * 100 : 0;
 
-  const departmentSummary = [
-    { name: "Camera & Optics", allocated: 40000, color: "bg-emerald-500" },
-    { name: "Art & Production Design", allocated: 35000, color: "bg-teal-400" },
-    { name: "Locations & Soundstages", allocated: 25000, color: "bg-emerald-600" },
-    { name: "Cast, Crew & Stunts", allocated: 30000, color: "bg-cyan-500" },
-    { name: "Sound, Grip & Electric", allocated: 20000, color: "bg-emerald-400" }
-  ];
+  const byDept = useMemo(
+    () =>
+      DEPARTMENTS.map((d) => ({
+        dept: d as string,
+        lines: lines.filter((l) => l.department === d),
+        planned: lines.filter((l) => l.department === d).reduce((t, l) => t + lineAmount(l), 0),
+        spent: expenses.filter((e) => e.department === d).reduce((t, e) => t + (Number(e.amount) || 0), 0),
+      })).filter((x) => x.lines.length > 0 || x.spent > 0),
+    [lines, expenses]
+  );
 
-  const handleAddExpense = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.item || !formData.spent) return;
+  const barTone = (p: number) => (p > 100 ? "bg-red-500" : p >= 80 ? "bg-amber-400" : "bg-emerald-500");
 
-    const newExpense: ExpenseItem = {
-      id: `EXP-${100 + expenses.length + 1}`,
-      item: formData.item,
-      department: formData.department,
-      allocated: Number(formData.allocated) || Number(formData.spent),
-      spent: Number(formData.spent),
-      status: formData.status
-    };
+  /* ---------------- actions ---------------- */
 
-    setExpenses([newExpense, ...expenses]);
-    setFormData({
-      item: "",
-      department: "Camera & Optics",
-      allocated: "",
-      spent: "",
-      status: "Approved"
-    });
-    setIsModalOpen(false);
+  const runEstimate = () => {
+    if (scenes.length === 0) return;
+    if (lines.length > 0 && !window.confirm("Re-calculate the plan from your script? Any changes you made to the planned amounts will be replaced. Your spending records will NOT be touched.")) return;
+    const r = estimateBudget(scenes, chars, settings, rates);
+    setBudget((b) => ({ ...b, lines: r.lines, summary: r.summary, estimatedAt: Date.now() }));
   };
 
+  const updateLine = (id: string, patch: Partial<PlanLine>) =>
+    setBudget((b) => ({ ...b, lines: b.lines.map((l) => (l.id === id ? { ...l, ...patch } : l)) }));
+
+  const addLine = (department: string) =>
+    setBudget((b) => ({
+      ...b,
+      lines: [...b.lines, { id: uid("ln"), department, item: "New cost", qty: 1, unit: "each", unitCost: 0, note: "" }],
+    }));
+
+  const deleteLine = (id: string) => setBudget((b) => ({ ...b, lines: b.lines.filter((l) => l.id !== id) }));
+
+  const saveExpense = () => {
+    if (!form) return;
+    if (!form.description.trim() || !(Number(form.amount) > 0)) {
+      window.alert("Please write what the money was spent on and the amount.");
+      return;
+    }
+    setBudget((b) => {
+      const exists = b.expenses.some((e) => e.id === form.id);
+      return {
+        ...b,
+        expenses: exists ? b.expenses.map((e) => (e.id === form.id ? form : e)) : [form, ...b.expenses],
+      };
+    });
+    setForm(null);
+  };
+
+  const deleteExpense = (id: string) => {
+    if (window.confirm("Delete this spending record?")) setBudget((b) => ({ ...b, expenses: b.expenses.filter((e) => e.id !== id) }));
+  };
+
+  const shownExpenses = [...expenses]
+    .filter((e) => filterDept === "ALL" || e.department === filterDept)
+    .sort((a, b) => (a.date < b.date ? 1 : -1));
+
+  const exportPlan = () =>
+    downloadCsv("budget-plan.csv", [
+      ["Department", "Item", "Quantity", "Unit", "Cost each (Rs.)", "Total (Rs.)", "Note"],
+      ...lines.map((l) => [l.department, l.item, l.qty, l.unit, l.unitCost, Math.round(lineAmount(l)), l.note]),
+      ["", "", "", "", "TOTAL PLANNED", Math.round(plannedTotal), ""],
+    ]);
+
+  const exportSpending = () =>
+    downloadCsv("spending-record.csv", [
+      ["Date", "Department", "What it was for", "Amount (Rs.)", "Paid to", "Note"],
+      ...expenses.map((e) => [e.date, e.department, e.description, e.amount, e.paidTo, e.note]),
+      ["", "", "TOTAL SPENT", Math.round(spentTotal), "", ""],
+    ]);
+
+  /* ---------------- UI ---------------- */
+
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
-      {/* Top Header */}
-      <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-6 border-b border-emerald-950/60">
-        <div>
-          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-2">
-            <Sparkles className="w-3.5 h-3.5" /> Department Cost Control
+    <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto text-slate-100">
+      <PageHeader
+        icon={<Wallet className="w-3.5 h-3.5" />}
+        badge="Budget"
+        title="Film Budget & Spending"
+        subtitle="See how much the film will cost, then record every rupee you spend while shooting."
+        sinhala="චිත්‍රපටයට කොපමණ වියදමක් යයිද බලන්න, රූගත කරන අතරතුර වියදම් කරන හැම රුපියලක්ම මෙහි සටහන් කරන්න."
+        actions={
+          <>
+            <button onClick={exportPlan} disabled={!lines.length} className={btnGhost}>
+              <Download className="w-3.5 h-3.5" /> Download plan (Excel)
+            </button>
+            <button onClick={exportSpending} disabled={!expenses.length} className={btnGhost}>
+              <Download className="w-3.5 h-3.5" /> Download spending
+            </button>
+          </>
+        }
+      />
+
+      <HelpBox>
+        <p><b>Step 1.</b> Upload your script on the <Link href="/breakdown" className="text-emerald-300 underline">Script page</Link>. Then press <b>“Work out the budget from my script”</b> below.</p>
+        <p><b>Step 2.</b> Check the numbers. You can change any amount: the prices here are only a starting guess.</p>
+        <p><b>Step 3.</b> While shooting, press <b>“Add spending”</b> every time money is paid. The bars show how much is left.</p>
+        <p className="text-emerald-300/80">පියවර 1: Script පිටුවේ script එක දමන්න. 2: පහළ බොත්තම එබූ විට ඇස්තමේන්තුව ලැබේ; අගයන් ඔබට වෙනස් කළ හැක. 3: රූගත කරන විට වියදම් එකතු කරන්න.</p>
+      </HelpBox>
+
+      {!ready ? null : (
+        <>
+          {/* ------- summary ------- */}
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <Card>
+              <p className="text-xs uppercase tracking-wider text-slate-400">Total budget (plan)</p>
+              <p className="text-3xl font-bold text-white mt-1">{money(plannedTotal)}</p>
+              <p className="text-xs text-slate-500 mt-1">මුළු සැලසුම් කළ බජට් එක</p>
+            </Card>
+            <Card>
+              <p className="text-xs uppercase tracking-wider text-slate-400">Spent so far</p>
+              <p className="text-3xl font-bold text-emerald-300 mt-1">{money(spentTotal)}</p>
+              <p className="text-xs text-slate-500 mt-1">{plannedTotal > 0 ? `${pct.toFixed(1)}% of the budget used` : "No budget yet"} · මෙතෙක් වියදම</p>
+            </Card>
+            <Card>
+              <p className="text-xs uppercase tracking-wider text-slate-400">Money left</p>
+              <p className={`text-3xl font-bold mt-1 ${left < 0 ? "text-red-400" : "text-white"}`}>{money(left)}</p>
+              <p className="text-xs text-slate-500 mt-1">{left < 0 ? "Over budget!" : "Still available"} · ඉතිරි මුදල</p>
+            </Card>
           </div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-            Production Financials & Ledger
-          </h1>
-          <p className="text-slate-400 text-sm mt-1">
-            Real-time tracking of line-item expenditures against allocated department budgets.
-          </p>
-        </div>
 
-        <div className="flex items-center gap-3">
-          <button
-            onClick={() => setIsModalOpen(true)}
-            className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" /> Log Line Expense
-          </button>
-          <Link
-            href="/roster"
-            className="px-4 py-2.5 rounded-xl bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/30 text-emerald-400 text-xs font-semibold transition-all flex items-center gap-1.5"
-          >
-            Crew Roster <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        </div>
-      </div>
-
-      {/* Financial Health Overview Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        <div className="p-6 rounded-2xl bg-[#09130e] border border-emerald-950/70">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Total Allocated Budget</p>
-          <h3 className="text-3xl font-extrabold text-white mt-2">${totalBudget.toLocaleString()}</h3>
-          <p className="text-xs text-slate-400 mt-2 flex items-center gap-1">
-            <FileSpreadsheet className="w-3.5 h-3.5 text-emerald-400" /> Full production package
-          </p>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-[#09130e] border border-emerald-950/70">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Committed / Spent</p>
-          <h3 className="text-3xl font-extrabold text-emerald-400 mt-2">${totalSpent.toLocaleString()}</h3>
-          <p className="text-xs text-emerald-400 mt-2 flex items-center gap-1">
-            <TrendingUp className="w-3.5 h-3.5" /> {((totalSpent / totalBudget) * 100).toFixed(1)}% of total budget utilized
-          </p>
-        </div>
-
-        <div className="p-6 rounded-2xl bg-[#09130e] border border-emerald-950/70">
-          <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Remaining Buffer</p>
-          <h3 className="text-3xl font-extrabold text-teal-300 mt-2">${remaining.toLocaleString()}</h3>
-          <p className="text-xs text-teal-400 mt-2 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5" /> No deficit recorded
-          </p>
-        </div>
-      </div>
-
-      {/* Department Breakdown Section */}
-      <div className="p-6 rounded-2xl bg-[#09130e] border border-emerald-950/70 space-y-5">
-        <h2 className="text-base font-bold text-white flex items-center gap-2">
-          <Layers className="w-4 h-4 text-emerald-400" /> Department Allocations & Burn
-        </h2>
-
-        <div className="space-y-4">
-          {departmentSummary.map((dept, idx) => {
-            const deptSpent = expenses
-              .filter(e => e.department.toLowerCase().includes(dept.name.split(" ")[0].toLowerCase()))
-              .reduce((sum, e) => sum + e.spent, 0);
-            const percentage = Math.round((deptSpent / dept.allocated) * 100);
-
-            return (
-              <div key={idx} className="space-y-2">
-                <div className="flex justify-between items-center text-xs">
-                  <span className="font-semibold text-white">{dept.name}</span>
-                  <span className="text-slate-400">
-                    <strong className="text-emerald-300">${deptSpent.toLocaleString()}</strong> /${dept.allocated.toLocaleString()} ({percentage}%)
-                  </span>
-                </div>
-                <div className="w-full h-2 rounded-full bg-[#050b07] overflow-hidden border border-emerald-950/40">
-                  <div
-                    className={`h-full rounded-full ${dept.color} transition-all duration-500`}
-                    style={{ width: `${Math.min(percentage, 100)}%` }}
-                  />
-                </div>
+          {plannedTotal > 0 && (
+            <div>
+              <div className="w-full h-3 rounded-full bg-[#050b07] overflow-hidden border border-emerald-950/60">
+                <div className={`h-full ${barTone(pct)} transition-all`} style={{ width: `${Math.min(100, pct)}%` }} />
               </div>
-            );
-          })}
-        </div>
-      </div>
+              {pct > 100 && (
+                <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-red-500/10 border border-red-500/30 text-red-300 text-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0" /> You have spent {money(spentTotal - plannedTotal)} more than the whole budget.
+                </div>
+              )}
+              {pct >= 80 && pct <= 100 && (
+                <div className="mt-3 flex items-center gap-2 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+                  <AlertTriangle className="w-4 h-4 shrink-0" /> Careful: more than 80% of the budget is already used.
+                </div>
+              )}
+            </div>
+          )}
 
-      {/* Detailed Line-Item Ledger Table */}
-      <div className="p-6 rounded-2xl bg-[#09130e] border border-emerald-950/70 space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-base font-bold text-white flex items-center gap-2">
-            <DollarSign className="w-4 h-4 text-emerald-400" /> Recent Expense Records
-          </h2>
-          <span className="text-xs text-slate-400">{expenses.length} Records Logged</span>
-        </div>
-
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead>
-              <tr className="border-b border-emerald-950/70 text-slate-400 uppercase tracking-wider font-semibold">
-                <th className="py-3 px-4">Ref Code</th>
-                <th className="py-3 px-4">Expense Description</th>
-                <th className="py-3 px-4">Department</th>
-                <th className="py-3 px-4">Allocated</th>
-                <th className="py-3 px-4">Amount Spent</th>
-                <th className="py-3 px-4">Status</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-emerald-950/40 text-slate-300 font-light">
-              {expenses.map((row) => (
-                <tr key={row.id} className="hover:bg-[#0c1a13] transition-colors">
-                  <td className="py-3.5 px-4 font-mono font-bold text-emerald-400">{row.id}</td>
-                  <td className="py-3.5 px-4 font-medium text-white">{row.item}</td>
-                  <td className="py-3.5 px-4 text-slate-400">{row.department}</td>
-                  <td className="py-3.5 px-4 font-mono">${row.allocated.toLocaleString()}</td>
-                  <td className="py-3.5 px-4 font-mono font-medium text-emerald-300">${row.spent.toLocaleString()}</td>
-                  <td className="py-3.5 px-4">
-                    <span className={`px-2.5 py-1 rounded-full text-[11px] font-semibold ${row.status === "Approved"
-                        ? "bg-emerald-500/10 text-emerald-400 border border-emerald-500/20"
-                        : "bg-amber-500/10 text-amber-400 border border-amber-500/20"
-                      }`}>
-                      {row.status}
-                    </span>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </div>
-
-      {/* Log Expense Modal */}
-      {isModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4">
-          <div className="relative w-full max-w-lg bg-[#09130e] border border-emerald-500/40 rounded-2xl p-6 shadow-2xl">
-            <div className="flex items-center justify-between pb-4 border-b border-emerald-950/70">
-              <h3 className="text-base font-bold text-white flex items-center gap-2">
-                <Plus className="w-4 h-4 text-emerald-400" /> Log New Line Expense
-              </h3>
-              <button
-                onClick={() => setIsModalOpen(false)}
-                className="text-slate-400 hover:text-white p-1 rounded-lg hover:bg-[#0e1d15]"
-              >
-                <X className="w-5 h-5" />
-              </button>
+          {/* ------- estimate from script ------- */}
+          <Card>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h2 className="text-base font-bold text-white flex items-center gap-2">
+                  <Calculator className="w-4 h-4 text-emerald-400" /> Work out the budget from my script
+                </h2>
+                {scenes.length > 0 ? (
+                  <p className="text-sm text-slate-300 mt-1">
+                    Your script has <b>{scenes.length} scenes</b>. The computer will count the places, actors and props, guess the number of shooting days, and add up the likely costs.
+                  </p>
+                ) : (
+                  <p className="text-sm text-amber-300 mt-1">
+                    No script found yet. Go to the <Link href="/breakdown" className="underline">Script page</Link> and upload your script first.
+                  </p>
+                )}
+              </div>
+              <div className="flex gap-2 shrink-0">
+                <button onClick={() => setShowSettings(!showSettings)} className={btnGhost}>
+                  <Settings2 className="w-3.5 h-3.5" /> Change assumptions & prices
+                </button>
+                <button onClick={runEstimate} disabled={scenes.length === 0} className={btnPrimary}>
+                  <Calculator className="w-3.5 h-3.5" /> {lines.length ? "Re-calculate" : "Work out the budget"}
+                </button>
+              </div>
             </div>
 
-            <form onSubmit={handleAddExpense} className="space-y-4 mt-4">
+            {budget.summary && (
+              <div className="mt-4 grid grid-cols-2 md:grid-cols-6 gap-2 text-center">
+                {[
+                  ["Scenes", budget.summary.scenes],
+                  ["Places", budget.summary.locations],
+                  ["Characters", budget.summary.characters],
+                  ["Props", budget.summary.props],
+                  ["Shooting days", budget.summary.shootingDays],
+                  ["Film length", `${budget.summary.runtimeMin} min`],
+                ].map(([label, val]) => (
+                  <div key={String(label)} className="rounded-xl bg-[#0b1a12] border border-emerald-950/70 py-2">
+                    <p className="text-lg font-bold text-white">{val}</p>
+                    <p className="text-[11px] text-slate-400">{label}</p>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {showSettings && (
+              <div className="mt-5 pt-5 border-t border-emerald-950/70 space-y-5">
+                <div>
+                  <h3 className="text-sm font-semibold text-white mb-2">How will you shoot?</h3>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                    <Field label="Scenes shot per day" hint="Usually 2 to 5">
+                      <input type="number" min={1} className={inputCls} value={settings.scenesPerDay}
+                        onChange={(e) => setBudget((b) => ({ ...b, settings: { ...b.settings, scenesPerDay: Number(e.target.value) } }))} />
+                    </Field>
+                    <Field label="Crew size" hint="People behind the camera">
+                      <input type="number" min={1} className={inputCls} value={settings.crewSize}
+                        onChange={(e) => setBudget((b) => ({ ...b, settings: { ...b.settings, crewSize: Number(e.target.value) } }))} />
+                    </Field>
+                    <Field label="Permits & insurance (%)">
+                      <input type="number" min={0} className={inputCls} value={settings.insurancePct}
+                        onChange={(e) => setBudget((b) => ({ ...b, settings: { ...b.settings, insurancePct: Number(e.target.value) } }))} />
+                    </Field>
+                    <Field label="Safety buffer (%)" hint="Extra for surprises">
+                      <input type="number" min={0} className={inputCls} value={settings.bufferPct}
+                        onChange={(e) => setBudget((b) => ({ ...b, settings: { ...b.settings, bufferPct: Number(e.target.value) } }))} />
+                    </Field>
+                  </div>
+                </div>
+                <div>
+                  <h3 className="text-sm font-semibold text-white mb-1">Prices used in the estimate (Rs.)</h3>
+                  <p className="text-xs text-slate-400 mb-3">These are starting guesses, not real quotations. Change them to match the prices you really get, then press “Re-calculate”.</p>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3">
+                    {(Object.keys(RATE_LABELS) as (keyof RateCard)[]).map((k) => (
+                      <Field key={k} label={`${RATE_LABELS[k].label} (${RATE_LABELS[k].unit})`}>
+                        <input type="number" min={0} className={inputCls} value={rates[k]}
+                          onChange={(e) => setBudget((b) => ({ ...b, rates: { ...b.rates, [k]: Number(e.target.value) } }))} />
+                      </Field>
+                    ))}
+                  </div>
+                  <button className={`${btnGhost} mt-3`} onClick={() => setBudget((b) => ({ ...b, rates: DEFAULT_RATES, settings: DEFAULT_SETTINGS }))}>
+                    Put back the original prices
+                  </button>
+                </div>
+              </div>
+            )}
+          </Card>
+
+          {/* ------- department plan ------- */}
+          <Card>
+            <h2 className="text-base font-bold text-white mb-1">Where the money goes</h2>
+            <p className="text-xs text-slate-400 mb-4">Press a row to see the details and change the numbers. ඕනෑම පේළියක් එබූ විට විස්තර පෙනේ.</p>
+
+            {byDept.length === 0 ? (
+              <EmptyState
+                icon={<FileText className="w-8 h-8" />}
+                title="No budget yet"
+                text="Press “Work out the budget” above to create a first draft from your script."
+              />
+            ) : (
+              <div className="space-y-2">
+                {byDept.map(({ dept, lines: dl, planned, spent }) => {
+                  const p = planned > 0 ? (spent / planned) * 100 : spent > 0 ? 101 : 0;
+                  const isOpen = open[dept];
+                  return (
+                    <div key={dept} className="rounded-xl bg-[#0b1a12] border border-emerald-950/70">
+                      <button onClick={() => setOpen({ ...open, [dept]: !isOpen })} className="w-full text-left p-4 cursor-pointer">
+                        <div className="flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <p className="text-sm font-semibold text-white flex items-center gap-2">
+                              {dept}
+                              {p > 100 && <Pill tone="red">Over budget</Pill>}
+                              {p >= 80 && p <= 100 && <Pill tone="amber">Almost used up</Pill>}
+                            </p>
+                            <p className="text-[11px] text-slate-400 truncate">{DEPT_HELP[dept]?.en} · {DEPT_HELP[dept]?.si}</p>
+                          </div>
+                          <div className="flex items-center gap-4 shrink-0">
+                            <div className="text-right">
+                              <p className="text-sm font-bold text-white">{money(planned)}</p>
+                              <p className="text-[11px] text-emerald-300">spent {money(spent)}</p>
+                            </div>
+                            <ChevronDown className={`w-4 h-4 text-slate-400 transition-transform ${isOpen ? "rotate-180" : ""}`} />
+                          </div>
+                        </div>
+                        <div className="mt-3 w-full h-2 rounded-full bg-[#050b07] overflow-hidden border border-emerald-950/40">
+                          <div className={`h-full ${barTone(p)}`} style={{ width: `${Math.min(100, p)}%` }} />
+                        </div>
+                      </button>
+
+                      {isOpen && (
+                        <div className="px-4 pb-4 overflow-x-auto">
+                          <table className="w-full text-xs min-w-[640px]">
+                            <thead>
+                              <tr className="text-left text-slate-400">
+                                <th className="py-2 pr-2 font-medium">What</th>
+                                <th className="py-2 pr-2 font-medium w-20">How many</th>
+                                <th className="py-2 pr-2 font-medium w-24">Cost each (Rs.)</th>
+                                <th className="py-2 pr-2 font-medium w-28 text-right">Total</th>
+                                <th className="w-8" />
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {dl.map((l) => (
+                                <tr key={l.id} className="border-t border-emerald-950/60 align-top">
+                                  <td className="py-2 pr-2">
+                                    <input className={inputCls} value={l.item} onChange={(e) => updateLine(l.id, { item: e.target.value })} />
+                                    {l.note && <p className="text-[10px] text-slate-500 mt-1">{l.note}</p>}
+                                  </td>
+                                  <td className="py-2 pr-2">
+                                    <input type="number" min={0} className={inputCls} value={l.qty} onChange={(e) => updateLine(l.id, { qty: Number(e.target.value) })} />
+                                    <p className="text-[10px] text-slate-500 mt-1">{l.unit}</p>
+                                  </td>
+                                  <td className="py-2 pr-2">
+                                    <input type="number" min={0} className={inputCls} value={l.unitCost} onChange={(e) => updateLine(l.id, { unitCost: Number(e.target.value) })} />
+                                  </td>
+                                  <td className="py-2 pr-2 text-right font-semibold text-white pt-3">{money(lineAmount(l))}</td>
+                                  <td className="py-2 pt-2.5">
+                                    <button onClick={() => deleteLine(l.id)} className="text-slate-500 hover:text-red-400 cursor-pointer" title="Remove">
+                                      <Trash2 className="w-3.5 h-3.5" />
+                                    </button>
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                          <button onClick={() => addLine(dept)} className={`${btnGhost} mt-3`}>
+                            <Plus className="w-3.5 h-3.5" /> Add another cost here
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </Card>
+
+          {/* ------- spending log ------- */}
+          <Card>
+            <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4">
               <div>
-                <label className="block text-xs font-semibold text-slate-300 mb-1">Expense Description</label>
-                <input
-                  type="text"
-                  required
-                  placeholder="e.g. Anamorphic Lens Rental, Drone Pilot Fee"
-                  value={formData.item}
-                  onChange={(e) => setFormData({ ...formData, item: e.target.value })}
-                  className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                />
+                <h2 className="text-base font-bold text-white">Spending record</h2>
+                <p className="text-xs text-slate-400">Write down every payment made during the film. හැම ගෙවීමක්ම මෙහි සටහන් කරන්න.</p>
               </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Department</label>
-                  <select
-                    value={formData.department}
-                    onChange={(e) => setFormData({ ...formData, department: e.target.value })}
-                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                  >
-                    <option value="Camera & Optics">Camera & Optics</option>
-                    <option value="Art & Production Design">Art & Production Design</option>
-                    <option value="Locations & Soundstages">Locations & Soundstages</option>
-                    <option value="Cast & Stunts">Cast & Stunts</option>
-                    <option value="Sound & Audio">Sound & Audio</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Approval Status</label>
-                  <select
-                    value={formData.status}
-                    onChange={(e) => setFormData({ ...formData, status: e.target.value as "Approved" | "Pending" })}
-                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                  >
-                    <option value="Approved">Approved</option>
-                    <option value="Pending">Pending</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Allocated Budget ($)</label>
-                  <input
-                    type="number"
-                    placeholder="e.g. 5000"
-                    value={formData.allocated}
-                    onChange={(e) => setFormData({ ...formData, allocated: e.target.value })}
-                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-xs font-semibold text-slate-300 mb-1">Actual Amount Spent ($)</label>
-                  <input
-                    type="number"
-                    required
-                    placeholder="e.g. 4500"
-                    value={formData.spent}
-                    onChange={(e) => setFormData({ ...formData, spent: e.target.value })}
-                    className="w-full bg-[#050b07] border border-emerald-950/80 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-emerald-500/60"
-                  />
-                </div>
-              </div>
-
-              <div className="pt-3 flex items-center justify-end gap-3 border-t border-emerald-950/60">
+              <div className="flex gap-2">
+                <select className={`${inputCls} w-auto`} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
+                  <option value="ALL">All departments</option>
+                  {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+                </select>
                 <button
-                  type="button"
-                  onClick={() => setIsModalOpen(false)}
-                  className="px-4 py-2 rounded-xl text-xs font-medium text-slate-400 hover:text-white"
+                  className={btnPrimary}
+                  onClick={() => setForm({ id: uid("exp"), date: today(), department: "Crew", description: "", amount: 0, paidTo: "", note: "" })}
                 >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20"
-                >
-                  Save Line Expense
+                  <Plus className="w-3.5 h-3.5" /> Add spending
                 </button>
               </div>
-            </form>
+            </div>
+
+            {shownExpenses.length === 0 ? (
+              <EmptyState
+                icon={<Wallet className="w-8 h-8" />}
+                title="Nothing recorded yet"
+                text="When you pay for anything (food, fuel, equipment, a location…) press “Add spending” and write it down."
+              />
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs min-w-[680px]">
+                  <thead>
+                    <tr className="text-left text-slate-400 border-b border-emerald-950/70">
+                      <th className="py-2 pr-3 font-medium">Date</th>
+                      <th className="py-2 pr-3 font-medium">What it was for</th>
+                      <th className="py-2 pr-3 font-medium">Department</th>
+                      <th className="py-2 pr-3 font-medium">Paid to</th>
+                      <th className="py-2 pr-3 font-medium text-right">Amount</th>
+                      <th className="w-16" />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {shownExpenses.map((e) => (
+                      <tr key={e.id} className="border-b border-emerald-950/40">
+                        <td className="py-2.5 pr-3 text-slate-300 whitespace-nowrap">{e.date}</td>
+                        <td className="py-2.5 pr-3 text-white font-medium">
+                          {e.description}
+                          {e.note && <span className="block text-[10px] text-slate-500 font-normal">{e.note}</span>}
+                        </td>
+                        <td className="py-2.5 pr-3 text-slate-300">{e.department}</td>
+                        <td className="py-2.5 pr-3 text-slate-300">{e.paidTo || "—"}</td>
+                        <td className="py-2.5 pr-3 text-right font-semibold text-emerald-300">{money(e.amount)}</td>
+                        <td className="py-2.5">
+                          <div className="flex gap-2 justify-end">
+                            <button onClick={() => setForm(e)} className="text-slate-400 hover:text-emerald-300 cursor-pointer" title="Edit"><Pencil className="w-3.5 h-3.5" /></button>
+                            <button onClick={() => deleteExpense(e.id)} className="text-slate-500 hover:text-red-400 cursor-pointer" title="Delete"><Trash2 className="w-3.5 h-3.5" /></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </>
+      )}
+
+      {form && (
+        <Modal title={expenses.some((e) => e.id === form.id) ? "Change spending record" : "Add spending"} onClose={() => setForm(null)}>
+          <div className="space-y-4">
+            <Field label="What was the money spent on?">
+              <input autoFocus className={inputCls} placeholder="e.g. Lunch for the crew, Day 3" value={form.description}
+                onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </Field>
+            <div className="grid grid-cols-2 gap-3">
+              <Field label="Amount (Rs.)">
+                <input type="number" min={0} className={inputCls} value={form.amount || ""} onChange={(e) => setForm({ ...form, amount: Number(e.target.value) })} />
+              </Field>
+              <Field label="Date">
+                <input type="date" className={inputCls} value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+              </Field>
+            </div>
+            <Field label="Which department?" hint={DEPT_HELP[form.department]?.en}>
+              <select className={inputCls} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })}>
+                {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
+              </select>
+            </Field>
+            <Field label="Paid to (optional)">
+              <input className={inputCls} placeholder="Shop, person or company" value={form.paidTo} onChange={(e) => setForm({ ...form, paidTo: e.target.value })} />
+            </Field>
+            <Field label="Note (optional)">
+              <input className={inputCls} value={form.note} onChange={(e) => setForm({ ...form, note: e.target.value })} />
+            </Field>
+            <div className="flex justify-end gap-2 pt-2 border-t border-emerald-950/60">
+              <button className={btnGhost} onClick={() => setForm(null)}>Cancel</button>
+              <button className={btnPrimary} onClick={saveExpense}><CheckCircle2 className="w-3.5 h-3.5" /> Save</button>
+            </div>
           </div>
-        </div>
+        </Modal>
       )}
     </div>
   );

@@ -41,6 +41,21 @@ interface SceneEntity {
   visualPrompt: string;
 }
 
+// පරීක්ෂණ: දර්ශන browser එකේ ස්ථිරව සුරකී (tab එක වැසුවත් නොමැකේ). Budget, Roster, Call Sheet, Locations පිටු මෙයින් කියවයි.
+const persistScenes = (scenes: unknown) => {
+  try {
+    const j = JSON.stringify(scenes);
+    sessionStorage.setItem("eclat_active_scenes", j);
+    localStorage.setItem("eclat_scenes_v1", j);
+  } catch { }
+};
+const clearScenes = () => {
+  try {
+    sessionStorage.removeItem("eclat_active_scenes");
+    localStorage.removeItem("eclat_scenes_v1");
+  } catch { }
+};
+
 export default function ScriptBreakdownPage() {
   const router = useRouter();
   const [inputMode, setInputMode] = useState<"upload" | "paste">("upload");
@@ -57,7 +72,7 @@ export default function ScriptBreakdownPage() {
 
   useEffect(() => {
     try {
-      const saved = sessionStorage.getItem("eclat_active_scenes");
+      const saved = sessionStorage.getItem("eclat_active_scenes") || localStorage.getItem("eclat_scenes_v1");
       if (saved) {
         const scenes = JSON.parse(saved);
         setParsedScenes(scenes);
@@ -483,6 +498,11 @@ export default function ScriptBreakdownPage() {
         throw new Error("පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය.");
       }
 
+      // Budget ඇස්තමේන්තුවට script එකේ දිග (චිත්‍රපටයේ විනාඩි ගණන) අවශ්‍ය නිසා සුරකී
+      try {
+        localStorage.setItem("eclat_script_meta_v1", JSON.stringify({ chars: rawContent.length, at: Date.now() }));
+      } catch { }
+
       const scenes = await parseWithAiHybrid(rawContent);
 
       if (scenes.length > 0) {
@@ -495,7 +515,7 @@ export default function ScriptBreakdownPage() {
         } catch { }
         setParsedScenes(scenes);
         setSelectedSceneIds(scenes.map((s) => s.id));
-        sessionStorage.setItem("eclat_active_scenes", JSON.stringify(scenes));
+        persistScenes(scenes);
       } else {
         alert("දර්ශන හඳුනා ගැනීමට නොහැකි විය.");
       }
@@ -513,7 +533,7 @@ export default function ScriptBreakdownPage() {
     setScriptText("");
     setParsedScenes([]);
     setSelectedSceneIds([]);
-    sessionStorage.removeItem("eclat_active_scenes");
+    clearScenes();
     sessionStorage.removeItem("eclat_storyboard_frames");
     const fileInput = document.getElementById("file-input-upload") as HTMLInputElement;
     if (fileInput) fileInput.value = "";
@@ -523,7 +543,7 @@ export default function ScriptBreakdownPage() {
     const updated = parsedScenes.filter((s) => s.id !== id);
     setParsedScenes(updated);
     setSelectedSceneIds((prev) => prev.filter((item) => item !== id));
-    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
+    persistScenes(updated);
   };
 
   const handleToggleSelect = (id: string) => {
@@ -546,13 +566,13 @@ export default function ScriptBreakdownPage() {
     const updated = parsedScenes.filter((s) => !selectedSceneIds.includes(s.id));
     setParsedScenes(updated);
     setSelectedSceneIds([]);
-    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
+    persistScenes(updated);
   };
 
   const handleClearAllScenes = () => {
     setParsedScenes([]);
     setSelectedSceneIds([]);
-    sessionStorage.removeItem("eclat_active_scenes");
+    clearScenes();
   };
 
   const handleSaveEditedScene = (e: React.FormEvent) => {
@@ -560,7 +580,7 @@ export default function ScriptBreakdownPage() {
     if (!editingScene) return;
     const updated = parsedScenes.map((s) => (s.id === editingScene.id ? editingScene : s));
     setParsedScenes(updated);
-    sessionStorage.setItem("eclat_active_scenes", JSON.stringify(updated));
+    persistScenes(updated);
     setEditingScene(null);
   };
 

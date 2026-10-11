@@ -1,221 +1,128 @@
+"use client";
+
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import {
-  FileText,
-  Film,
-  DollarSign,
-  Users,
-  ArrowRight,
-  Sparkles,
-  CheckCircle2,
-  Clock,
-  Layers,
-  PlusCircle,
-  Clapperboard
-} from "lucide-react";
+import { FileText, Film, Wallet, Users, MapPin, ClipboardList, CheckCircle2, Circle, ArrowRight, Clapperboard } from "lucide-react";
+import { KEYS, loadScenes, money } from "@/lib/store";
+import { PageHeader, Card } from "@/components/ui";
+
+interface Stats {
+  scenes: number;
+  planned: number;
+  spent: number;
+  teamTotal: number;
+  teamConfirmed: number;
+  castedChars: number;
+  chars: number;
+  places: number;
+  placesReady: number;
+  unplacedScenes: number;
+  sheets: number;
+  storyboardFrames: number;
+}
+
+const read = (key: string): any => {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+};
 
 export default function DashboardPage() {
+  const [s, setS] = useState<Stats | null>(null);
+
+  useEffect(() => {
+    const scenes = loadScenes();
+    const budget = read(KEYS.budget);
+    const roster = read(KEYS.roster);
+    const locs = read(KEYS.locations);
+    const sheets = read(KEYS.callsheets);
+
+    const planned = (budget?.lines || []).reduce((t: number, l: any) => t + (Number(l.qty) || 0) * (Number(l.unitCost) || 0), 0);
+    const spent = (budget?.expenses || []).reduce((t: number, e: any) => t + (Number(e.amount) || 0), 0);
+    const team = (roster?.team || []).filter((m: any) => m.status !== "Declined");
+    const chars = new Set<string>();
+    scenes.forEach((sc) => (sc.characters || []).forEach((c) => c && !/^(LEAD CHARACTER|ප්‍රධාන චරිතය)$/i.test(c) && chars.add(c.trim().toUpperCase())));
+    const casted = Array.from(chars).filter((c) => roster?.casting?.[c]).length;
+    const items = locs?.items || [];
+    const linked = new Set(items.flatMap((l: any) => l.sceneIds || []));
+    let frames = 0;
+    try {
+      Object.keys(localStorage).filter((k) => k.startsWith("cine_storyboard_cache_")).forEach((k) => (frames += Object.keys(JSON.parse(localStorage.getItem(k) || "{}")).length));
+    } catch { }
+
+    setS({
+      scenes: scenes.length,
+      planned,
+      spent,
+      teamTotal: team.length,
+      teamConfirmed: team.filter((m: any) => m.status === "Confirmed").length,
+      castedChars: casted,
+      chars: chars.size,
+      places: items.length,
+      placesReady: items.filter((l: any) => l.status === "Approved" || l.status === "Booked").length,
+      unplacedScenes: scenes.filter((sc) => !linked.has(sc.id)).length,
+      sheets: (sheets?.sheets || []).length,
+      storyboardFrames: frames,
+    });
+  }, []);
+
+  const steps = s
+    ? [
+        { done: s.scenes > 0, title: "Upload your script", text: s.scenes > 0 ? `${s.scenes} scenes found` : "Add a story or screenplay (Sinhala or English)", href: "/breakdown", icon: FileText },
+        { done: s.storyboardFrames > 0, title: "Create storyboard pictures", text: s.storyboardFrames > 0 ? `${s.storyboardFrames} pictures made` : "See each scene as a picture", href: "/storyboard", icon: Film },
+        { done: s.planned > 0, title: "Work out the budget", text: s.planned > 0 ? `Planned ${money(s.planned)}` : "How much will the film cost?", href: "/financials", icon: Wallet },
+        { done: s.teamTotal > 0, title: "Build your cast & crew", text: s.teamTotal > 0 ? `${s.teamTotal} people, ${s.castedChars}/${s.chars} characters cast` : "Find actors and crew", href: "/roster", icon: Users },
+        { done: s.places > 0 && s.unplacedScenes === 0, title: "Choose filming places", text: s.places > 0 ? `${s.places} places · ${s.unplacedScenes} scenes still need one` : "Find places for your scenes", href: "/locations", icon: MapPin },
+        { done: s.sheets > 0, title: "Make call sheets", text: s.sheets > 0 ? `${s.sheets} shooting days planned` : "One page per shooting day", href: "/callsheet", icon: ClipboardList },
+      ]
+    : [];
+  const next = steps.find((x) => !x.done);
+
   return (
-    <div className="space-y-8 p-6 md:p-8 max-w-7xl mx-auto text-slate-100">
-      {/* Top Banner / Welcome Header */}
-      <div className="relative overflow-hidden rounded-2xl bg-gradient-to-r from-[#0d1f17] via-[#091510] to-[#060c09] border border-emerald-950/70 p-6 md:p-8">
-        <div className="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6">
-          <div>
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-400 text-xs font-semibold uppercase tracking-wider mb-3">
-              <Sparkles className="w-3.5 h-3.5" /> Active Project
+    <div className="space-y-6 p-4 md:p-8 max-w-7xl mx-auto text-slate-100">
+      <PageHeader
+        icon={<Clapperboard className="w-3.5 h-3.5" />}
+        badge="Home"
+        title="Your Film at a Glance"
+        subtitle="Everything about your film in one place: script, pictures, money, people, places and daily plans."
+        sinhala="ඔබේ චිත්‍රපටය ගැන සියල්ල එකම තැනක: කතාව, පින්තූර, මුදල්, පුද්ගලයින්, ස්ථාන සහ දෛනික සැලසුම්."
+        actions={next && <Link href={next.href} className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs inline-flex items-center gap-2">Next: {next.title} <ArrowRight className="w-3.5 h-3.5" /></Link>}
+      />
+
+      {s && (
+        <>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <Card><p className="text-xs uppercase text-slate-400">Scenes in script</p><p className="text-3xl font-bold text-white mt-1">{s.scenes}</p></Card>
+            <Card><p className="text-xs uppercase text-slate-400">Budget (plan)</p><p className="text-2xl font-bold text-white mt-1">{money(s.planned)}</p><p className="text-xs text-emerald-300 mt-1">Spent {money(s.spent)}</p></Card>
+            <Card><p className="text-xs uppercase text-slate-400">Team</p><p className="text-3xl font-bold text-white mt-1">{s.teamTotal}</p><p className="text-xs text-emerald-300 mt-1">{s.teamConfirmed} confirmed</p></Card>
+            <Card><p className="text-xs uppercase text-slate-400">Places ready</p><p className="text-3xl font-bold text-white mt-1">{s.placesReady}<span className="text-base text-slate-400"> / {s.places}</span></p></Card>
+          </div>
+
+          <Card>
+            <h2 className="text-base font-bold text-white mb-1">Your steps</h2>
+            <p className="text-xs text-slate-400 mb-4">Follow them in order, or jump to any step. ඕනෑම පියවරකට කෙලින්ම යන්න පුලුවන්.</p>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {steps.map((st, i) => {
+                const Icon = st.icon;
+                return (
+                  <Link key={st.href} href={st.href} className={`flex items-center gap-4 p-4 rounded-xl border transition-all ${st.done ? "bg-emerald-500/5 border-emerald-500/25" : "bg-[#0b1a12] border-emerald-950/70 hover:border-emerald-600/40"}`}>
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0"><Icon className="w-5 h-5" /></div>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-sm font-semibold text-white">{i + 1}. {st.title}</p>
+                      <p className="text-xs text-slate-400 truncate">{st.text}</p>
+                    </div>
+                    {st.done ? <CheckCircle2 className="w-5 h-5 text-emerald-400 shrink-0" /> : <Circle className="w-5 h-5 text-slate-600 shrink-0" />}
+                  </Link>
+                );
+              })}
             </div>
-            <h1 className="text-2xl sm:text-3xl font-extrabold text-white tracking-tight">
-              Neon Horizon <span className="text-slate-400 text-base font-normal">(Feature Film)</span>
-            </h1>
-            <p className="text-slate-400 text-sm mt-1 max-w-xl">
-              Pre-production command center. Track your screenplay breakdown, storyboards, department budgets, and crew logistics.
-            </p>
-          </div>
+          </Card>
 
-          <div className="flex items-center gap-3 shrink-0">
-            <Link
-              href="/breakdown"
-              className="px-5 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20 transition-all flex items-center gap-2"
-            >
-              <PlusCircle className="w-4 h-4" /> Continue Breakdown
-            </Link>
-          </div>
-        </div>
-
-        {/* Ambient background glow */}
-        <div className="absolute right-0 top-0 w-80 h-80 bg-emerald-500/10 blur-[100px] pointer-events-none rounded-full" />
-      </div>
-
-      {/* Production Quick Stats Grid */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        {/* Stat 1 */}
-        <div className="p-5 rounded-xl bg-[#09130e] border border-emerald-950/60 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Extracted Scenes</p>
-            <h3 className="text-2xl font-bold text-white mt-1">18 Scenes</h3>
-            <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-              <CheckCircle2 className="w-3 h-3" /> Ready for breakdown
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-            <FileText className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Stat 2 */}
-        <div className="p-5 rounded-xl bg-[#09130e] border border-emerald-950/60 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Storyboard Cards</p>
-            <h3 className="text-2xl font-bold text-white mt-1">24 Shots</h3>
-            <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-              <Film className="w-3 h-3" /> 16:9 Aspect Ratio
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-            <Layers className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Stat 3 */}
-        <div className="p-5 rounded-xl bg-[#09130e] border border-emerald-950/60 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Budget Balance</p>
-            <h3 className="text-2xl font-bold text-white mt-1">+$16,000</h3>
-            <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-              <DollarSign className="w-3 h-3" /> Within safe limit
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-            <DollarSign className="w-5 h-5" />
-          </div>
-        </div>
-
-        {/* Stat 4 */}
-        <div className="p-5 rounded-xl bg-[#09130e] border border-emerald-950/60 flex items-center justify-between">
-          <div>
-            <p className="text-xs uppercase tracking-wider text-slate-400 font-medium">Cast & Crew</p>
-            <h3 className="text-2xl font-bold text-white mt-1">32 Members</h3>
-            <p className="text-xs text-emerald-400 mt-1 flex items-center gap-1">
-              <Users className="w-3 h-3" /> Call sheet synced
-            </p>
-          </div>
-          <div className="w-12 h-12 rounded-xl bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 shrink-0">
-            <Users className="w-5 h-5" />
-          </div>
-        </div>
-      </div>
-
-      {/* Production Pipeline Roadmap (User Action Guide) */}
-      <div className="p-6 rounded-2xl bg-[#09130e] border border-emerald-950/60">
-        <h2 className="text-base font-bold text-white mb-4 flex items-center gap-2">
-          <Clock className="w-4 h-4 text-emerald-400" /> Production Roadmap
-        </h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <div className="p-4 rounded-xl bg-[#0e1c15] border border-emerald-500/30">
-            <span className="text-xs font-bold text-emerald-400 uppercase">Phase 1</span>
-            <h4 className="text-sm font-semibold text-white mt-1">Script Breakdown</h4>
-            <p className="text-xs text-slate-400 mt-1">Screenplay parsed into 18 scenes with character tags.</p>
-            <div className="mt-3 text-xs text-emerald-400 font-medium flex items-center gap-1">
-              <CheckCircle2 className="w-3.5 h-3.5" /> Completed
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[#0e1c15] border border-emerald-500/20">
-            <span className="text-xs font-bold text-emerald-400 uppercase">Phase 2</span>
-            <h4 className="text-sm font-semibold text-white mt-1">Storyboard Sequence</h4>
-            <p className="text-xs text-slate-400 mt-1">24 of 48 keyframes generated with camera angle notes.</p>
-            <div className="mt-3 text-xs text-amber-400 font-medium flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" /> In Progress (50%)
-            </div>
-          </div>
-
-          <div className="p-4 rounded-xl bg-[#0b1610] border border-emerald-950/60 opacity-80">
-            <span className="text-xs font-bold text-slate-400 uppercase">Phase 3</span>
-            <h4 className="text-sm font-semibold text-white mt-1">Principal Photography</h4>
-            <p className="text-xs text-slate-400 mt-1">Finalize call sheets and allocate daily department budgets.</p>
-            <div className="mt-3 text-xs text-slate-400 font-medium flex items-center gap-1">
-              <Clock className="w-3.5 h-3.5" /> Pending Call Sheets
-            </div>
-          </div>
-        </div>
-      </div>
-
-      {/* Studio Workspaces Navigation Cards */}
-      <div>
-        <h2 className="text-base font-bold text-white mb-4">Production Modules</h2>
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-          <Link
-            href="/breakdown"
-            className="group p-5 rounded-xl bg-[#09130e] hover:bg-[#0c1a13] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <FileText className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                  Script Breakdown Engine
-                </h3>
-                <p className="text-xs text-slate-400">View and parse screenplay scenes, props, and characters.</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
-          </Link>
-
-          <Link
-            href="/storyboard"
-            className="group p-5 rounded-xl bg-[#09130e] hover:bg-[#0c1a13] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <Film className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                  16:9 Visual Storyboards
-                </h3>
-                <p className="text-xs text-slate-400">Organize cinematic frames, lens choices, and camera prompts.</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
-          </Link>
-
-          <Link
-            href="/financials"
-            className="group p-5 rounded-xl bg-[#09130e] hover:bg-[#0c1a13] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <DollarSign className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                  Budget Ledger & Variance
-                </h3>
-                <p className="text-xs text-slate-400">Track department expenses against total allocated budget.</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
-          </Link>
-
-          <Link
-            href="/roster"
-            className="group p-5 rounded-xl bg-[#09130e] hover:bg-[#0c1a13] border border-emerald-950/60 hover:border-emerald-500/40 transition-all flex items-center justify-between"
-          >
-            <div className="flex items-center gap-4">
-              <div className="w-11 h-11 rounded-lg bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center text-emerald-400 group-hover:scale-105 transition-transform">
-                <Users className="w-5 h-5" />
-              </div>
-              <div>
-                <h3 className="text-sm font-semibold text-white group-hover:text-emerald-400 transition-colors">
-                  Cast & Crew Logistics
-                </h3>
-                <p className="text-xs text-slate-400">Manage rates, call times, and contact information.</p>
-              </div>
-            </div>
-            <ArrowRight className="w-4 h-4 text-slate-500 group-hover:text-emerald-400 group-hover:translate-x-1 transition-all" />
-          </Link>
-        </div>
-      </div>
+          <p className="text-[11px] text-slate-500">Your work is saved in this browser. To keep a copy or share it with your director/producer, use <b>Save project</b> in the left menu and send them the file; they can open it with <b>Open project</b>.</p>
+        </>
+      )}
     </div>
   );
 }
