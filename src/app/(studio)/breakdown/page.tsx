@@ -327,7 +327,8 @@ export default function ScriptBreakdownPage() {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   // එක chunk එකක් Gemini එකට යවයි (429/503 වලදී නැවත උත්සාහ කරයි)
-  const parseChunkWithAi = async (text: string): Promise<any[] | null> => {
+  type ChunkResult = { scenes: any[] | null; reason?: "NO_KEY" | "BAD_JSON" | "FAILED" };
+  const parseChunkWithAi = async (text: string): Promise<ChunkResult> => {
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const res = await fetch("/api/screenplay/parse", {
@@ -336,15 +337,38 @@ export default function ScriptBreakdownPage() {
           body: JSON.stringify({ text }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.success && Array.isArray(data.scenes)) return data.scenes;
-        if (data.code === "NO_KEY") return null; // key නැත, regex වෙත මාරු වේ
+        if (res.ok && data.success && Array.isArray(data.scenes)) return { scenes: data.scenes };
+        if (data.code === "NO_KEY") return { scenes: null, reason: "NO_KEY" };
+        if (data.code === "BAD_JSON") return { scenes: null, reason: "BAD_JSON" };
         // Rate limit / overload නම් රැඳී සිට නැවත උත්සාහ කරයි
         await sleep(res.status === 429 ? 8000 * (attempt + 1) : 2500 * (attempt + 1));
       } catch {
         await sleep(2500 * (attempt + 1));
       }
     }
-    return null;
+    return { scenes: null, reason: "FAILED" };
+  };
+
+  // කොටසක් අසාර්ථක වී ප්‍රතිචාරය කැපී ගියා නම් එය දෙකට බෙදා නැවත AI වෙත යවයි (regex එකට වැටීමට පෙර)
+  const parseChunkRobust = async (
+    text: string,
+    depth = 0
+  ): Promise<{ ai: any[] | null; text: string }[]> => {
+    const r = await parseChunkWithAi(text);
+    if (r.scenes && r.scenes.length > 0) return [{ ai: r.scenes, text }];
+
+    if (r.reason === "BAD_JSON" && depth < 3 && text.length > 3000) {
+      const lines = text.split("\n");
+      const mid = Math.floor(lines.length / 2);
+      const first = lines.slice(0, mid).join("\n");
+      const second = lines.slice(mid).join("\n");
+      if (first.trim().length > 200 && second.trim().length > 200) {
+        const ra = await parseChunkRobust(first, depth + 1);
+        const rb = await parseChunkRobust(second, depth + 1);
+        return [...ra, ...rb];
+      }
+    }
+    return [{ ai: null, text }];
   };
 
   const toStr = (v: any) => (typeof v === "string" ? v.trim() : "");
@@ -388,31 +412,51 @@ export default function ScriptBreakdownPage() {
   };
 
   // AI මුලින්; එය අසාර්ථක chunk සඳහා පමණක් regex parser එක (fallback)
+  // කොටස් දෙක බැගින් සමාන්තරව යවයි, හැදෙන දර්ශන ඒ සැණින් තිරයේ පෙන්වයි
   const parseWithAiHybrid = async (rawText: string): Promise<SceneEntity[]> => {
     const isSinhala = /[\u0D80-\u0DFF]/.test(rawText);
-    const chunks = splitIntoChunks(rawText);
+    // සිංහල අකුරු token වැඩි නිසා කොටස් කුඩා කරයි
+    const chunks = splitIntoChunks(rawText, isSinhala ? 12000 : 22000);
     const all: SceneEntity[] = [];
-    let aiChunks = 0;
+    let aiPieces = 0;
+    const PARALLEL = 2;
 
-    for (let i = 0; i < chunks.length; i++) {
-      setProgress(`AI විශ්ලේෂණය: කොටස ${i + 1} / ${chunks.length}`);
-      const aiScenes = await parseChunkWithAi(chunks[i]);
+    setParsedScenes([]);
+    setSelectedSceneIds([]);
 
-      if (aiScenes && aiScenes.length > 0) {
-        aiChunks++;
-        aiScenes.forEach((s) => all.push(aiSceneToEntity(s, all.length + 1, isSinhala)));
-      } else {
-        // Fallback: regex parser
-        const fallback = parseScriptContent(chunks[i]);
-        fallback.forEach((s) => {
-          const n = all.length + 1;
-          all.push({ ...s, id: `SCENE-${String(n).padStart(2, "0")}`, sceneNumber: n });
-        });
+    for (let i = 0; i < chunks.length; i += PARALLEL) {
+      const group = chunks.slice(i, i + PARALLEL);
+      const last = Math.min(i + PARALLEL, chunks.length);
+      setProgress(
+        `AI විශ්ලේෂණය: කොටස ${i + 1}${last > i + 1 ? "-" + last : ""} / ${chunks.length} · දර්ශන ${all.length}ක් හමුවිය`
+      );
+
+      // කොටස් සමාන්තරව සකසන නමුත් ප්‍රතිඵල මුල් පිළිවෙලටම එකතු කරයි
+      const results = await Promise.all(group.map((c) => parseChunkRobust(c)));
+
+      for (const pieces of results) {
+        for (const piece of pieces) {
+          if (piece.ai && piece.ai.length > 0) {
+            aiPieces++;
+            piece.ai.forEach((s) => all.push(aiSceneToEntity(s, all.length + 1, isSinhala)));
+          } else {
+            // Fallback: regex parser
+            parseScriptContent(piece.text).forEach((s) => {
+              const n = all.length + 1;
+              all.push({ ...s, id: `SCENE-${String(n).padStart(2, "0")}`, sceneNumber: n });
+            });
+          }
+        }
       }
-      if (i < chunks.length - 1) await sleep(3000); // rate limit වලට ගෞරවය
+
+      // අතරමැද ප්‍රතිඵල ඒ සැණින් පෙන්වයි
+      setParsedScenes([...all]);
+      setSelectedSceneIds(all.map((s) => s.id));
+
+      if (last < chunks.length) await sleep(2000); // rate limit වලට ගෞරවය
     }
 
-    if (aiChunks === 0 && all.length > 0) {
+    if (aiPieces === 0 && all.length > 0) {
       console.warn("Gemini භාවිතා නොවීය; regex parser පමණක් භාවිතා විය.");
     }
     return all;
@@ -566,7 +610,12 @@ export default function ScriptBreakdownPage() {
     const merged = Array.from(frameMap.values());
 
     sessionStorage.setItem("eclat_storyboard_frames", JSON.stringify(merged));
-    router.push("/storyboard");
+    // එක් දර්ශනයක් නම් ඒ දර්ශනයටම යොමු කර ඉබේම හදන්න පටන් ගනී
+    router.push(
+      targetScenes.length === 1
+        ? `/storyboard?scene=${encodeURIComponent(targetScenes[0].id)}&auto=1`
+        : "/storyboard"
+    );
   };
 
   return (
@@ -740,7 +789,17 @@ export default function ScriptBreakdownPage() {
             )}
           </div>
 
-          {isProcessing ? (
+          {isProcessing && parsedScenes.length > 0 && (
+            <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3 text-xs text-emerald-300">
+              <Loader2 className="w-4 h-4 animate-spin shrink-0" />
+              <div>
+                <p className="font-semibold">{progress}</p>
+                <p className="text-slate-400 mt-0.5">දර්ශන හැදෙන විට පහළින් පෙනේ. මෙම පිටුව වසන්න එපා.</p>
+              </div>
+            </div>
+          )}
+
+          {isProcessing && parsedScenes.length === 0 ? (
             <div className="p-16 rounded-2xl bg-[#070e0a] border border-emerald-950/70 text-center flex flex-col items-center justify-center">
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
               <h3 className="text-sm font-semibold text-white">තිර පිටපත විශ්ලේෂණය කරමින් පවතී...</h3>

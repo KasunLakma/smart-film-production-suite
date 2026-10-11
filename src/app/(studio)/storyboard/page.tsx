@@ -91,6 +91,8 @@ export default function StoryboardPage() {
 
   // සියලු පින්තූර ඉල්ලීම් එකින් එක පෝලිමේ ක්‍රියාත්මක කරයි (free image service එකට එකවර ඉල්ලීම් යැවීම වළක්වයි)
   const queueRef = useRef<Promise<void>>(Promise.resolve());
+  const paramAppliedRef = useRef(false);
+  const autoSceneRef = useRef<string | null>(null);
 
   const patchShot = (id: string, patch: Partial<StoryboardShot>) =>
     setShots((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
@@ -121,7 +123,12 @@ export default function StoryboardPage() {
       if (data.success && data.imageUrl) {
         // පින්තූරය සැබවින්ම ලැබෙන තෙක් බලා සිටී; අසාර්ථක නම් නැවත උත්සාහ කරයි
         for (let attempt = 0; attempt < 3; attempt++) {
-          const url = attempt === 0 ? data.imageUrl : `${data.imageUrl}&retry=${attempt}`;
+          const url =
+            attempt === 0
+              ? data.imageUrl
+              : attempt === 1
+                ? `${data.imageUrl}&model=turbo&retry=1` // වෙනත් model එකක් උත්සාහ කරයි
+                : `${data.imageUrl}&retry=${attempt}`;
           const ok = await preloadImage(url);
           if (ok) {
             saveToCache(shot.id, url);
@@ -205,17 +212,47 @@ export default function StoryboardPage() {
             });
 
             setShots(newShots);
+
+            // Breakdown පිටුවේ "Generate Storyboard" එබූ දර්ශනයටම යොමු වීම (?scene=SCENE-02&auto=1)
+            if (!paramAppliedRef.current) {
+              paramAppliedRef.current = true;
+              const params = new URLSearchParams(window.location.search);
+              const wanted = params.get("scene");
+              if (wanted && parsed.some((sc: any) => sc.id === wanted)) {
+                setFilterScene(wanted);
+                if (params.get("auto") === "1") autoSceneRef.current = wanted;
+                window.history.replaceState(null, "", `/storyboard?scene=${encodeURIComponent(wanted)}`);
+              }
+            }
           }
         } catch { }
       }
     }
   }, [artStyle]);
 
+  // ඉබේම හදන්න අවශ්‍ය දර්ශනයක් ඇත්නම්, shots පූරණය වූ පසු එහි පින්තූර හදන්න පටන් ගනී
+  useEffect(() => {
+    if (!autoSceneRef.current || shots.length === 0) return;
+    const id = autoSceneRef.current;
+    autoSceneRef.current = null;
+    shots.filter((s) => s.sceneId === id && !s.imageUrl).forEach((s) => fetchAiFrame(s));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [shots]);
+
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
     const targetShots = (filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene)).filter(
       (s) => !s.imageUrl
     );
+    if (targetShots.length > 12) {
+      const ok = window.confirm(
+        `පින්තූර ${targetShots.length}ක් හදන්න යන්නේ. එකින් එක හදන නිසා විනාඩි ගණනාවක් (සමහරවිට පැයක්) යයි. දිගටම යනවාද?`
+      );
+      if (!ok) {
+        setIsGeneratingAll(false);
+        return;
+      }
+    }
     // සියල්ල එකවර පෝලිමට දමයි; පෝලිම එකින් එක සකසයි
     await Promise.all(targetShots.map((shot) => fetchAiFrame(shot)));
     setIsGeneratingAll(false);
@@ -286,7 +323,9 @@ export default function StoryboardPage() {
           >
             All Sequences ({shots.length})
           </button>
-          {sceneList.map((scn) => (
+          {sceneList.length <= 12 ? (
+            <>
+            {sceneList.map((scn) => (
             <button
               key={scn.id}
               onClick={() => setFilterScene(scn.id)}
@@ -298,6 +337,21 @@ export default function StoryboardPage() {
               {scn.id}
             </button>
           ))}
+            </>
+          ) : (
+            <select
+              value={filterScene}
+              onChange={(e) => setFilterScene(e.target.value)}
+              className="px-3 py-1.5 rounded-lg text-xs bg-[#0e1d15] text-slate-200 border border-emerald-950 max-w-[260px]"
+            >
+              <option value="ALL">සියලු දර්ශන ({sceneList.length})</option>
+              {sceneList.map((scn) => (
+                <option key={scn.id} value={scn.id}>
+                  {scn.id} — {String(scn.slugline || "").slice(0, 40)}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
 
         <div className="flex items-center gap-2 bg-[#050b07] p-1 rounded-xl border border-emerald-950">

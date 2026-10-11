@@ -127,7 +127,16 @@ export async function POST(req: Request) {
                 });
 
                 const raw = (response.text || "").replace(/^```json\s*|\s*```$/g, "").trim();
-                const parsed = JSON.parse(raw);
+                let parsed: any;
+                try {
+                    parsed = JSON.parse(raw);
+                } catch {
+                    // ප්‍රතිචාරය කැපී ගියා (output සීමාව ඉක්මවීම). නැවත යැවීමෙන් වැඩක් නැත; කොටස දෙකට බෙදා යැවිය යුතුය.
+                    return NextResponse.json(
+                        { success: false, code: "BAD_JSON", error: "Model output was cut off or invalid JSON" },
+                        { status: 502 }
+                    );
+                }
                 const scenes = Array.isArray(parsed?.scenes) ? parsed.scenes : [];
                 return NextResponse.json({ success: true, scenes, model });
             } catch (e: any) {
