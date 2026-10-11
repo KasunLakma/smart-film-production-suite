@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import {
   SlidersHorizontal,
@@ -25,7 +25,11 @@ interface StoryboardShot {
   displayTitle: string;
   actionSubject: string;
   imageUrl?: string;
+  prompt?: string;
   isGenerating?: boolean;
+  queued?: boolean;
+  startedAt?: number;
+  error?: boolean;
 }
 
 export default function StoryboardPage() {
@@ -33,7 +37,7 @@ export default function StoryboardPage() {
   const [artStyle, setArtStyle] = useState<"sketch_bw" | "graphic_novel">("sketch_bw");
   const [isGeneratingAll, setIsGeneratingAll] = useState(false);
   const [shots, setShots] = useState<StoryboardShot[]>([]);
-  const [sceneList, setSceneList] = useState<{ id: string; slugline: string }[]>([]);
+  const [sceneList, setSceneList] = useState<any[]>([]);
 
   const STORAGE_KEY = `cine_storyboard_cache_${artStyle}`;
 
@@ -63,31 +67,93 @@ export default function StoryboardPage() {
     }
   };
 
-  // Generate Frame බටන් එක එබූ විට සෘජුවම API එකෙන් AI පින්තූරය ලබා ගැනීම
-  const fetchAiFrame = async (shot: StoryboardShot) => {
+  // පින්තූරය ඇත්තටම බාගත වී පෙන්විය හැකිද කියා පරීක්ෂා කරයි (තත්පර 90 ක් දක්වා)
+  const preloadImage = (url: string): Promise<boolean> =>
+    new Promise((resolve) => {
+      const img = new Image();
+      const timer = setTimeout(() => {
+        img.onload = null;
+        img.onerror = null;
+        resolve(false);
+      }, 60000);
+      img.onload = () => {
+        clearTimeout(timer);
+        resolve(true);
+      };
+      img.onerror = () => {
+        clearTimeout(timer);
+        resolve(false);
+      };
+      img.src = url;
+    });
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // සියලු පින්තූර ඉල්ලීම් එකින් එක පෝලිමේ ක්‍රියාත්මක කරයි (free image service එකට එකවර ඉල්ලීම් යැවීම වළක්වයි)
+  const queueRef = useRef<Promise<void>>(Promise.resolve());
+
+  const patchShot = (id: string, patch: Partial<StoryboardShot>) =>
+    setShots((prev) => prev.map((s) => (s.id === id ? { ...s, ...patch } : s)));
+
+  const runFrame = async (shot: StoryboardShot) => {
     const isWide = shot.id.endsWith("-A");
-    setShots((prev) => prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: true } : s)));
+    const scene = sceneList.find((sc) => sc.id === shot.sceneId);
+    patchShot(shot.id, { queued: false, startedAt: Date.now(), error: false });
 
     try {
       const res = await fetch("/api/storyboard/generate", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ slugline: shot.sceneSlug, isWide, artStyle })
+        body: JSON.stringify({
+          sceneId: shot.sceneId,
+          slugline: shot.sceneSlug,
+          isWide,
+          artStyle,
+          visualPrompt: scene?.visualPrompt,
+          synopsis: scene?.synopsis,
+          props: scene?.props,
+          locationType: scene?.locationType,
+          timeOfDay: scene?.timeOfDay
+        })
       });
       const data = await res.json();
+
       if (data.success && data.imageUrl) {
-        saveToCache(shot.id, data.imageUrl);
-        setShots((prev) =>
-          prev.map((s) => (s.id === shot.id ? { ...s, imageUrl: data.imageUrl, isGenerating: false } : s))
-        );
-        return;
+        // පින්තූරය සැබවින්ම ලැබෙන තෙක් බලා සිටී; අසාර්ථක නම් නැවත උත්සාහ කරයි
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const url = attempt === 0 ? data.imageUrl : `${data.imageUrl}&retry=${attempt}`;
+          const ok = await preloadImage(url);
+          if (ok) {
+            saveToCache(shot.id, url);
+            patchShot(shot.id, { imageUrl: url, prompt: data.prompt, isGenerating: false, error: false });
+            return;
+          }
+          await sleep(4000 * (attempt + 1));
+        }
       }
     } catch (e) {
       console.error(e);
     }
 
-    setShots((prev) => prev.map((s) => (s.id === shot.id ? { ...s, isGenerating: false } : s)));
+    patchShot(shot.id, { isGenerating: false, queued: false, error: true });
   };
+
+  // Generate Frame බටන් එක එබූ විට පෝලිමට එකතු වේ
+  const fetchAiFrame = (shot: StoryboardShot): Promise<void> => {
+    patchShot(shot.id, { isGenerating: true, queued: true, error: false });
+    const job = queueRef.current.then(() => runFrame(shot));
+    queueRef.current = job.catch(() => { });
+    return job;
+  };
+
+  // තත්පර ගණන පෙන්වීමට සරල ticker එකක්
+  const [, setTick] = useState(0);
+  const anyGenerating = shots.some((s) => s.isGenerating);
+  useEffect(() => {
+    if (!anyGenerating) return;
+    const t = setInterval(() => setTick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [anyGenerating]);
 
   useEffect(() => {
     if (typeof window !== "undefined") {
@@ -100,7 +166,7 @@ export default function StoryboardPage() {
         try {
           const parsed = JSON.parse(storedScenes);
           if (Array.isArray(parsed) && parsed.length > 0) {
-            setSceneList(parsed.map((s: any) => ({ id: s.id, slugline: s.slugline })));
+            setSceneList(parsed);
             const newShots: StoryboardShot[] = [];
 
             parsed.forEach((scene: any, index: number) => {
@@ -147,13 +213,11 @@ export default function StoryboardPage() {
 
   const handleGenerateAll = async () => {
     setIsGeneratingAll(true);
-    const targetShots = filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene);
-    for (const shot of targetShots) {
-      if (!shot.imageUrl) {
-        await fetchAiFrame(shot);
-        await new Promise((r) => setTimeout(r, 600));
-      }
-    }
+    const targetShots = (filterScene === "ALL" ? shots : shots.filter((s) => s.sceneId === filterScene)).filter(
+      (s) => !s.imageUrl
+    );
+    // සියල්ල එකවර පෝලිමට දමයි; පෝලිම එකින් එක සකසයි
+    await Promise.all(targetShots.map((shot) => fetchAiFrame(shot)));
     setIsGeneratingAll(false);
   };
 
@@ -197,11 +261,11 @@ export default function StoryboardPage() {
           >
             {isGeneratingAll ? (
               <>
-                <Loader2 className="w-4 h-4 animate-spin" /> Rendering All Panels...[cite: 160]
+                <Loader2 className="w-4 h-4 animate-spin" /> Rendering {shots.filter((s) => s.imageUrl).length}/{shots.length}...
               </>
             ) : (
               <>
-                <Wand2 className="w-4 h-4" /> Synthesize All Frames[cite: 160]
+                <Wand2 className="w-4 h-4" /> Synthesize All Frames
               </>
             )}
           </button>
@@ -211,7 +275,7 @@ export default function StoryboardPage() {
       <div className="flex flex-wrap items-center justify-between gap-4 p-4 rounded-xl bg-[#09130e] border border-emerald-950/70">
         <div className="flex flex-wrap items-center gap-2">
           <span className="text-xs font-medium text-slate-400 flex items-center gap-1.5 mr-1">
-            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:[cite: 160, 161]
+            <SlidersHorizontal className="w-3.5 h-3.5 text-emerald-400" /> Filter Scene:
           </span>
           <button
             onClick={() => setFilterScene("ALL")}
@@ -220,7 +284,7 @@ export default function StoryboardPage() {
                 : "bg-[#0e1d15] text-slate-300 hover:text-white"
               }`}
           >
-            All Sequences ({shots.length})[cite: 161]
+            All Sequences ({shots.length})
           </button>
           {sceneList.map((scn) => (
             <button
@@ -231,14 +295,14 @@ export default function StoryboardPage() {
                   : "bg-[#0e1d15] text-slate-300 hover:text-white"
                 }`}
             >
-              {scn.id}[cite: 161]
+              {scn.id}
             </button>
           ))}
         </div>
 
         <div className="flex items-center gap-2 bg-[#050b07] p-1 rounded-xl border border-emerald-950">
           <span className="text-xs text-slate-400 px-2 flex items-center gap-1">
-            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:[cite: 161, 162]
+            <Palette className="w-3.5 h-3.5 text-emerald-400" /> Style:
           </span>
           <button
             onClick={() => setArtStyle("sketch_bw")}
@@ -247,7 +311,7 @@ export default function StoryboardPage() {
                 : "text-slate-400 hover:text-white"
               }`}
           >
-            StudioBinder (B&W Sketch)[cite: 162]
+            StudioBinder (B&W Sketch)
           </button>
           <button
             onClick={() => setArtStyle("graphic_novel")}
@@ -256,7 +320,7 @@ export default function StoryboardPage() {
                 : "text-slate-400 hover:text-white"
               }`}
           >
-            Graphic Novel (Color)[cite: 162]
+            Graphic Novel (Color)
           </button>
         </div>
       </div>
@@ -271,16 +335,24 @@ export default function StoryboardPage() {
               {shot.isGenerating ? (
                 <div className="w-full h-full flex flex-col items-center justify-center bg-[#07130c] text-emerald-400 space-y-2 p-4 text-center">
                   <Loader2 className="w-8 h-8 animate-spin" />
-                  <span className="text-xs font-medium tracking-wide">
-                    Synthesizing High-Detail Frame...[cite: 163]
-                  </span>
-                  <span className="text-[11px] text-slate-400 max-w-xs truncate">{shot.sceneSlug}[cite: 163]</span>
+                  {shot.queued ? (
+                    <span className="text-xs font-medium tracking-wide">පෝලිමේ රැඳී සිටී... (ඊළඟට මෙය හැදේ)</span>
+                  ) : (
+                    <>
+                      <span className="text-xs font-medium tracking-wide">
+                        පින්තූරය හදමින් පවතී... {shot.startedAt ? Math.floor((Date.now() - shot.startedAt) / 1000) : 0}s
+                      </span>
+                      <span className="text-[11px] text-slate-400">සාමාන්‍යයෙන් තත්පර 10-40ක් යයි</span>
+                    </>
+                  )}
+                  <span className="text-[11px] text-slate-500 max-w-xs truncate">{shot.sceneSlug}</span>
                 </div>
               ) : shot.imageUrl ? (
                 <>
                   <img
                     src={shot.imageUrl}
                     alt={shot.shotNumber}
+                    onError={() => patchShot(shot.id, { imageUrl: "", error: true })}
                     className="w-full h-full object-cover object-center group-hover:scale-105 transition-transform duration-500"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent opacity-0 group-hover:opacity-100 transition-opacity flex items-end justify-end p-3">
@@ -288,7 +360,7 @@ export default function StoryboardPage() {
                       onClick={() => fetchAiFrame(shot)}
                       className="px-2.5 py-1 rounded-lg bg-black/80 hover:bg-emerald-500 hover:text-slate-950 text-white text-[11px] font-semibold flex items-center gap-1.5 transition-all border border-emerald-500/30 cursor-pointer"
                     >
-                      <RefreshCw className="w-3 h-3" /> Re-render Frame[cite: 163, 164]
+                      <RefreshCw className="w-3 h-3" /> Re-render Frame
                     </button>
                   </div>
                 </>
@@ -298,28 +370,30 @@ export default function StoryboardPage() {
                     onClick={() => fetchAiFrame(shot)}
                     className="px-6 py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 active:scale-95 text-slate-950 font-bold text-xs shadow-lg shadow-emerald-500/20 flex items-center gap-2 cursor-pointer transition-all hover:scale-105 z-20"
                   >
-                    <Wand2 className="w-4 h-4" /> Generate Frame[cite: 160]
+                    <Wand2 className="w-4 h-4" /> Generate Frame
                   </button>
                   <span className="text-[11px] text-slate-500 mt-2">
-                    Click to synthesize this 16:9 cinematic frame
+                    {shot.error
+                      ? "පින්තූරය ලබා ගැනීමට නොහැකි විය (image service එක කාර්යබහුලයි). නැවත ඔබන්න."
+                      : "Click to synthesize this 16:9 cinematic frame"}
                   </span>
                 </div>
               )}
 
               <div className="absolute top-3 left-3 flex items-center gap-2 pointer-events-none">
                 <span className="px-2 py-0.5 rounded bg-slate-950/90 backdrop-blur-md border border-white/20 text-white text-[11px] font-bold font-mono">
-                  {shot.shotNumber}[cite: 164]
+                  {shot.shotNumber}
                 </span>
               </div>
 
               <div className="absolute bottom-2 right-2 pointer-events-none flex items-center gap-1.5">
                 {shot.imageUrl && (
                   <span className="px-1.5 py-0.5 rounded bg-emerald-950/80 text-[10px] text-emerald-400 border border-emerald-500/40 flex items-center gap-1">
-                    <CheckCircle2 className="w-3 h-3" /> Studio Ready[cite: 164]
+                    <CheckCircle2 className="w-3 h-3" /> Studio Ready
                   </span>
                 )}
                 <span className="px-2 py-0.5 rounded bg-black/85 backdrop-blur-sm text-[10px] font-mono text-slate-300 border border-slate-800">
-                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}[cite: 164]
+                  {artStyle === "sketch_bw" ? "StudioBinder Sketch" : "Graphic Novel"}
                 </span>
               </div>
             </div>
@@ -327,24 +401,29 @@ export default function StoryboardPage() {
             <div className="p-5 flex-1 flex flex-col justify-between space-y-4">
               <div>
                 <p className="text-[11px] font-semibold text-emerald-400 uppercase tracking-wider mb-1 truncate">
-                  {shot.displayTitle}[cite: 165]
+                  {shot.displayTitle}
                 </p>
                 <h3 className="text-sm font-bold text-white mb-2">
-                  {shot.shotType}[cite: 165]
+                  {shot.shotType}
                 </h3>
                 <p className="text-xs text-slate-300 leading-relaxed font-light line-clamp-3">
-                  "{shot.sceneSlug}"[cite: 165]
+                  "{shot.sceneSlug}"
                 </p>
+                {shot.prompt && (
+                  <p className="mt-2 text-[10px] text-slate-500 leading-snug line-clamp-3" title={shot.prompt}>
+                    <span className="text-emerald-500 font-semibold">AI Prompt: </span>{shot.prompt}
+                  </p>
+                )}
               </div>
 
               <div className="pt-3 border-t border-emerald-950/60 grid grid-cols-2 gap-2 text-[11px]">
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>[cite: 165]
-                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.lens}</span>[cite: 165]
+                  <span className="text-slate-500 block text-[10px] uppercase">Lens Angle</span>
+                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.lens}</span>
                 </div>
                 <div className="bg-[#0e1d15] p-2 rounded-lg border border-emerald-950/80">
-                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>[cite: 165]
-                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.cameraMovement}</span>[cite: 165]
+                  <span className="text-slate-500 block text-[10px] uppercase">Movement</span>
+                  <span className="text-slate-200 font-medium truncate block mt-0.5">{shot.cameraMovement}</span>
                 </div>
               </div>
             </div>

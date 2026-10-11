@@ -48,6 +48,7 @@ export default function ScriptBreakdownPage() {
   const [scriptText, setScriptText] = useState("");
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [progress, setProgress] = useState("");
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
 
   const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
@@ -292,6 +293,131 @@ export default function ScriptBreakdownPage() {
     });
   };
 
+  // ---------- AI (Gemini) + Regex Hybrid Parsing ----------
+
+  // දිග තිර පිටපතක් දර්ශන මායිම් වලින් (නැත්නම් හිස් පේළි වලින්) කොටස් වලට කඩයි
+  const splitIntoChunks = (text: string, maxChars = 22000): string[] => {
+    const lines = text.replace(/\r\n/g, "\n").split("\n");
+    const slugRe = /^\s*(?:SCENE\s*\d+|දර්ශනය\s*\d+|INT[\.\s\-\/]|EXT[\.\s\-\/]|I\/E[\.\s]|අභ්‍යන්තර|බාහිර)/i;
+    const chunks: string[] = [];
+    let buf: string[] = [];
+    let size = 0;
+
+    const flush = () => {
+      const t = buf.join("\n").trim();
+      if (t.length > 0) chunks.push(t);
+      buf = [];
+      size = 0;
+    };
+
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const isBoundary = slugRe.test(line) || (line.trim() === "" && size > maxChars * 0.8);
+      // සීමාවට ආසන්න වූ විට, දර්ශන මායිමකදී කොටස වසයි
+      if (size >= maxChars * 0.7 && isBoundary) flush();
+      // මායිමක් නොමැතිව සීමාව ඉක්මවූයේ නම් බලෙන් වසයි
+      if (size >= maxChars * 1.3) flush();
+      buf.push(line);
+      size += line.length + 1;
+    }
+    flush();
+    return chunks;
+  };
+
+  const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+  // එක chunk එකක් Gemini එකට යවයි (429/503 වලදී නැවත උත්සාහ කරයි)
+  const parseChunkWithAi = async (text: string): Promise<any[] | null> => {
+    for (let attempt = 0; attempt < 4; attempt++) {
+      try {
+        const res = await fetch("/api/screenplay/parse", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ text }),
+        });
+        const data = await res.json().catch(() => ({}));
+        if (res.ok && data.success && Array.isArray(data.scenes)) return data.scenes;
+        if (data.code === "NO_KEY") return null; // key නැත, regex වෙත මාරු වේ
+        // Rate limit / overload නම් රැඳී සිට නැවත උත්සාහ කරයි
+        await sleep(res.status === 429 ? 8000 * (attempt + 1) : 2500 * (attempt + 1));
+      } catch {
+        await sleep(2500 * (attempt + 1));
+      }
+    }
+    return null;
+  };
+
+  const toStr = (v: any) => (typeof v === "string" ? v.trim() : "");
+  const toArr = (v: any, max: number): string[] =>
+    Array.isArray(v)
+      ? Array.from(new Set(v.map(toStr).filter(Boolean))).slice(0, max)
+      : [];
+
+  // Gemini ප්‍රතිඵලය SceneEntity එකක් බවට හරවයි
+  const aiSceneToEntity = (ai: any, sceneNum: number, isSinhala: boolean): SceneEntity => {
+    const isExt = String(ai.locationType).toUpperCase().startsWith("EXT");
+    const tod = String(ai.timeOfDay || "UNSPECIFIED").toUpperCase();
+    const slugRaw = toStr(ai.slugline) || `Scene ${sceneNum}`;
+    const prefix = isSinhala ? "දර්ශනය" : "SCENE";
+    const slugline = /^(SCENE|දර්ශනය)\s*\d+/i.test(slugRaw)
+      ? slugRaw.toUpperCase()
+      : `${prefix} ${String(sceneNum).padStart(2, "0")}: ${slugRaw.toUpperCase()}`;
+
+    const characters = toArr(ai.characters, 8);
+    const props = toArr(ai.props, 8);
+    const dialogues: DialogueItem[] = Array.isArray(ai.dialogues)
+      ? ai.dialogues
+          .map((d: any) => ({ speaker: toStr(d?.speaker).toUpperCase(), line: toStr(d?.line) }))
+          .filter((d: DialogueItem) => d.speaker && d.line)
+          .slice(0, 3)
+      : [];
+
+    return {
+      id: `SCENE-${String(sceneNum).padStart(2, "0")}`,
+      sceneNumber: sceneNum,
+      slugline,
+      locationType: isExt ? (isSinhala ? "EXT (බාහිර)" : "EXT (Exterior)") : (isSinhala ? "INT (අභ්‍යන්තර)" : "INT (Interior)"),
+      timeOfDay: tod === "UNSPECIFIED" ? "DAY" : tod,
+      synopsis: toStr(ai.synopsis).slice(0, 300),
+      characters: characters.length ? characters : [isSinhala ? "ප්‍රධාන චරිතය" : "LEAD CHARACTER"],
+      props: props.length ? props : [isSinhala ? "ප්‍රධාන පසුතල උපකරණ" : "KEY SCENE PROP"],
+      dialogues,
+      plannedShots: 3,
+      visualPrompt: toStr(ai.visualDescriptionEN), // <- ඉංග්‍රීසි image prompt එක
+    };
+  };
+
+  // AI මුලින්; එය අසාර්ථක chunk සඳහා පමණක් regex parser එක (fallback)
+  const parseWithAiHybrid = async (rawText: string): Promise<SceneEntity[]> => {
+    const isSinhala = /[\u0D80-\u0DFF]/.test(rawText);
+    const chunks = splitIntoChunks(rawText);
+    const all: SceneEntity[] = [];
+    let aiChunks = 0;
+
+    for (let i = 0; i < chunks.length; i++) {
+      setProgress(`AI විශ්ලේෂණය: කොටස ${i + 1} / ${chunks.length}`);
+      const aiScenes = await parseChunkWithAi(chunks[i]);
+
+      if (aiScenes && aiScenes.length > 0) {
+        aiChunks++;
+        aiScenes.forEach((s) => all.push(aiSceneToEntity(s, all.length + 1, isSinhala)));
+      } else {
+        // Fallback: regex parser
+        const fallback = parseScriptContent(chunks[i]);
+        fallback.forEach((s) => {
+          const n = all.length + 1;
+          all.push({ ...s, id: `SCENE-${String(n).padStart(2, "0")}`, sceneNumber: n });
+        });
+      }
+      if (i < chunks.length - 1) await sleep(3000); // rate limit වලට ගෞරවය
+    }
+
+    if (aiChunks === 0 && all.length > 0) {
+      console.warn("Gemini භාවිතා නොවීය; regex parser පමණක් භාවිතා විය.");
+    }
+    return all;
+  };
+
   const handleExecuteBreakdown = async () => {
     if (!uploadedFile && !scriptText.trim()) return;
 
@@ -313,9 +439,16 @@ export default function ScriptBreakdownPage() {
         throw new Error("පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය.");
       }
 
-      const scenes = parseScriptContent(rawContent);
+      const scenes = await parseWithAiHybrid(rawContent);
 
       if (scenes.length > 0) {
+        // පරණ තිර පිටපතේ storyboard පින්තූර cache එක මකා දමයි (අලුත් පිටපතට වැරදි පින්තූර නොපෙන්වීමට)
+        try {
+          Object.keys(localStorage)
+            .filter((k) => k.startsWith("cine_storyboard_cache_") || k === "active_screenplay_scenes")
+            .forEach((k) => localStorage.removeItem(k));
+          sessionStorage.removeItem("eclat_storyboard_frames");
+        } catch { }
         setParsedScenes(scenes);
         setSelectedSceneIds(scenes.map((s) => s.id));
         sessionStorage.setItem("eclat_active_scenes", JSON.stringify(scenes));
@@ -327,6 +460,7 @@ export default function ScriptBreakdownPage() {
       alert(`Breakdown අසාර්ථක විය: ${err.message}`);
     } finally {
       setIsProcessing(false);
+      setProgress("");
     }
   };
 
@@ -537,7 +671,7 @@ export default function ScriptBreakdownPage() {
                     >
                       {isProcessing ? (
                         <>
-                          <Loader2 className="w-4 h-4 animate-spin" /> Processing Screenplay...
+                          <Loader2 className="w-4 h-4 animate-spin" /> {progress || "Processing Screenplay..."}
                         </>
                       ) : (
                         <>
@@ -611,6 +745,7 @@ export default function ScriptBreakdownPage() {
               <div className="w-10 h-10 border-2 border-emerald-500 border-t-transparent rounded-full animate-spin mb-4" />
               <h3 className="text-sm font-semibold text-white">තිර පිටපත විශ්ලේෂණය කරමින් පවතී...</h3>
               <p className="text-xs text-slate-400 mt-1">දර්ශන, චරිත, උපකරණ සහ දෙබස් සජීවීව වෙන් කරමින් පවතී.</p>
+              {progress && <p className="text-xs text-emerald-400 mt-3 font-mono">{progress}</p>}
             </div>
           ) : parsedScenes.length > 0 ? (
             <div className="space-y-4 max-h-[780px] overflow-y-auto pr-1 custom-scrollbar">

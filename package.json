@@ -10,7 +10,7 @@
     "db:push": "prisma db push"
   },
   "dependencies": {
-    "@google/genai": "^2.27.0",
+    "@google/genai": "^2.28.0",
     "clsx": "^2.1.1",
     "jose": "^6.2.12",
     "lucide-react": "^1.44.0",
