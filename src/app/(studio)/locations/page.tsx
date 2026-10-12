@@ -190,6 +190,11 @@ export default function LocationsPage() {
     if (window.confirm(`Delete “${l.name}”?`)) setState((s) => ({ items: s.items.filter((x) => x.id !== l.id) }));
   };
 
+  const deleteAll = () => {
+    if (!window.confirm(`Delete ALL ${items.length} saved places? This cannot be undone.\n\nසුරකින ලද ස්ථාන සියල්ලම මකන්නද?`)) return;
+    setState({ items: [] });
+  };
+
   const setStatus = (id: string, status: LocStatus) =>
     setState((s) => ({ items: s.items.map((l) => (l.id === id ? { ...l, status } : l)) }));
 
@@ -270,7 +275,10 @@ export default function LocationsPage() {
               action={<button className={btnPrimary} onClick={() => setTab("find")}>Find places</button>} />
           ) : (
             <>
-              <p className="text-xs text-slate-400">Daily fees of Approved and Booked places together: <b className="text-white">{money(readyFees)}</b> · Enter the real payments on the <Link className="underline text-emerald-300" href="/financials">Budget page</Link>.</p>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <p className="text-xs text-slate-400">Daily fees of Approved and Booked places together: <b className="text-white">{money(readyFees)}</b> · Enter the real payments on the <Link className="underline text-emerald-300" href="/financials">Budget page</Link>.</p>
+                <button onClick={deleteAll} className="px-2.5 py-1.5 rounded-lg bg-red-950/30 hover:bg-red-900/50 border border-red-900/40 text-red-300 text-[11px] font-medium inline-flex items-center gap-1.5 cursor-pointer"><Trash2 className="w-3.5 h-3.5" /> Delete all places</button>
+              </div>
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
                 {shown.map((l) => (
                   <div key={l.id} className="rounded-2xl bg-[#09130e] border border-emerald-950/70 p-5 space-y-3">
@@ -305,16 +313,16 @@ export default function LocationsPage() {
 
                     <div className="text-xs">
                       <span className="text-slate-400">Scenes shot here: </span>
-                      {l.sceneIds.length === 0 ? (
+                      {l.sceneIds.filter((id) => sceneById.has(id)).length === 0 ? (
                         <span className="text-amber-300">none linked yet</span>
                       ) : (
-                        l.sceneIds.slice(0, 10).map((id) => (
+                        l.sceneIds.filter((id) => sceneById.has(id)).slice(0, 10).map((id) => (
                           <span key={id} className="inline-block mr-1 mb-1 px-1.5 py-0.5 rounded bg-emerald-950 border border-emerald-900/60 text-emerald-200 text-[10px]">
                             Scene {sceneById.get(id)?.sceneNumber ?? "?"}
                           </span>
                         ))
                       )}
-                      {l.sceneIds.length > 10 && <span className="text-slate-500"> +{l.sceneIds.length - 10}</span>}
+                      {l.sceneIds.filter((id) => sceneById.has(id)).length > 10 && <span className="text-slate-500"> +{l.sceneIds.filter((id) => sceneById.has(id)).length - 10}</span>}
                     </div>
 
                     <div className="flex items-center justify-between gap-2 pt-3 border-t border-emerald-950/60">

@@ -153,6 +153,11 @@ export default function CallSheetPage() {
     setState({ sheets: made, activeId: made[0]?.id ?? null });
   };
 
+  const deleteAllSheets = () => {
+    if (!window.confirm(`Delete ALL ${sheets.length} call sheets? This cannot be undone.\n\nCall sheet සියල්ලම මකන්නද?`)) return;
+    setState({ sheets: [], activeId: null });
+  };
+
   const toggleScene = (id: string) => {
     if (!sheet) return;
     patch({ sceneIds: sheet.sceneIds.includes(id) ? sheet.sceneIds.filter((x) => x !== id) : [...sheet.sceneIds, id] });
@@ -224,6 +229,12 @@ export default function CallSheetPage() {
                 <button className={btnPrimary} onClick={autoPlan} disabled={scenes.length === 0}><Wand2 className="w-3.5 h-3.5" /> Plan all days from my script</button>
                 <button className={btnGhost} onClick={newSheet}><Plus className="w-3.5 h-3.5" /> New blank day</button>
               </div>
+              {sheets.length > 0 && (
+                <button className={btnDanger} onClick={deleteAllSheets}><Trash2 className="w-3.5 h-3.5" /> Delete all call sheets</button>
+              )}
+              {scenes.length === 0 && sheets.length > 0 && (
+                <p className="text-xs text-amber-300">The script was removed, so these call sheets have no scenes. You can delete them.</p>
+              )}
               {scenes.length === 0 && (
                 <p className="text-xs text-amber-300">No script yet: upload one on the <Link className="underline" href="/breakdown">Script page</Link> to use the quick plan.</p>
               )}

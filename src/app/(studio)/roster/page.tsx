@@ -148,6 +148,16 @@ export default function RosterPage() {
     }));
   };
 
+  const clearTeam = () => {
+    if (!window.confirm("Remove everyone from My Team? The people stay in the Find People list.\n\nමගේ කණ්ඩායමෙන් සියලු දෙනාම ඉවත් කරන්නද?")) return;
+    setRoster((r) => ({ ...r, team: [], casting: {} }));
+  };
+
+  const clearCasting = () => {
+    if (!window.confirm("Clear all the actor choices for the characters?")) return;
+    setRoster((r) => ({ ...r, casting: {} }));
+  };
+
   const removeSamples = () => {
     if (!window.confirm("Remove all the example (Sample) profiles? Profiles you added yourself stay.")) return;
     setRoster((r) => {
@@ -333,7 +343,10 @@ export default function RosterPage() {
             <Card>
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-base font-bold text-white">My team</h2>
-                <button onClick={exportTeam} className={btnGhost}><Download className="w-3.5 h-3.5" /> Download list (Excel)</button>
+                <div className="flex gap-2">
+                  <button onClick={exportTeam} className={btnGhost}><Download className="w-3.5 h-3.5" /> Download list (Excel)</button>
+                  <button onClick={clearTeam} className={btnDanger}><Trash2 className="w-3.5 h-3.5" /> Remove everyone</button>
+                </div>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-xs min-w-[760px]">
@@ -388,7 +401,10 @@ export default function RosterPage() {
               action={<Link href="/breakdown" className={btnPrimary}>Go to Script page</Link>} />
           ) : (
             <Card>
-              <h2 className="text-base font-bold text-white">Who plays whom?</h2>
+              <div className="flex items-start justify-between gap-3">
+                <h2 className="text-base font-bold text-white">Who plays whom?</h2>
+                {castedCount > 0 && <button onClick={clearCasting} className={btnDanger}><Trash2 className="w-3.5 h-3.5" /> Clear all choices</button>}
+              </div>
               <p className="text-xs text-slate-400 mb-4">Choose an actor for each character. The actor is added to “My Team” automatically and shows up on the call sheets. ({castedCount} of {characters.length} characters have an actor.)</p>
               <div className="space-y-2">
                 {characters.map((c) => {

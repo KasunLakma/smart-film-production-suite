@@ -1,5 +1,6 @@
 "use client";
 
+import { clearScriptDependents } from "@/lib/store";
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import {
@@ -529,12 +530,14 @@ export default function ScriptBreakdownPage() {
   };
 
   const handleRemoveScriptAndClear = () => {
+    const hasOther = typeof window !== "undefined" && (localStorage.getItem("eclat_budget_v1") || localStorage.getItem("eclat_callsheets_v1") || localStorage.getItem("eclat_roster_v1"));
+    if (hasOther && !window.confirm("Remove this script AND everything made from it?\n\nThis deletes: the budget plan, call sheets, actor choices and storyboard pictures.\nThis is kept: your spending records, people list and saved places.\n\nස්ක්‍රිප්ට් එකත්, ඒකෙන් හදපු බජට් සැලැස්ම, call sheet, නළු තේරීම් සහ පින්තූර මකන්නද?")) return;
     setUploadedFile(null);
     setScriptText("");
     setParsedScenes([]);
     setSelectedSceneIds([]);
     clearScenes();
-    sessionStorage.removeItem("eclat_storyboard_frames");
+    clearScriptDependents();
     const fileInput = document.getElementById("file-input-upload") as HTMLInputElement;
     if (fileInput) fileInput.value = "";
   };
@@ -570,9 +573,12 @@ export default function ScriptBreakdownPage() {
   };
 
   const handleClearAllScenes = () => {
+    const hasOther = typeof window !== "undefined" && (localStorage.getItem("eclat_budget_v1") || localStorage.getItem("eclat_callsheets_v1") || localStorage.getItem("eclat_roster_v1"));
+    if (hasOther && !window.confirm("Remove this script AND everything made from it?\n\nThis deletes: the budget plan, call sheets, actor choices and storyboard pictures.\nThis is kept: your spending records, people list and saved places.\n\nස්ක්‍රිප්ට් එකත්, ඒකෙන් හදපු බජට් සැලැස්ම, call sheet, නළු තේරීම් සහ පින්තූර මකන්නද?")) return;
     setParsedScenes([]);
     setSelectedSceneIds([]);
     clearScenes();
+    clearScriptDependents();
   };
 
   const handleSaveEditedScene = (e: React.FormEvent) => {

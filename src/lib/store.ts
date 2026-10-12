@@ -172,3 +172,59 @@ export function downloadCsv(filename: string, rows: (string | number)[][]) {
   a.click();
   URL.revokeObjectURL(a.href);
 }
+
+/* ---------- deleting data ---------- */
+
+function readJson(key: string): any {
+  try {
+    return JSON.parse(localStorage.getItem(key) || "null");
+  } catch {
+    return null;
+  }
+}
+
+function writeJson(key: string, value: unknown) {
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch {
+    /* ignore */
+  }
+}
+
+/** Storyboard pictures and the old scene copies used by the storyboard page */
+export function clearStoryboardData() {
+  try {
+    Object.keys(localStorage)
+      .filter((k) => k.startsWith("cine_storyboard_cache_") || k === "active_screenplay_scenes")
+      .forEach((k) => localStorage.removeItem(k));
+    sessionStorage.removeItem("eclat_storyboard_frames");
+  } catch {
+    /* ignore */
+  }
+}
+
+/**
+ * Call this when the script is removed. Deletes everything that was MADE FROM the script:
+ * budget plan, call sheets, cast choices, storyboard pictures and the scene links of places.
+ * Kept: spending records, prices, the people list, and the places themselves.
+ */
+export function clearScriptDependents() {
+  const b = readJson(KEYS.budget);
+  if (b) writeJson(KEYS.budget, { ...b, lines: [], summary: null, estimatedAt: null });
+  localStorage.removeItem(KEYS.callsheets);
+  const r = readJson(KEYS.roster);
+  if (r) writeJson(KEYS.roster, { ...r, casting: {} });
+  const l = readJson(KEYS.locations);
+  if (l?.items) writeJson(KEYS.locations, { ...l, items: l.items.map((x: any) => ({ ...x, sceneIds: [] })) });
+  localStorage.removeItem(KEYS.meta);
+  clearStoryboardData();
+}
+
+/** Start a brand-new film: delete everything saved by the app in this browser */
+export function clearEverything() {
+  Object.values(KEYS).forEach((k) => {
+    localStorage.removeItem(k);
+    sessionStorage.removeItem(k);
+  });
+  clearStoryboardData();
+}

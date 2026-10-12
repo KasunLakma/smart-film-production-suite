@@ -3,8 +3,9 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { FileText, Film, Wallet, Users, MapPin, ClipboardList, CheckCircle2, Circle, ArrowRight, Clapperboard } from "lucide-react";
-import { KEYS, loadScenes, money } from "@/lib/store";
-import { PageHeader, Card } from "@/components/ui";
+import { KEYS, loadScenes, money, clearEverything } from "@/lib/store";
+import { PageHeader, Card, btnDanger } from "@/components/ui";
+import { Trash2 } from "lucide-react";
 
 interface Stats {
   scenes: number;
@@ -119,6 +120,24 @@ export default function DashboardPage() {
               })}
             </div>
           </Card>
+
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-red-900/40 bg-red-950/10">
+            <div>
+              <p className="text-sm font-semibold text-red-300">Start a new film</p>
+              <p className="text-xs text-slate-400">Deletes the script, budget, team, places, call sheets and pictures saved in this browser. අලුත් චිත්‍රපටයක් පටන් ගැනීමට සියල්ල මකයි.</p>
+            </div>
+            <button
+              className={btnDanger}
+              onClick={() => {
+                if (!window.confirm("Delete EVERYTHING saved for this film in this browser?\n\nTip: press Cancel, then use “Save project” in the left menu first if you want a backup.\n\nසියල්ලම මකන්නද?")) return;
+                if (!window.confirm("Are you really sure? This cannot be undone.")) return;
+                clearEverything();
+                window.location.reload();
+              }}
+            >
+              <Trash2 className="w-3.5 h-3.5" /> Delete everything
+            </button>
+          </div>
 
           <p className="text-[11px] text-slate-500">Your work is saved in this browser. To keep a copy or share it with your director/producer, use <b>Save project</b> in the left menu and send them the file; they can open it with <b>Open project</b>.</p>
         </>

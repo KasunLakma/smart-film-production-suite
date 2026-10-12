@@ -131,6 +131,16 @@ export default function FinancialsPage() {
     setForm(null);
   };
 
+  const deletePlan = () => {
+    if (!window.confirm("Delete the whole budget plan? Your spending records will NOT be deleted.\n\nබජට් සැලැස්ම මකන්නද? (වියදම් සටහන් මැකෙන්නේ නෑ)")) return;
+    setBudget((b) => ({ ...b, lines: [], summary: null, estimatedAt: null }));
+  };
+
+  const deleteAllSpending = () => {
+    if (!window.confirm(`Delete ALL ${expenses.length} spending records? This cannot be undone.\n\nවියදම් සටහන් සියල්ලම මකන්නද?`)) return;
+    setBudget((b) => ({ ...b, expenses: [] }));
+  };
+
   const deleteExpense = (id: string) => {
     if (window.confirm("Delete this spending record?")) setBudget((b) => ({ ...b, expenses: b.expenses.filter((e) => e.id !== id) }));
   };
@@ -184,6 +194,13 @@ export default function FinancialsPage() {
 
       {!ready ? null : (
         <>
+          {scenes.length === 0 && lines.length > 0 && (
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-amber-200 text-sm">
+              <p className="flex items-center gap-2"><AlertTriangle className="w-4 h-4 shrink-0" /> The script was removed, but this budget plan was made from it. You can keep it or delete it.</p>
+              <button onClick={deletePlan} className={btnDanger}><Trash2 className="w-3.5 h-3.5" /> Delete this plan</button>
+            </div>
+          )}
+
           {/* ------- summary ------- */}
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
             <Card>
@@ -310,8 +327,13 @@ export default function FinancialsPage() {
 
           {/* ------- department plan ------- */}
           <Card>
-            <h2 className="text-base font-bold text-white mb-1">Where the money goes</h2>
-            <p className="text-xs text-slate-400 mb-4">Press a row to see the details and change the numbers. ඕනෑම පේළියක් එබූ විට විස්තර පෙනේ.</p>
+            <div className="flex items-start justify-between gap-3 mb-4">
+              <div>
+                <h2 className="text-base font-bold text-white mb-1">Where the money goes</h2>
+                <p className="text-xs text-slate-400">Press a row to see the details and change the numbers. ඕනෑම පේළියක් එබූ විට විස්තර පෙනේ.</p>
+              </div>
+              {lines.length > 0 && <button onClick={deletePlan} className={btnDanger}><Trash2 className="w-3.5 h-3.5" /> Delete plan</button>}
+            </div>
 
             {byDept.length === 0 ? (
               <EmptyState
@@ -405,6 +427,7 @@ export default function FinancialsPage() {
                 <p className="text-xs text-slate-400">Write down every payment made during the film. හැම ගෙවීමක්ම මෙහි සටහන් කරන්න.</p>
               </div>
               <div className="flex gap-2">
+                {expenses.length > 0 && <button onClick={deleteAllSpending} className={btnDanger}><Trash2 className="w-3.5 h-3.5" /> Delete all</button>}
                 <select className={`${inputCls} w-auto`} value={filterDept} onChange={(e) => setFilterDept(e.target.value)}>
                   <option value="ALL">All departments</option>
                   {DEPARTMENTS.map((d) => <option key={d} value={d}>{d}</option>)}
