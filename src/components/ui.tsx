@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { HelpCircle, ChevronDown, X } from "lucide-react";
 
 export const inputCls =
@@ -48,6 +48,10 @@ export function PageHeader({
 /** A friendly "How does this page work?" box that can be folded away */
 export function HelpBox({ title = "How does this page work?", children }: { title?: string; children: React.ReactNode }) {
   const [open, setOpen] = useState(true);
+  // ෆෝන් වල ඉඩ ඉතිරි කිරීමට උපදෙස් පෙට්ටිය මුලින් වසා තබයි
+  useEffect(() => {
+    if (window.innerWidth < 640) setOpen(false);
+  }, []);
   return (
     <div className="rounded-xl bg-emerald-500/5 border border-emerald-500/20 print:hidden">
       <button

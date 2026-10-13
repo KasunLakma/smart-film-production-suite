@@ -1,7 +1,7 @@
 "use client";
 
 import { clearScriptDependents } from "@/lib/store";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { useRouter } from "next/navigation";
 import {
   FileText,
@@ -42,6 +42,37 @@ interface SceneEntity {
   visualPrompt: string;
 }
 
+// සාමාන්‍ය screenplay format: චරිතයේ නම ලොකු අකුරින් තනි පේළියක, ඊට පහළින් දෙබස
+const CUE_RE = /^([A-Z][A-Z0-9 .'\-]{1,30}?)(?:\s*\((?:V\.O\.|O\.S\.|O\.C\.|CONT[’']?D|FILTERED|ON [A-Z ]+|PRE-LAP)\))?\s*$/;
+const NOT_A_NAME = /^(INT|EXT|I\/E|FADE|CUT|DISSOLVE|SMASH|CONTINUED|CONTINUOUS|MORE|THE END|TITLE|SUPER|ANGLE|CLOSE|INSERT|BACK TO|LATER|MONTAGE|FLASHBACK|END OF|OMITTED|SERIES OF|INTERCUT|SCENE|DAY|NIGHT)\b/;
+
+const extractCues = (chunk: string): { names: string[]; dialogues: DialogueItem[] } => {
+  const lines = chunk.split("\n").map((l) => l.trim());
+  const counts = new Map<string, number>();
+  const dialogues: DialogueItem[] = [];
+  for (let i = 0; i < lines.length - 1; i++) {
+    const line = lines[i];
+    if (!line || line.length > 38 || /[.:!?]$/.test(line.replace(/\)$/, "")) ) continue;
+    const m = line.match(CUE_RE);
+    if (!m || NOT_A_NAME.test(line)) continue;
+    const next = lines[i + 1];
+    if (!next || CUE_RE.test(next)) continue; // දෙබසක් පහළින් තිබිය යුතුය
+    const name = m[1].trim();
+    counts.set(name, (counts.get(name) || 0) + 1);
+    if (dialogues.length < 3) {
+      // දෙබස = හිස් පේළියක් එන තුරු පේළි
+      const spoken: string[] = [];
+      for (let j = i + 1; j < lines.length && lines[j] && spoken.length < 4; j++) {
+        if (!/^\(.*\)$/.test(lines[j])) spoken.push(lines[j]);
+      }
+      const text = spoken.join(" ").replace(/\s+/g, " ").trim();
+      if (text.length > 2) dialogues.push({ speaker: name, line: text.slice(0, 180) });
+    }
+  }
+  const names = Array.from(counts.entries()).sort((a, b) => b[1] - a[1]).map(([n]) => n);
+  return { names, dialogues };
+};
+
 // පරීක්ෂණ: දර්ශන browser එකේ ස්ථිරව සුරකී (tab එක වැසුවත් නොමැකේ). Budget, Roster, Call Sheet, Locations පිටු මෙයින් කියවයි.
 const persistScenes = (scenes: unknown) => {
   try {
@@ -65,6 +96,7 @@ export default function ScriptBreakdownPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
+  const [aiReport, setAiReport] = useState<{ total: number; ai: number; basic: number; reason: string } | null>(null);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
 
   const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
@@ -123,20 +155,34 @@ export default function ScriptBreakdownPage() {
         const page = await pdf.getPage(i);
         const textContent = await page.getTextContent();
 
-        let lastY: number | null = null;
+        // සමහර PDF වල සෑම අකුරක්ම වෙන වෙනම text කොටසකි. ඒ නිසා අතරට හිස්තැන් දමන්නේ
+        // කොටස් දෙකක් අතර සැබෑ ඉඩක් (gap) ඇති විට පමණි.
         let pageStr = "";
+        let lastY: number | null = null;
+        let lastEndX: number | null = null;
+        let pendingBreak = false;
 
         for (const item of textContent.items as any[]) {
-          const str = item.str;
+          const str: string = item.str;
+          if (item.hasEOL) pendingBreak = true;
           if (!str) continue;
-          const currentY = item.transform ? item.transform[5] : null;
+          const x = item.transform ? item.transform[4] : 0;
+          const y = item.transform ? item.transform[5] : 0;
+          const h = Math.abs(item.height || (item.transform && item.transform[3]) || 10) || 10;
+          const w = item.width || 0;
 
-          if (lastY !== null && currentY !== null && Math.abs(currentY - lastY) > 8) {
+          if (lastY === null) {
+            pageStr += str;
+          } else if (pendingBreak || Math.abs(y - lastY) > h * 0.6) {
             pageStr += "\n" + str;
           } else {
-            pageStr += (pageStr.endsWith(" ") || str.startsWith(" ") ? "" : " ") + str;
+            const gap = lastEndX !== null ? x - lastEndX : 0;
+            const needSpace = gap > h * 0.18 && !pageStr.endsWith(" ") && !str.startsWith(" ");
+            pageStr += (needSpace ? " " : "") + str;
           }
-          lastY = currentY;
+          pendingBreak = !!item.hasEOL;
+          lastY = y;
+          lastEndX = x + w;
         }
 
         fullScript += pageStr + "\n\n";
@@ -267,6 +313,17 @@ export default function ScriptBreakdownPage() {
         }
       }
 
+      // සාමාන්‍ය screenplay format එකක් නම් චරිත සහ දෙබස් එයින් ගනී (වඩා නිවැරදියි)
+      const cueInfo = extractCues(chunk);
+      if (cueInfo.names.length > 0) {
+        characters.length = 0;
+        cueInfo.names.slice(0, 8).forEach((n) => characters.push(n));
+        if (cueInfo.dialogues.length > 0) {
+          dialogues.length = 0;
+          cueInfo.dialogues.forEach((d) => dialogues.push(d));
+        }
+      }
+
       // Props Extraction
       const props: string[] = [];
       propKeywords.forEach(p => {
@@ -343,8 +400,10 @@ export default function ScriptBreakdownPage() {
   const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
   // එක chunk එකක් Gemini එකට යවයි (429/503 වලදී නැවත උත්සාහ කරයි)
-  type ChunkResult = { scenes: any[] | null; reason?: "NO_KEY" | "BAD_JSON" | "FAILED" };
+  type ChunkResult = { scenes: any[] | null; reason?: "NO_KEY" | "BAD_JSON" | "FAILED" | "QUOTA" };
+  const aiDisabledRef = useRef(false); // quota ඉවර වූ විට ඉතිරි කොටස් සඳහා AI උත්සාහ නොකරයි
   const parseChunkWithAi = async (text: string): Promise<ChunkResult> => {
+    if (aiDisabledRef.current) return { scenes: null, reason: "QUOTA" };
     for (let attempt = 0; attempt < 4; attempt++) {
       try {
         const res = await fetch("/api/screenplay/parse", {
@@ -354,7 +413,14 @@ export default function ScriptBreakdownPage() {
         });
         const data = await res.json().catch(() => ({}));
         if (res.ok && data.success && Array.isArray(data.scenes)) return { scenes: data.scenes };
-        if (data.code === "NO_KEY") return { scenes: null, reason: "NO_KEY" };
+        if (data.code === "NO_KEY") {
+          aiDisabledRef.current = true;
+          return { scenes: null, reason: "NO_KEY" };
+        }
+        if (data.code === "DAILY_QUOTA") {
+          aiDisabledRef.current = true;
+          return { scenes: null, reason: "QUOTA" };
+        }
         if (data.code === "BAD_JSON") return { scenes: null, reason: "BAD_JSON" };
         // Rate limit / overload නම් රැඳී සිට නැවත උත්සාහ කරයි
         await sleep(res.status === 429 ? 8000 * (attempt + 1) : 2500 * (attempt + 1));
@@ -369,7 +435,7 @@ export default function ScriptBreakdownPage() {
   const parseChunkRobust = async (
     text: string,
     depth = 0
-  ): Promise<{ ai: any[] | null; text: string }[]> => {
+  ): Promise<{ ai: any[] | null; text: string; reason?: string }[]> => {
     const r = await parseChunkWithAi(text);
     if (r.scenes && r.scenes.length > 0) return [{ ai: r.scenes, text }];
 
@@ -384,7 +450,7 @@ export default function ScriptBreakdownPage() {
         return [...ra, ...rb];
       }
     }
-    return [{ ai: null, text }];
+    return [{ ai: null, text, reason: r.reason }];
   };
 
   const toStr = (v: any) => (typeof v === "string" ? v.trim() : "");
@@ -432,11 +498,15 @@ export default function ScriptBreakdownPage() {
   const parseWithAiHybrid = async (rawText: string): Promise<SceneEntity[]> => {
     const isSinhala = /[\u0D80-\u0DFF]/.test(rawText);
     // සිංහල අකුරු token වැඩි නිසා කොටස් කුඩා කරයි
-    const chunks = splitIntoChunks(rawText, isSinhala ? 12000 : 22000);
+    const chunks = splitIntoChunks(rawText, isSinhala ? 12000 : 16000);
     const all: SceneEntity[] = [];
     let aiPieces = 0;
     const PARALLEL = 2;
 
+    let basicPieces = 0;
+    let lastReason = "";
+    aiDisabledRef.current = false;
+    setAiReport(null);
     setParsedScenes([]);
     setSelectedSceneIds([]);
 
@@ -457,9 +527,18 @@ export default function ScriptBreakdownPage() {
             piece.ai.forEach((s) => all.push(aiSceneToEntity(s, all.length + 1, isSinhala)));
           } else {
             // Fallback: regex parser
+            basicPieces++;
+            if (piece.reason) lastReason = piece.reason;
             parseScriptContent(piece.text).forEach((s) => {
               const n = all.length + 1;
-              all.push({ ...s, id: `SCENE-${String(n).padStart(2, "0")}`, sceneNumber: n });
+              // සීන් නමේ අංකයත් සම්පූර්ණ script එකේ අංකයට ගැලපෙන ලෙස නිවැරදි කරයි
+              const label = isSinhala ? "දර්ශනය" : "SCENE";
+              all.push({
+                ...s,
+                id: `SCENE-${String(n).padStart(2, "0")}`,
+                sceneNumber: n,
+                slugline: s.slugline.replace(/^(SCENE|දර්ශනය)\s*\d+/i, `${label} ${String(n).padStart(2, "0")}`),
+              });
             });
           }
         }
@@ -472,9 +551,7 @@ export default function ScriptBreakdownPage() {
       if (last < chunks.length) await sleep(2000); // rate limit වලට ගෞරවය
     }
 
-    if (aiPieces === 0 && all.length > 0) {
-      console.warn("Gemini භාවිතා නොවීය; regex parser පමණක් භාවිතා විය.");
-    }
+    setAiReport({ total: aiPieces + basicPieces, ai: aiPieces, basic: basicPieces, reason: lastReason });
     return all;
   };
 
@@ -577,6 +654,7 @@ export default function ScriptBreakdownPage() {
     if (hasOther && !window.confirm("Remove this script AND everything made from it?\n\nThis deletes: the budget plan, call sheets, actor choices and storyboard pictures.\nThis is kept: your spending records, people list and saved places.\n\nස්ක්‍රිප්ට් එකත්, ඒකෙන් හදපු බජට් සැලැස්ම, call sheet, නළු තේරීම් සහ පින්තූර මකන්නද?")) return;
     setParsedScenes([]);
     setSelectedSceneIds([]);
+    setAiReport(null);
     clearScenes();
     clearScriptDependents();
   };
@@ -814,6 +892,27 @@ export default function ScriptBreakdownPage() {
               </button>
             )}
           </div>
+
+          {!isProcessing && aiReport && parsedScenes.length > 0 && (
+            aiReport.basic === 0 ? (
+              <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">
+                ✅ The AI helper analysed the whole script ({aiReport.ai} parts).
+              </div>
+            ) : (
+              <div className="mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1">
+                <p className="font-semibold text-sm">⚠ The AI helper could not analyse {aiReport.basic} of {aiReport.total} parts.</p>
+                <p>
+                  {aiReport.reason === "QUOTA"
+                    ? "The free AI limit for today is used up (it resets around midday, Sri Lanka time)."
+                    : aiReport.reason === "NO_KEY"
+                      ? "The AI key is missing on this server."
+                      : "The AI helper was busy or could not be reached."}{" "}
+                  Those parts were split with simple rules instead, so characters and props may be less accurate.
+                </p>
+                <p className="text-amber-300/80">You can press “Execute Dynamic Breakdown” again later to try the AI helper again.</p>
+              </div>
+            )
+          )}
 
           {isProcessing && parsedScenes.length > 0 && (
             <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 flex items-center gap-3 text-xs text-emerald-300">

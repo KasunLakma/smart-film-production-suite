@@ -31,7 +31,7 @@ async function describeInEnglish(scene: {
     const apiKey = process.env.GEMINI_API_KEY;
     if (!apiKey) return "";
     const ai = new GoogleGenAI({ apiKey });
-    const models = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"].filter(
+    const models = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash-lite"].filter(
         Boolean
     ) as string[];
 

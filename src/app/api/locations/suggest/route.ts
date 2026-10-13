@@ -49,7 +49,11 @@ const SCHEMA = {
 
 function models(): string[] {
     return Array.from(
-        new Set([process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"].filter(Boolean) as string[])
+        new Set(
+            [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest", "gemini-2.5-flash", "gemini-2.5-flash-lite"].filter(
+                Boolean
+            ) as string[]
+        )
     );
 }
 
@@ -103,7 +107,7 @@ export async function POST(req: Request) {
             } catch (e: any) {
                 last = e;
                 const st = statusOf(e);
-                if (st === 404 || st === 400 || e instanceof SyntaxError) continue;
+                if (st === 404 || st === 400 || st === 429 || st === 503 || e instanceof SyntaxError) continue;
                 break;
             }
         }

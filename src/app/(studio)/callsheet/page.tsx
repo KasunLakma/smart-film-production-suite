@@ -215,7 +215,7 @@ export default function CallSheetPage() {
 
       <HelpBox>
         <p><b>Quick way:</b> press <b>“Plan all days from my script”</b>. The computer puts scenes from the same place together and makes one call sheet for each day.</p>
-        <p><b>Then</b> open a day on the left, set the date and times, and tick the scenes. The page on the right is exactly what will be printed.</p>
+        <p><b>Then</b> open a day from the list, set the date and times, and tick the scenes. The white paper preview is exactly what will be printed.</p>
         <p><b>Finally</b> press <b>Print / Save as PDF</b> and send it to the cast and crew.</p>
         <p className="text-emerald-300/80">“Cast & Crew” පිටුවේ නළු නිලියන් සහ කණ්ඩායම තෝරා තිබුණොත් ඔවුන්ගේ නම් ඉබේම මෙහි පෙනේ.</p>
       </HelpBox>
@@ -360,10 +360,10 @@ export default function CallSheetPage() {
                   <button className={btnPrimary} onClick={() => window.print()}><Printer className="w-3.5 h-3.5" /> Print / Save as PDF</button>
                 </div>
 
-                <div className="print-paper bg-white text-black rounded-md shadow-2xl p-6 md:p-8 text-[12px] leading-snug" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
+                <div className="print-paper bg-white text-black rounded-md shadow-2xl p-3 sm:p-6 md:p-8 text-[12px] leading-snug" style={{ fontFamily: "Arial, Helvetica, sans-serif" }}>
                   {/* header */}
-                  <div className="border-2 border-black grid grid-cols-[1fr_1.3fr_1fr]">
-                    <div className="p-2 border-r-2 border-black space-y-1">
+                  <div className="border-2 border-black grid grid-cols-1 sm:grid-cols-[1fr_1.3fr_1fr]">
+                    <div className="p-2 border-b-2 sm:border-b-0 sm:border-r-2 border-black space-y-1">
                       <p><b>Director:</b> {sheet.director || "—"}</p>
                       <p><b>Producer:</b> {sheet.producer || "—"}</p>
                       <p><b>Meet at:</b> {sheet.baseLocation || "—"}</p>
@@ -374,7 +374,7 @@ export default function CallSheetPage() {
                       <p className="text-base">{dayLabel}</p>
                       <p className="mt-1">{dateLabel}</p>
                     </div>
-                    <div className="p-2 border-l-2 border-black space-y-1">
+                    <div className="p-2 border-t-2 sm:border-t-0 sm:border-l-2 border-black space-y-1">
                       <p><b>Crew arrives:</b> {sheet.crewCall || "—"}</p>
                       <p><b>Filming starts:</b> {sheet.shootCall || "—"}</p>
                       <p><b>Breakfast:</b> {sheet.breakfast || "—"}</p>
@@ -390,7 +390,7 @@ export default function CallSheetPage() {
                   </div>
 
                   {/* scenes */}
-                  <table className="w-full border-2 border-black border-collapse mt-3">
+                  <div className="overflow-x-auto mt-3"><table className="w-full min-w-[560px] border-2 border-black border-collapse">
                     <thead>
                       <tr className="bg-gray-200 text-left">
                         {["Scene", "In/Out", "What happens", "Day/Night", "Actors in the scene", "Location"].map((h) => (
@@ -412,10 +412,10 @@ export default function CallSheetPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
 
                   {/* cast */}
-                  <table className="w-full border-2 border-black border-collapse mt-3">
+                  <div className="overflow-x-auto mt-3"><table className="w-full min-w-[560px] border-2 border-black border-collapse">
                     <thead>
                       <tr className="bg-gray-200 text-left">
                         {["Character", "Actor", "Arrives", "Make-up", "On set", "Phone", "Notes"].map((h) => (
@@ -441,7 +441,7 @@ export default function CallSheetPage() {
                         );
                       })}
                     </tbody>
-                  </table>
+                  </table></div>
 
                   {/* transport + dept notes */}
                   <div className="mt-3 border-2 border-black">
@@ -454,7 +454,7 @@ export default function CallSheetPage() {
                   </div>
 
                   {/* crew */}
-                  <table className="w-full border-2 border-black border-collapse mt-3">
+                  <div className="overflow-x-auto mt-3"><table className="w-full min-w-[560px] border-2 border-black border-collapse">
                     <thead>
                       <tr className="bg-gray-200 text-left">
                         {["Crew job", "Name", "Arrives", "Phone"].map((h) => (
@@ -474,7 +474,7 @@ export default function CallSheetPage() {
                         </tr>
                       ))}
                     </tbody>
-                  </table>
+                  </table></div>
 
                   <div className="grid grid-cols-3 gap-6 mt-8 text-center text-[11px]">
                     {["Director", "1st Assistant Director", "Production Manager"].map((r) => (

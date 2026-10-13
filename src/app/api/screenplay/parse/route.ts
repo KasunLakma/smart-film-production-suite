@@ -77,7 +77,14 @@ const SCENE_SCHEMA = {
 
 // පළමු model එක නැති නම් ඊළඟ එකට මාරු වේ. Vercel හි GEMINI_MODEL දමා වෙනස් කළ හැක.
 function modelCandidates(): string[] {
-    const list = [process.env.GEMINI_MODEL, "gemini-flash-latest", "gemini-flash-lite-latest"].filter(
+    // හැම model එකකටම වෙන වෙනම free quota එකක් ඇත; එකක් ඉවර වුණොත් ඊළඟ එක උත්සාහ කරයි
+    const list = [
+        process.env.GEMINI_MODEL,
+        "gemini-flash-latest",
+        "gemini-flash-lite-latest",
+        "gemini-2.5-flash",
+        "gemini-2.5-flash-lite",
+    ].filter(
         Boolean
     ) as string[];
     return Array.from(new Set(list));
@@ -142,16 +149,19 @@ export async function POST(req: Request) {
             } catch (e: any) {
                 lastError = e;
                 const status = errStatus(e);
-                // Model නැති / අවලංගු නම් පමණක් ඊළඟ model එක උත්සාහ කරයි
-                if (status === 404 || status === 400) continue;
+                // Model නැති / quota ඉවර / overload නම් ඊළඟ model එක උත්සාහ කරයි
+                if (status === 404 || status === 400 || status === 429 || status === 503) continue;
                 break;
             }
         }
 
         const status = errStatus(lastError);
-        console.error("Gemini parse error:", lastError?.message || lastError);
+        const msg = String(lastError?.message || "");
+        console.error("Gemini parse error:", msg);
+        // දවසේ quota එක ඉවර වී ඇත්නම් නැවත උත්සාහ කිරීමෙන් වැඩක් නැත
+        const daily = status === 429 && /PerDay|per day|daily/i.test(msg);
         return NextResponse.json(
-            { success: false, error: lastError?.message || "Gemini parse failed", code: status },
+            { success: false, error: msg || "Gemini parse failed", code: daily ? "DAILY_QUOTA" : status },
             { status: status === 429 ? 429 : 502 }
         );
     } catch (error: any) {

@@ -1,11 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { FileText, Film, Wallet, Users, MapPin, ClipboardList, CheckCircle2, Circle, ArrowRight, Clapperboard } from "lucide-react";
-import { KEYS, loadScenes, money, clearEverything } from "@/lib/store";
+import { KEYS, loadScenes, money, clearEverything, exportProjectFile, importProjectFile } from "@/lib/store";
 import { PageHeader, Card, btnDanger } from "@/components/ui";
-import { Trash2 } from "lucide-react";
+import { Trash2, Download, FolderOpen } from "lucide-react";
 
 interface Stats {
   scenes: number;
@@ -32,6 +32,15 @@ const read = (key: string): any => {
 
 export default function DashboardPage() {
   const [s, setS] = useState<Stats | null>(null);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const openProject = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    if (await importProjectFile(f)) window.location.reload();
+    else window.alert("This file is not an eclat project file.");
+    e.target.value = "";
+  };
 
   useEffect(() => {
     const scenes = loadScenes();
@@ -121,6 +130,16 @@ export default function DashboardPage() {
             </div>
           </Card>
 
+          <Card>
+            <h2 className="text-base font-bold text-white mb-1">Save or share your project</h2>
+            <p className="text-xs text-slate-400 mb-3">Your work is kept in this browser only. Save a file to make a backup, or to send the whole project to your director, producer or friends. They open it here with “Open project”. · ප්‍රොජෙක්ට් එක ෆයිල් එකක් ලෙස සුරකින්න / යවන්න.</p>
+            <div className="flex flex-wrap gap-2">
+              <button onClick={exportProjectFile} className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-xs inline-flex items-center gap-2 cursor-pointer"><Download className="w-3.5 h-3.5" /> Save project file</button>
+              <button onClick={() => fileRef.current?.click()} className="px-4 py-2.5 rounded-xl bg-[#0e1d15] hover:bg-emerald-950 border border-emerald-900/60 text-slate-200 text-xs font-medium inline-flex items-center gap-2 cursor-pointer"><FolderOpen className="w-3.5 h-3.5" /> Open project file</button>
+              <input ref={fileRef} type="file" accept=".json,application/json" className="hidden" onChange={openProject} />
+            </div>
+          </Card>
+
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 p-4 rounded-xl border border-red-900/40 bg-red-950/10">
             <div>
               <p className="text-sm font-semibold text-red-300">Start a new film</p>
@@ -139,7 +158,7 @@ export default function DashboardPage() {
             </button>
           </div>
 
-          <p className="text-[11px] text-slate-500">Your work is saved in this browser. To keep a copy or share it with your director/producer, use <b>Save project</b> in the left menu and send them the file; they can open it with <b>Open project</b>.</p>
+          <p className="text-[11px] text-slate-500">Your work is saved in this browser. To keep a copy or share it with your director/producer, use the <b>Save project file</b> button above and send them the file; they can open it with <b>Open project file</b>.</p>
         </>
       )}
     </div>
