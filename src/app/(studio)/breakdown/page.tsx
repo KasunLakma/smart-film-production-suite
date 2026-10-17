@@ -96,7 +96,7 @@ export default function ScriptBreakdownPage() {
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const [progress, setProgress] = useState("");
-  const [aiReport, setAiReport] = useState<{ total: number; ai: number; basic: number; reason: string } | null>(null);
+  const [aiReport, setAiReport] = useState<{ total: number; ai: number; basic: number; reason: string; models: string[]; langWarn: number } | null>(null);
   const [isGeneratingAllStoryboards, setIsGeneratingAllStoryboards] = useState(false);
 
   const [parsedScenes, setParsedScenes] = useState<SceneEntity[]>([]);
@@ -189,9 +189,21 @@ export default function ScriptBreakdownPage() {
       }
 
       if (fullScript.trim().length > 30) {
+        // සිංහල PDF වල අකුරු කියවීම අවිශ්වාසයි (බොහෝ විට Google Docs/Word PDF වල ස්වර ලකුණු වැරදි තැන්වල වැටේ).
+        // එය හඳුනාගෙන පරිශීලකයාට දැනුම් දෙයි.
+        const hasSinhalaText = /[\u0D80-\u0DFF]/.test(fullScript);
+        const controlChars = /[\u0000-\u0008\u000B\u000C\u000E-\u001F]/.test(fullScript);
+        const wordsStartingWithVowelSign = (fullScript.match(/(?:^|\s)[\u0DD9\u0DDB]/gm) || []).length;
+        if (hasSinhalaText && (controlChars || wordsStartingWithVowelSign >= 4)) {
+          const goOn = window.confirm(
+            "The Sinhala letters inside this PDF look scrambled (this happens with many PDFs made by Google Docs or Word).\n\nThe scenes may come out wrong.\n\nBetter: copy the text into “Paste Script”, or save it as a .txt file and upload that.\n\nPress OK to try anyway, or Cancel to stop.\n\nමේ PDF එකේ සිංහල අකුරු අවුල් වී ඇත. “Paste Script” හෝ .txt ෆයිල් එකක් භාවිතා කරන එක හොඳයි."
+          );
+          if (!goOn) throw new Error("Stopped: the Sinhala text in this PDF is not readable. Use Paste Script or a .txt file.");
+        }
         return fullScript;
       }
     } catch (err) {
+      if (err instanceof Error && err.message.startsWith("Stopped:")) throw err; // පරිශීලකයා නවත්වා ඇත
       console.warn("PDF.js layout extraction fallback:", err);
     }
 
@@ -401,6 +413,9 @@ export default function ScriptBreakdownPage() {
 
   // එක chunk එකක් Gemini එකට යවයි (429/503 වලදී නැවත උත්සාහ කරයි)
   type ChunkResult = { scenes: any[] | null; reason?: "NO_KEY" | "BAD_JSON" | "FAILED" | "QUOTA" };
+  const langRef = useRef<"si" | "en">("en"); // script එකේ භාෂාව (AI එකට පැහැදිලිව දැනුම් දෙයි)
+  const modelsRef = useRef<Set<string>>(new Set());
+  const langWarnRef = useRef(0);
   const aiDisabledRef = useRef(false); // quota ඉවර වූ විට ඉතිරි කොටස් සඳහා AI උත්සාහ නොකරයි
   const parseChunkWithAi = async (text: string): Promise<ChunkResult> => {
     if (aiDisabledRef.current) return { scenes: null, reason: "QUOTA" };
@@ -409,10 +424,14 @@ export default function ScriptBreakdownPage() {
         const res = await fetch("/api/screenplay/parse", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ text }),
+          body: JSON.stringify({ text, language: langRef.current }),
         });
         const data = await res.json().catch(() => ({}));
-        if (res.ok && data.success && Array.isArray(data.scenes)) return { scenes: data.scenes };
+        if (res.ok && data.success && Array.isArray(data.scenes)) {
+          if (data.model) modelsRef.current.add(String(data.model));
+          if (data.languageOk === false) langWarnRef.current++;
+          return { scenes: data.scenes };
+        }
         if (data.code === "NO_KEY") {
           aiDisabledRef.current = true;
           return { scenes: null, reason: "NO_KEY" };
@@ -506,6 +525,9 @@ export default function ScriptBreakdownPage() {
     let basicPieces = 0;
     let lastReason = "";
     aiDisabledRef.current = false;
+    langRef.current = isSinhala ? "si" : "en";
+    modelsRef.current = new Set();
+    langWarnRef.current = 0;
     setAiReport(null);
     setParsedScenes([]);
     setSelectedSceneIds([]);
@@ -551,7 +573,14 @@ export default function ScriptBreakdownPage() {
       if (last < chunks.length) await sleep(2000); // rate limit වලට ගෞරවය
     }
 
-    setAiReport({ total: aiPieces + basicPieces, ai: aiPieces, basic: basicPieces, reason: lastReason });
+    setAiReport({
+      total: aiPieces + basicPieces,
+      ai: aiPieces,
+      basic: basicPieces,
+      reason: lastReason,
+      models: Array.from(modelsRef.current),
+      langWarn: langWarnRef.current,
+    });
     return all;
   };
 
@@ -893,10 +922,16 @@ export default function ScriptBreakdownPage() {
             )}
           </div>
 
+          {!isProcessing && aiReport && aiReport.langWarn > 0 && parsedScenes.length > 0 && (
+            <div className="mb-4 p-3 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200">
+              ⚠ In {aiReport.langWarn} part{aiReport.langWarn > 1 ? "s" : ""}, the AI wrote scene titles or summaries in English even though your script is Sinhala. You can fix any scene with the pencil icon, or press “Execute Dynamic Breakdown” again.
+            </div>
+          )}
+
           {!isProcessing && aiReport && parsedScenes.length > 0 && (
             aiReport.basic === 0 ? (
               <div className="mb-4 p-3 rounded-xl bg-emerald-500/10 border border-emerald-500/30 text-xs text-emerald-300">
-                ✅ The AI helper analysed the whole script ({aiReport.ai} parts).
+                ✅ The AI helper analysed the whole script ({aiReport.ai} parts).{aiReport.models.length > 0 && <span className="text-emerald-400/70"> AI model used: {aiReport.models.join(", ")}</span>}
               </div>
             ) : (
               <div className="mb-4 p-4 rounded-xl bg-amber-500/10 border border-amber-500/30 text-xs text-amber-200 space-y-1">

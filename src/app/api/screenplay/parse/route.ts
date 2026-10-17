@@ -22,15 +22,44 @@ RULES
 - If the text is a plain story with no headings, split it into scenes yourself based on location/time changes.
 - If the portion begins in the middle of a scene, treat that beginning as its own scene.
 - Ignore title pages, page numbers, "CONTINUED", "(MORE)", copyright lines and other non-story noise.
-- slugline: the original scene heading if it exists, otherwise write one in the same language as the script (e.g. "INT. OLD HOUSE - NIGHT").
+- slugline: the original scene heading if it exists, otherwise write one (see LANGUAGE RULE for the format).
 - locationType: "INT" or "EXT".
 - timeOfDay: one of DAY, NIGHT, DAWN, DUSK, UNSPECIFIED.
-- synopsis: 1-2 sentences summarising what happens, in the SAME language as the script.
+- synopsis: 1-2 sentences summarising what happens (see LANGUAGE RULE for the language).
 - characters: names of characters who appear or speak in this scene, in the original script language (max 8, no duplicates).
 - props: important physical objects / equipment / vehicles / set items used or shown in the scene, in the original script language (max 8). Do not list characters or locations.
 - dialogues: up to 3 of the most important spoken lines, with speaker and the line in the original language.
 - visualDescriptionEN: ALWAYS ENGLISH, even if the script is Sinhala. 1-3 sentences that describe ONLY what a camera would see in this scene: the setting, the key characters (age, clothing, expression, action), important props, lighting and mood. No character names, no dialogue, no camera jargon, no text/letters in the image. This will be used directly as an AI image-generation prompt.
 Return scenes strictly in story order.`;
+
+
+const hasSinhala = (s: unknown) => /[\u0D80-\u0DFF]/.test(String(s || ""));
+
+// අකුරු අතරින් සිංහල අකුරු කොපමණද කියා බලා භාෂාව තීරණය කරයි
+function detectLanguage(text: string): "si" | "en" {
+    const letters = text.match(/[A-Za-z\u0D80-\u0DFF]/g) || [];
+    const sinhala = text.match(/[\u0D80-\u0DFF]/g) || [];
+    return letters.length > 0 && sinhala.length / letters.length > 0.25 ? "si" : "en";
+}
+
+function languageRule(lang: "si" | "en"): string {
+    if (lang === "si") {
+        return `LANGUAGE RULE (very important, never break it):
+This script is written in SINHALA. Write the fields slugline, synopsis, characters, props and dialogues in SINHALA using real Sinhala Unicode letters (like a Sinhala film crew would write them).
+- Do NOT translate these fields into English. Do NOT write Sinhala words with English letters (no "gammanaya", no "yaka").
+- If the text has no scene heading, write the slugline exactly in this style: "<අභ්‍යන්තර or බාහිර> - <place name in Sinhala> - <දහවල් or රාත්‍රී or අලුයම or සවස>". Example: "බාහිර - පැරණි ගම්මානය - දහවල්".
+- The synopsis must be 1-2 Sinhala sentences.
+- ONLY visualDescriptionEN is written in English.`;
+    }
+    return `LANGUAGE RULE: This script is in English. Write slugline, synopsis, characters, props and dialogues in English, using the format "INT. OLD HOUSE - NIGHT" for a slugline when no heading exists. visualDescriptionEN is also English.`;
+}
+
+// සිංහල script එකකදී ප්‍රතිඵලයේ කොපමණ ප්‍රමාණයක් සිංහලද (0-1)
+function sinhalaShare(scenes: any[]): number {
+    if (!scenes.length) return 1;
+    const ok = scenes.filter((x) => hasSinhala(x?.synopsis) && hasSinhala(x?.slugline)).length;
+    return ok / scenes.length;
+}
 
 const SCENE_SCHEMA = {
     type: "object",
@@ -116,37 +145,53 @@ export async function POST(req: Request) {
             return NextResponse.json({ success: false, error: "පිටපතෙහි කියවිය හැකි පෙළක් හමු නොවීය." }, { status: 400 });
         }
 
+        const lang: "si" | "en" = body?.language === "si" || body?.language === "en" ? body.language : detectLanguage(text);
+        const system = `${SYSTEM_PROMPT}\n\n${languageRule(lang)}`;
+
         const ai = new GoogleGenAI({ apiKey });
         let lastError: any = null;
 
+        const callModel = async (model: string, contents: string) => {
+            const response = await ai.models.generateContent({
+                model,
+                contents,
+                config: {
+                    systemInstruction: system,
+                    responseMimeType: "application/json",
+                    responseJsonSchema: SCENE_SCHEMA,
+                    temperature: 0.2,
+                    maxOutputTokens: 16384,
+                },
+            });
+            const raw = (response.text || "").replace(/^```json\s*|\s*```$/g, "").trim();
+            const parsed = JSON.parse(raw); // JSON කැපී ගියා නම් SyntaxError
+            return Array.isArray(parsed?.scenes) ? parsed.scenes : [];
+        };
+
         for (const model of modelCandidates()) {
             try {
-                const response = await ai.models.generateContent({
-                    model,
-                    contents: `SCREENPLAY PORTION:\n\n${text}`,
-                    config: {
-                        systemInstruction: SYSTEM_PROMPT,
-                        responseMimeType: "application/json",
-                        responseJsonSchema: SCENE_SCHEMA,
-                        temperature: 0.2,
-                        maxOutputTokens: 16384,
-                    },
-                });
+                const base = `SCREENPLAY PORTION:\n\n${text}`;
+                let scenes = await callModel(model, base);
+                let languageOk = true;
 
-                const raw = (response.text || "").replace(/^```json\s*|\s*```$/g, "").trim();
-                let parsed: any;
-                try {
-                    parsed = JSON.parse(raw);
-                } catch {
+                // සිංහල script එකක ප්‍රතිඵලය ඉංග්‍රීසියෙන් ආවොත් එක වතාවක් නිවැරදි කරන්න ඉල්ලයි
+                if (lang === "si" && sinhalaShare(scenes) < 0.7) {
+                    const fixed = await callModel(
+                        model,
+                        `${base}\n\nIMPORTANT CORRECTION: Your previous answer wrote slugline and synopsis in English. This is a SINHALA script. Redo the whole answer and write slugline, synopsis, characters, props and dialogues in SINHALA Unicode letters. Only visualDescriptionEN stays English.`
+                    );
+                    if (sinhalaShare(fixed) >= sinhalaShare(scenes)) scenes = fixed;
+                    languageOk = sinhalaShare(scenes) >= 0.7;
+                }
+                return NextResponse.json({ success: true, scenes, model, language: lang, languageOk });
+            } catch (e: any) {
+                if (e instanceof SyntaxError) {
                     // ප්‍රතිචාරය කැපී ගියා (output සීමාව ඉක්මවීම). නැවත යැවීමෙන් වැඩක් නැත; කොටස දෙකට බෙදා යැවිය යුතුය.
                     return NextResponse.json(
                         { success: false, code: "BAD_JSON", error: "Model output was cut off or invalid JSON" },
                         { status: 502 }
                     );
                 }
-                const scenes = Array.isArray(parsed?.scenes) ? parsed.scenes : [];
-                return NextResponse.json({ success: true, scenes, model });
-            } catch (e: any) {
                 lastError = e;
                 const status = errStatus(e);
                 // Model නැති / quota ඉවර / overload නම් ඊළඟ model එක උත්සාහ කරයි
